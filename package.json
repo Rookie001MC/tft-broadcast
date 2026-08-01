@@ -16,10 +16,14 @@
 		"db:generate": "drizzle-kit generate",
 		"db:migrate": "drizzle-kit migrate",
 		"db:studio": "drizzle-kit studio",
-		"auth:schema": "auth generate --config src/lib/server/auth.js --output src/lib/server/db/schema/auth.js --yes"
+		"auth:schema": "auth generate --config src/lib/server/auth.js --output src/lib/server/db/schema/auth.js --yes",
+		"test:unit": "vitest",
+		"test": "npm run test:unit -- --run && npm run test:e2e",
+		"test:e2e": "playwright install && playwright test"
 	},
 	"devDependencies": {
 		"@eslint/js": "^10.0.1",
+		"@playwright/test": "^1.60.0",
 		"@skeletonlabs/skeleton": "^5.0.0",
 		"@skeletonlabs/skeleton-svelte": "^5.0.0",
 		"@sveltejs/adapter-auto": "^7.0.1",
@@ -28,6 +32,7 @@
 		"@tailwindcss/vite": "^4.3.0",
 		"@types/better-sqlite3": "^7.6.13",
 		"@types/node": "^24",
+		"@vitest/browser-playwright": "^4.1.8",
 		"auth": "^1.6.23",
 		"better-auth": "^1.6.23",
 		"drizzle-kit": "^0.31.10",
@@ -36,6 +41,7 @@
 		"eslint-config-prettier": "^10.1.8",
 		"eslint-plugin-svelte": "^3.19.0",
 		"globals": "^17.6.0",
+		"playwright": "^1.60.0",
 		"prettier": "^3.8.3",
 		"prettier-plugin-svelte": "^4.1.0",
 		"prettier-plugin-tailwindcss": "^0.8.0",
@@ -43,7 +49,9 @@
 		"svelte-check": "^4.6.0",
 		"tailwindcss": "^4.3.0",
 		"typescript": "^6.0.3",
-		"vite": "^8.0.16"
+		"vite": "^8.0.16",
+		"vitest": "^4.1.8",
+		"vitest-browser-svelte": "^2.1.1"
 	},
 	"dependencies": {
 		"better-sqlite3": "^13.0.2",
