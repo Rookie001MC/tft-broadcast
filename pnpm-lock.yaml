@@ -11,6 +11,9 @@ importers:
       better-sqlite3:
         specifier: ^13.0.2
         version: 13.0.2
+      twisted:
+        specifier: ^1.82.0
+        version: 1.82.0
     devDependencies:
       '@eslint/js':
         specifier: ^10.0.1
@@ -1593,6 +1596,10 @@ packages:
     engines: {node: '>=14'}
     hasBin: true
 
+  promise-queue@2.2.5:
+    resolution: {integrity: sha512-p/iXrPSVfnqPft24ZdNNLECw/UrtLTpT3jpAAMzl/o5/rDsGCPo3/CQS2611flL6LkoEJ3oQZw7C8Q80ZISXRQ==}
+    engines: {node: '>= 0.8.0'}
+
   punycode@2.3.1:
     resolution: {integrity: sha512-vYt7UD1U9Wg6138shLtLOvdAu+8DsC/ilFtEVHcH+wydcSpNE20AfSOduf6MkRFahL5FY7X1oU7nKVZFtfq8Fg==}
     engines: {node: '>=6'}
@@ -1687,6 +1694,10 @@ packages:
     resolution: {integrity: sha512-GQHnkIfxyx1wYCOS/wonik5MVRZU9hi1TEZmzGZSCJB1y9YgoZ8H6itNE/u4suE+yLmOzuE4E5S4TZ/ZX2wcWQ==}
     engines: {node: '>=18.0.0'}
     hasBin: true
+
+  twisted@1.82.0:
+    resolution: {integrity: sha512-Bs4eX0nOkP2W8gZX0mPMncJXMDcV32KFFRpHhdj8LT9KC84QadtGvv19zoVnp16VA/MUmHAASYSs2oOmKT8keQ==}
+    engines: {node: '>=18.0.0'}
 
   type-check@0.4.0:
     resolution: {integrity: sha512-XleUoc9uwGXqjWwXaUTZAmzMcFZ5858QA2vvx1Ur5xIcixXIP+8LnFDgRplU30us6teqdlskFfu+ae4K79Ooew==}
@@ -2832,6 +2843,8 @@ snapshots:
 
   prettier@3.9.6: {}
 
+  promise-queue@2.2.5: {}
+
   punycode@2.3.1: {}
 
   readdirp@4.1.2: {}
@@ -2953,6 +2966,10 @@ snapshots:
       esbuild: 0.28.1
     optionalDependencies:
       fsevents: 2.3.3
+
+  twisted@1.82.0:
+    dependencies:
+      promise-queue: 2.2.5
 
   type-check@0.4.0:
     dependencies:
