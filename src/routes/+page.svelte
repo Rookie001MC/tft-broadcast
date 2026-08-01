@@ -1,4 +1,6 @@
 <script>
+	import { redirect } from "@sveltejs/kit";
+
     // Redirect to admin shell
-    window.location.href = '/admin';
+    redirect(301, '/admin');
 </script>
