@@ -1,0 +1,1114 @@
+<div class="content">
+	<div class="content-title">Teamfight Tactics</div>
+
+	<h1 id="developer-api-policy">Developer API Policy</h1>
+	<p>
+		Before you begin, read through the
+		<a href="https://developer.riotgames.com/policies/general">General</a> and
+		<a href="https://developer.riotgames.com/policies/game-specific#_legends-of-runeterra"
+			>Game Policies</a
+		>, <a href="https://developer.riotgames.com/terms">Terms of Use</a> and
+		<a href="https://www.riotgames.com/en/legal">Legal Notices</a>. Developers must adhere to policy
+		changes as they arise.
+	</p>
+	<h2 id="developer-api-policy_registration">Registration</h2>
+	<p>
+		If your product serves players, you must register it with us regardless of whether or not your
+		product uses official documented APIs. You must make sure its description and metadata are kept
+		up to date with the current version of your product.
+	</p>
+	<h2 id="developer-api-policy_monetization">Monetization</h2>
+	<p>To monetize your product, you must abide by the following:</p>
+	<ul>
+		<li>Your product cannot feature betting or gambling functionality.</li>
+		<li>
+			Your product must be registered on the Developer Portal and your product status is either
+			Approved or Acknowledged.
+		</li>
+		<li>You must have a free tier of access for players, which may include advertising.</li>
+		<li>
+			Your content must be transformative if you are charging players for it.
+			<ul>
+				<li>
+					What is transformative?
+					<ul>
+						<li>
+							Was value added to the original by creating new information, new aesthetics, new
+							insights, and understandings? If so, then it was transformative.
+						</li>
+					</ul>
+				</li>
+				<li>
+					Acceptable ways to charge players are:
+					<ul>
+						<li>Subscriptions, donations, or crowdfunding.</li>
+						<li>Entry fees for tournaments.</li>
+						<li>Currencies that cannot be exchanged back into fiat.</li>
+					</ul>
+				</li>
+				<li>Your monetization cannot gouge players or be unfair, as decided by Riot.</li>
+			</ul>
+		</li>
+	</ul>
+	<p>
+		If you are unsure if your monetization platform is acceptable, contact us through the Developer
+		Portal.
+	</p>
+	<h2 id="developer-api-policy_security">Security</h2>
+	<p>You must adhere to the following security policies:</p>
+	<ul>
+		<li>Do not share your Riot Games account information with anyone.</li>
+		<li>
+			Do not use a Production API key to run multiple projects. You may only have one product per
+			key.
+		</li>
+		<li>Use SSL/HTTPS when accessing the APIs so your API key is kept safe.</li>
+		<li>
+			Your API key may not be included in your code, especially if you plan on distributing a
+			binary.
+			<ul>
+				<li>
+					This key should only be shared with your teammates. If you need to share an API key for
+					your product with teammates, make sure your product is owned by a group in the Developer
+					portal. Add additional accounts to that account as needed.
+				</li>
+			</ul>
+		</li>
+	</ul>
+	<h2 id="developer-api-policy_game-integrity">Game Integrity</h2>
+	<ul>
+		<li>Products cannot alter the goal of the game (i.e. Destroy the Nexus).</li>
+		<li>
+			Products cannot create an unfair advantage for players, like a cheating program or giving some
+			players an advantage that others would not otherwise have.
+		</li>
+		<li>
+			Products should increase, and not decrease the diversity of game decisions (builds,
+			compositions, characters, decks).
+		</li>
+		<li>
+			Products should not remove game decisions, but may highlight decisions that are important and
+			give multiple choices to help players make good decisions.
+		</li>
+		<li>
+			Products cannot create alternatives for official skill ranking systems such as the ranked
+			ladder. Prohibited alternatives include MMR or ELO calculators.
+		</li>
+		<li>Products cannot identify or analyze players who are deliberately hidden by the game.</li>
+	</ul>
+	<h2 id="developer-api-policy_tournament-policies">Tournament Policies</h2>
+	<ul>
+		<li>
+			Tournaments must:
+			<ul>
+				<li>Follow all monetization policies above.</li>
+				<li>Allot at least 70% of the entry fees to the prize pool.</li>
+				<li>Win conditions must be fair and transparent to players (we determine fair).</li>
+				<li>Must have at least 20 participants.</li>
+				<li>Not include any gambling.</li>
+			</ul>
+		</li>
+		<li>
+			If you are a tournament organizer operating in the US or Canada please refer to, and adhere
+			to, these
+			<a href="https://developer.riotgames.com/policies/na-tournaments"
+				>North American tournament organizer policies</a
+			>.
+		</li>
+		<li>
+			If you are a tournament organizer operating in Europe, please refer to, and adhere to,
+			these&nbsp;<a href="https://riot.eurcommunitycompetition.com/games/teamfight-tactics"
+				>European tournament organizer policies</a
+			>.
+		</li>
+	</ul>
+	<style>
+
+		/* Removes Grey Cell Background */
+		.content table>tbody>tr:nth-of-type(even)
+		{
+		      background-color: transparent;!important;
+		}
+
+		/* Sets Border Width, Type, and Color for Leftmost Table Column Border */
+		.content table tr th:first-child, .content table tr td:first-child
+		{
+		      border-left: 1px solid #000;
+		}
+
+		/* Sets Background Color, Font Color, and Padding for Table Heading Row */
+		.content table>thead tr th
+		{
+		      background: #000;
+		      color: #ffffff!important;
+		      padding: 6px 13px!important;
+		}
+
+		/* Sets Border Width, Type and Color for Very Top Table Border */
+		.content table tr th
+
+		{
+		      border-top: 1px solid #000;
+		}
+
+		/* Sets Border Width, Type, and Color for Bottom and Right Sides of Cells */
+		.content table tr th, .content table tr td
+
+		{
+		      border-right:1px solid #000;
+		      border-bottom:1px solid #000;
+		}
+
+		/* Adds 10px of Empty Space Before the Top of the H3 Heading */
+		h3
+		{
+		      margin-top: 10px;
+		}
+
+		/* Adds 10px of Empty Space Before the Top of the H4 Heading */
+		h4
+		{
+		      margin-top: 10px;
+		}
+
+
+		/* Removes Grey and White Lines from Code Block */
+		.content pre>code
+
+		{
+		      background: #f7f7f9;
+		}
+
+		/* Changes Font Color of Inline Code Snippet to Black from Red */
+		.content code
+		{
+		      color: #000;
+		}</style
+	><style class="darkreader darkreader--sync" media="screen"></style>
+	<h1 id="game-policy">Game Policy</h1>
+	<h2 id="game-policy_use-cases">Use Cases</h2>
+	<p>Riot analyzes two main factors when evaluating applications:</p>
+	<ul>
+		<li>Is the use case good and approved?</li>
+		<li>Does the developer show they will deliver on that use case?</li>
+	</ul>
+	<p>
+		To demonstrate that your app meets the use case, you should have one or more of the following:
+	</p>
+	<ul>
+		<li>Be an established brand that wants to add Riot Games to its portfolio.</li>
+		<li>New app that is fully functional and testable by Riot.</li>
+		<li>Prototype that is mostly testable by Riot.</li>
+		<li>Mockups where Riot can clearly express your intent and the user flow.</li>
+		<li>A deck that shows your ambition and intent and some of the user flow.</li>
+	</ul>
+	<p>
+		Riot needs to see the user flow to understand what your intended player experience is, such as
+		account creation process, login pipeline, or queuing up for match pipeline.
+	</p>
+	<p>
+		You must also send a link to a working site, mockup, prototype, or rendering where it is easy to
+		understand the user flows of the tool.
+	</p>
+	<h3 id="game-policy_examples-of-approved-use-cases-for-personal-keys">
+		Examples of Approved Use Cases for Personal Keys:
+	</h3>
+	<ul>
+		<li>Personal sites.</li>
+		<li>School projects .</li>
+		<li>Creating a proof of concept for Production Key request.</li>
+	</ul>
+	<h3 id="game-policy_examples-of-approved-use-cases-for-production-keys-requiring-rso-integration">
+		Examples of Approved Use Cases for Production Keys requiring RSO integration:
+	</h3>
+	<ul>
+		<li>Showing (self) player stats.</li>
+		<li>Running tournaments.</li>
+		<li>
+			Training tools that allow players to view their own match histories and aggregate stats.
+		</li>
+		<li>LFG tools.</li>
+		<li>Game overlays that provide static data that is available prior to the game.</li>
+	</ul>
+	<h3
+		id="game-policy_examples-of-approved-use-cases-for-production-keys-not-requiring-rso-integration"
+	>
+		Examples of Approved Use Cases for Production Keys not requiring RSO integration:
+	</h3>
+	<ul>
+		<li>Aggregate player stats (no specific players).</li>
+		<li>Official Ladder Leaderboards.</li>
+	</ul>
+	<h3 id="game-policy_examples-of-unapproved-use-cases">Examples of Unapproved Use Cases</h3>
+	<p>The following use cases will not be approved:</p>
+	<ul>
+		<li>Scouting - tracking the champions opponents have on their boards.</li>
+		<li>
+			Products that bypass a skill test for the player. Skill tests can include the tracking of
+			diverse information over a short period of time.
+		</li>
+		<li>Apps that provide dynamic, real-time information.</li>
+		<li>Apps that dictate player decisions.</li>
+	</ul>
+	<h2 id="game-policy_tft-personal-keys">TFT Personal Keys</h2>
+	<p>Use keys for the following reasons:</p>
+	<ul>
+		<li>Personal keys are meant for smaller-size, personal projects.</li>
+		<li>Production keys are meant for larger-size, professional projects.</li>
+	</ul>
+	<h2 id="game-policy_general-teamfight-tactics-policy">General Teamfight Tactics Policy</h2>
+	<p>The following policies apply to Teamfight Tactics:</p>
+	<ul>
+		<li>
+			Products cannot display win rates for Legends and Legend-based Augments. This applies to all
+			websites, applications, and overlays.
+		</li>
+		<li>Products cannot alter the goal of the game, for example, they cannot destroy the Nexus.</li>
+		<li>
+			<p>
+				Products that help players improve their skills over time are encouraged. Pre-game best
+				practices or post-game analysis are great spaces for this.
+			</p>
+		</li>
+		<li>
+			<p>
+				Having a static recommendation for a player pre-game is acceptable, even if that same
+				recommendation is available to you the entire game.
+			</p>
+		</li>
+		<li>
+			<p>
+				Issues arise when the recommendations adjust in real time based on the player’s actions in
+				game and give direct prescriptions of what to do.
+			</p>
+		</li>
+		<li>
+			<p>
+				Products cannot bypass a skill test for the player. Skill tests can include the tracking of
+				diverse information over a short period of time.
+			</p>
+		</li>
+		<li>
+			<p>
+				Protect the learning curve. The great thing about Riot's games is that you are always
+				learning. If an app takes away that ability or desire to learn and improve, this takes away
+				from the fun and what makes this game so engaging.
+			</p>
+		</li>
+		<li>
+			<p>
+				Products should not remove game decisions, but may highlight decisions that are important
+				and give multiple choices to help players make good decisions.
+			</p>
+		</li>
+		<li>
+			<p>
+				Products may not provide information that was not available prior to the game. For example,
+				an app can provide metadata on augment statistics as this information is available prior to
+				the game and is not based on in-game activity. An app cannot make suggestions based on the
+				player’s current game state as that information is dynamic and not readily available prior
+				to the game start.
+			</p>
+		</li>
+		<li>
+			Products should increase not decrease the diversity of game decisions, in builds,
+			compositions, characters, decks.
+		</li>
+		<li>
+			<p>
+				Products cannot create an unfair advantage for players, such as cheating or giving some
+				players an advantage that others would not otherwise have.
+			</p>
+		</li>
+		<li>
+			<p>
+				Apps and overlays during the game may not include any real-time data that would improve a
+				player’s performance immediately by altering player behavior, such as "go here now" versus
+				altering it upon reflection, learning and coaching the player game over game.
+			</p>
+		</li>
+		<li>
+			<p>
+				Apps and Overlays during gameplay (including the loading screen) may not track your
+				opponent’s champions/plays or predict their next plays. This includes aggregate stats for
+				both individual players and the lobby
+			</p>
+			<ul>
+				<li>
+					Examples:
+					<ul>
+						<li>
+							A player/lobby’s most played champ/synergy/augment may not be displayed during
+							gameplay
+						</li>
+						<li>
+							A player/lobby’s predicted next play based on the board may not be displayed during
+							gameplay
+						</li>
+					</ul>
+				</li>
+			</ul>
+		</li>
+	</ul>
+	<style>
+
+		/* Removes Grey Cell Background */
+		.content table>tbody>tr:nth-of-type(even)
+		{
+		   background-color: transparent;!important;
+		}
+
+		/* Sets Border Width, Type, and Color for Leftmost Table Column Border */
+		.content table tr th:first-child, .content table tr td:first-child
+		{
+		   border-left: 1px solid #000;
+		}
+
+		/* Sets Background Color, Font Color, and Padding for Table Heading Row */
+		.content table>thead tr th
+		{
+		   background: #000;
+		   color: #ffffff!important;
+		   padding: 6px 13px!important;
+		}
+
+		/* Sets Border Width, Type and Color for Very Top Table Border */
+		.content table tr th
+
+		{
+		   border-top: 1px solid #000;
+		}
+
+		/* Sets Border Width, Type, and Color for Bottom and Right Sides of Cells */
+		.content table tr th, .content table tr td
+
+		{
+		   border-right:1px solid #000;
+		   border-bottom:1px solid #000;
+		}
+
+		/* Adds 10px of Empty Space Before the Top of the H3 Heading */
+		h3
+		{
+		   margin-top: 10px;
+		}
+
+		/* Adds 10px of Empty Space Before the Top of the H4 Heading */
+		h4
+		{
+		   margin-top: 10px;
+		}
+
+
+		/* Removes Grey and White Lines from Code Block */
+		.content pre>code
+
+		{
+		   background: #f7f7f9;
+		}
+
+		/* Changes Font Color of Inline Code Snippet to Black from Red */
+		.content code
+		{
+		   color: #000;
+		}</style
+	><style class="darkreader darkreader--sync" media="screen"></style>
+	<h1 id="rso-integration">RSO Integration</h1>
+	<p>
+		RSO or Riot Sign On, allows players to safely link their Riot Account to other applications.
+		This access is only available to developers with Production Level API Keys.
+	</p>
+	<h2 id="rso-integration_getting-a-production-key">Getting a Production Key</h2>
+	<p>
+		Before you can get started with RSO, you will need a production key. If you do not have one,
+		please request one at
+		<a href="https://developer.riotgames.com">developer.riotgames.com</a> after reading through our
+		policies. If approved, we will contact you in the developer portal app messaging to kick off the
+		RSO integration process.
+	</p>
+	<h2 id="rso-integration_implementing-rso">Implementing RSO</h2>
+	<ul>
+		<li>
+			Client Secret Basic RSO instructions:
+			<a
+				href="https://docs.google.com/document/d/1_8i2PvPA3edFHIh1IwfO5vs5rcl04O62Xfj0o7zCP3c/edit?pli=1"
+				>Implementing Riot Sign On</a
+			>
+		</li>
+		<li>
+			JWT RSO instructions:
+			<a
+				href="https://docs.google.com/document/d/e/2PACX-1vTSthxkWOIqPFe8Xqqjv4Ona5pRa5W3X6bLg4I47X15gJjG9ae-HU5a0by7VIVLWdPMgB9fTr5gvQcY/pub"
+				>Implementing RSO - JWT</a
+			>
+		</li>
+		<li>
+			<a href="https://static.developer.riotgames.com/docs/rso/rso-example-app.zip"
+				>Sample RSO Node App</a
+			>
+		</li>
+	</ul>
+	<p>Players should be directed to login at this link:</p>
+	<p>
+		<a
+			href="https://auth.riotgames.com/authorize?client_id=&amp;redirect_uri=&amp;response_type=code&amp;scope=openid+offline_access"
+			>https://auth.riotgames.com/authorize?client_id=&amp;redirect_uri=&amp;response_type=code&amp;scope=openid+offline_access</a
+		>.
+	</p>
+	<p>After logging in, players are redirected back to the redirect_uri you specified.</p>
+	<p>
+		See
+		<a
+			href="https://docs.google.com/document/d/1_8i2PvPA3edFHIh1IwfO5vs5rcl04O62Xfj0o7zCP3c/edit?pli=1"
+			>Implementing Riot Sign On</a
+		>
+		and
+		<a href="https://static.developer.riotgames.com/docs/rso/rso-example-app.zip"
+			>Sample RSO Node App</a
+		>
+		for information about how to integrate with RSO and to view a sample Node web server that
+		implements the example.
+	</p>
+	<p>Your RSO client has access to endpoints that will allow you to identify who logged in.</p>
+	<p>
+		For Teamfight Tactics, you will use
+		<a href="https://developer.riotgames.com/apis#account-v1/GET_getByAccessToken"
+			>/riot/account/v1/accounts/me</a
+		>:
+	</p>
+	<pre><code>curl --location --request GET 'https://americas.api.riotgames.com/riot/account/v1/accounts/me' --header 'Authorization: Bearer {accessToken}'
+curl --location --request GET 'https://europe.api.riotgames.com/riot/account/v1/accounts/me' --header 'Authorization: Bearer {accessToken}'
+curl --location --request GET 'https://asia.api.riotgames.com/riot/account/v1/accounts/me' --header 'Authorization: Bearer {accessToken}'
+</code></pre>
+
+	<p>
+		The accounts data returned from each cluster is identical. We recommend using the cluster
+		closest to your servers.
+	</p>
+	<style>
+
+		/* Removes Grey Cell Background */
+		.content table>tbody>tr:nth-of-type(even)
+		{
+		      background-color: transparent;!important;
+		}
+
+		/* Sets Border Width, Type, and Color for Leftmost Table Column Border */
+		.content table tr th:first-child, .content table tr td:first-child
+		{
+		      border-left: 1px solid #000;
+		}
+
+		/* Sets Background Color, Font Color, and Padding for Table Heading Row */
+		.content table>thead tr th
+		{
+		      background: #000;
+		      color: #ffffff!important;
+		      padding: 6px 13px!important;
+		}
+
+		/* Sets Border Width, Type and Color for Very Top Table Border */
+		.content table tr th
+
+		{
+		      border-top: 1px solid #000;
+		}
+
+		/* Sets Border Width, Type, and Color for Bottom and Right Sides of Cells */
+		.content table tr th, .content table tr td
+
+		{
+		      border-right:1px solid #000;
+		      border-bottom:1px solid #000;
+		}
+
+		/* Adds 10px of Empty Space Before the Top of the H3 Heading */
+		h3
+		{
+		      margin-top: 10px;
+		}
+
+		/* Adds 10px of Empty Space Before the Top of the H4 Heading */
+		h4
+		{
+		      margin-top: 10px;
+		}
+
+
+		/* Removes Grey and White Lines from Code Block */
+		.content pre>code
+
+		{
+		      background: #f7f7f9;
+		}
+
+		/* Changes Font Color of Inline Code Snippet to Black from Red */
+		.content code
+		{
+		      color: #000;
+		}</style
+	><style class="darkreader darkreader--sync" media="screen"></style>
+	<h1 id="routing-values">Routing Values</h1>
+	<p>
+		To execute a request to the Teamfight Tactics (TFT) API, you must select the correct host to
+		execute your request to. The TFT uses routing values in the domain to ensure your request is
+		properly routed. Platform IDs and regions as routing values, such as <code>na1</code> and
+		<code>americas</code>. Routing values are determined by the topology of the underlying services.
+		Services are frequently clustered by platform resulting in platform IDs being used as routing
+		values. Services may also be clustered by region, which is when regional routing values are
+		used. The best way to tell if an endpoint uses a platform or a region as a routing value is to
+		execute a sample request through the <a href="/apis">Reference page</a>.
+	</p>
+	<h2 id="routing-values_platform-routing-values">Platform Routing Values</h2>
+	<table>
+		<thead>
+			<tr>
+				<th>Platform</th>
+				<th>Host</th>
+			</tr>
+		</thead>
+		<tbody>
+			<tr>
+				<td>BR1</td>
+				<td>br1.api.riotgames.com</td>
+			</tr>
+			<tr>
+				<td>EUN1</td>
+				<td>eun1.api.riotgames.com</td>
+			</tr>
+			<tr>
+				<td>EUW1</td>
+				<td>euw1.api.riotgames.com</td>
+			</tr>
+			<tr>
+				<td>JP1</td>
+				<td>jp1.api.riotgames.com</td>
+			</tr>
+			<tr>
+				<td>KR</td>
+				<td>kr.api.riotgames.com</td>
+			</tr>
+			<tr>
+				<td>LA1</td>
+				<td>la1.api.riotgames.com</td>
+			</tr>
+			<tr>
+				<td>LA2</td>
+				<td>la2.api.riotgames.com</td>
+			</tr>
+			<tr>
+				<td>NA1</td>
+				<td>na1.api.riotgames.com</td>
+			</tr>
+			<tr>
+				<td>OC1</td>
+				<td>oc1.api.riotgames.com</td>
+			</tr>
+			<tr>
+				<td>TR1</td>
+				<td>tr1.api.riotgames.com</td>
+			</tr>
+			<tr>
+				<td>RU</td>
+				<td>ru.api.riotgames.com</td>
+			</tr>
+			<tr>
+				<td>PH2</td>
+				<td>ph2.api.riotgames.com</td>
+			</tr>
+			<tr>
+				<td>SG2</td>
+				<td>sg2.api.riotgames.com</td>
+			</tr>
+			<tr>
+				<td>TH2</td>
+				<td>th2.api.riotgames.com</td>
+			</tr>
+			<tr>
+				<td>TW2</td>
+				<td>tw2.api.riotgames.com</td>
+			</tr>
+			<tr>
+				<td>VN2</td>
+				<td>vn2.api.riotgames.com</td>
+			</tr>
+		</tbody>
+	</table>
+	<h2 id="routing-values_regional-routing-values">Regional Routing Values</h2>
+	<table>
+		<thead>
+			<tr>
+				<th>Region</th>
+				<th>Host</th>
+			</tr>
+		</thead>
+		<tbody>
+			<tr>
+				<td>AMERICAS</td>
+				<td>americas.api.riotgames.com</td>
+			</tr>
+			<tr>
+				<td>ASIA</td>
+				<td>asia.api.riotgames.com</td>
+			</tr>
+			<tr>
+				<td>EUROPE</td>
+				<td>europe.api.riotgames.com</td>
+			</tr>
+		</tbody>
+	</table>
+	<h1 id="match-history">Match History</h1>
+	<h2 id="match-history_best-practices">Best Practices</h2>
+	<p>
+		To best use TFT match history, there are two things to keep in mind—match history is still
+		evolving and fresh data is cheaper.
+	</p>
+	<h3 id="match-history_response-body-structure">Response Body Structure</h3>
+	<p>
+		A basic version of TFT match history was released in the client in patch 9.19. If you look up
+		matches played during this patch, they return <code>data_version: "1"</code> which is used
+		through patch 9.20. In patch 9.19, the only fields for a participant that are guaranteed to be
+		accurate are <code>last_round</code>, <code>level</code>, <code>placement</code>, and
+		<code>puuid</code>. In patch 9.20, items were added to the response body but were not guaranteed
+		to be accurate. As of patch 9.21, all fields in the response should be accurate. As of patch
+		9.22, a new field called <code>character_id</code> was added to the UnitDto and the data version
+		was bumped to <code>data_version: "2"</code>.
+	</p>
+	<h3 id="match-history_fresh-data">Fresh Data</h3>
+	<p>
+		The match history service itself is optimized for fresh data. The newer the matches, the cheaper
+		the cost to look them up. It is not recommended to backfill data for Set 1.
+	</p>
+	<style>
+
+		/* Removes Grey Cell Background */
+		.content table>tbody>tr:nth-of-type(even)
+		{
+		   background-color: transparent;!important;
+		}
+
+		/* Sets Border Width, Type, and Color for Leftmost Table Column Border */
+		.content table tr th:first-child, .content table tr td:first-child
+		{
+		   border-left: 1px solid #000;
+		}
+
+		/* Sets Background Color, Font Color, and Padding for Table Heading Row */
+		.content table>thead tr th
+		{
+		   background: #000;
+		   color: #ffffff!important;
+		   padding: 6px 13px!important;
+		}
+
+		/* Sets Border Width, Type and Color for Very Top Table Border */
+		.content table tr th
+
+		{
+		   border-top: 1px solid #000;
+		}
+
+		/* Sets Border Width, Type, and Color for Bottom and Right Sides of Cells */
+		.content table tr th, .content table tr td
+
+		{
+		   border-right:1px solid #000;
+		   border-bottom:1px solid #000;
+		}
+
+		/* Adds 10px of Empty Space Before the Top of the H3 Heading */
+		h3
+		{
+		   margin-top: 10px;
+		}
+
+		/* Adds 10px of Empty Space Before the Top of the H4 Heading */
+		h4
+		{
+		   margin-top: 10px;
+		}
+
+
+		/* Removes Grey and White Lines from Code Block */
+		.content pre>code
+
+		{
+		   background: #f7f7f9;
+		}
+
+		/* Changes Font Color of Inline Code Snippet to Black from Red */
+		.content code
+		{
+		   color: #000;
+		}</style
+	><style class="darkreader darkreader--sync" media="screen"></style>
+	<h1 id="data-dragon">Data Dragon</h1>
+	<ul>
+		<li><a href="https://developer.riotgames.com/docs/lol#data-dragon_regions">Regions</a></li>
+		<li>
+			<a href="https://developer.riotgames.com/docs/lol#data-dragon_data-assets"
+				>Data &amp; Assets</a
+			>
+		</li>
+		<li>
+			<a href="https://developer.riotgames.com/docs/tft#data-dragon_previous-sets">Previous Sets</a>
+		</li>
+	</ul>
+	<p>
+		Teamfight Tactics static data is included in the League of Legends Data Dragon. You can download
+		a compressed tarball (.tgz) for each patch that contains all active set assets for that patch.
+	</p>
+	<p>
+		Please note there are no indicators about which data is related to which set apart from the
+		naming convention, which varies by set and type of data.
+	</p>
+	<p>
+		Updating Data Dragon after each League of Legends/Teamfight Tactics patch is a manual process,
+		so it is not always updated immediately after a patch.
+	</p>
+	<h3 id="data-dragon_latest">Latest</h3>
+	<p>
+		<a href="https://ddragon.leagueoflegends.com/cdn/dragontail-16.15.1.tgz"
+			>https://ddragon.leagueoflegends.com/cdn/dragontail-16.15.1.tgz</a
+		>
+	</p>
+	<p>
+		Patch 10.10 was uploaded as a zip archive (.zip) instead of the typical compressed tarball
+		(.tgz)
+	</p>
+	<p>
+		<a href="https://ddragon.leagueoflegends.com/cdn/dragontail-10.10.5.zip"
+			>https://ddragon.leagueoflegends.com/cdn/dragontail-10.10.5.zip</a
+		>
+	</p>
+	<h2 id="data-dragon_versions">Versions</h2>
+	<p>
+		You can find all valid Data Dragon versions in the versions file. Typically there is only a
+		single build of Data Dragon for a given patch, however, there may be additional builds. This
+		typically occurs when there is an error in the original build. As such, you should always use
+		the most recent Data Dragon version for a given patch for the best results.
+	</p>
+	<p>
+		<a href="https://ddragon.leagueoflegends.com/api/versions.json"
+			>https://ddragon.leagueoflegends.com/api/versions.json</a
+		>
+	</p>
+	<h2 id="data-dragon_regions">Regions</h2>
+	<p>
+		Data Dragon versions are not always equivalent to the League of Legends client version in a
+		region. You can find the version each region is using in the realms files.
+	</p>
+	<p>
+		<a href="https://ddragon.leagueoflegends.com/realms/na.json"
+			>https://ddragon.leagueoflegends.com/realms/na.json</a
+		>
+	</p>
+	<h2 id="data-dragon_data-assets">Data &amp; Assets</h2>
+	<p>Below, you can find the available data for Teamfight Tactic sets.</p>
+	<h3 id="data-dragon_arena-mode">Arena Mode</h3>
+	<p>
+		<a href="https://ddragon.leagueoflegends.com/cdn/13.24.1/data/en_US/tft-arena.json"
+			>https://ddragon.leagueoflegends.com/cdn/13.24.1/data/en_US/tft-arena.json</a
+		>
+		Includes id, translated name and image for all arena skins. Icons are under
+		<code>img/tft-arena/</code>
+	</p>
+	<pre><code>{
+    "type": "tft-arena",
+    "version": "0.0.0",
+    "data": {
+        "Base": {
+            "id": "1",
+            "name": "Default Arena",
+            "image": {
+                "full": "1.png",
+                "sprite": "tft-arena0.png",
+                "group": "tft-arena",
+                "x": 0,
+                "y": 0,
+                "w": 48,
+                "h": 48
+            }
+        },
+    ...
+</code></pre>
+
+	<h3 id="data-dragon_augments">Augments</h3>
+	<p>
+		<a href="https://ddragon.leagueoflegends.com/cdn/13.24.1/data/en_US/tft-augments.json"
+			>https://ddragon.leagueoflegends.com/cdn/13.24.1/data/en_US/tft-augments.json</a
+		>
+		Includes id, translated name, and image for all non-hero augments for all active sets. Separate
+		section at the top of the file has information about the augment container for all active sets.
+		Augment container icons are under <code>img/tft-augment-container</code>. Augment icons are
+		under <code>img/tft-augment</code>.
+	</p>
+	<pre><code>{
+    "type": "tft-augment",
+    "version": "0.0.0",
+    "augment-container": {
+        "name": "Hexcore Augments",
+        "image": {
+            "full": "EOG_AugmentPop_Generic.TFT_Set9.png",
+            "sprite": "tft-augment0.png",
+            "group": "tft-augment",
+            "x": 0,
+            "y": 0,
+            "w": 48,
+            "h": 48
+        }
+    },
+    "data": {
+        "TFT6_Augment_SalvageBin": {
+            "id": "TFT6_Augment_SalvageBin",
+            "name": "Salvage Bin",
+            "image": {
+                "full": "Salvage2.png",
+                "sprite": "tft-augment0.png",
+                "group": "tft-augment",
+                "x": 48,
+                "y": 0,
+                "w": 48,
+                "h": 48
+            }
+        }
+    ...
+</code></pre>
+
+	<h3 id="data-dragon_champions">Champions</h3>
+	<p>
+		<a href="https://ddragon.leagueoflegends.com/cdn/13.24.1/data/en_US/tft-champion.json"
+			>https://ddragon.leagueoflegends.com/cdn/13.24.1/data/en_US/tft-champion.json</a
+		>
+		Includes id, translated name, tier, and image for all champions for all active sets. Icons are
+		under <code>img/tft-champion</code>.
+	</p>
+	<pre><code>{
+    "type": "tft-champion",
+    "version": "0.0.0",
+    "data": {
+        "TFT9_Irelia": {
+            "id": "TFT9_Irelia",
+            "name": "Irelia",
+            "tier": 1,
+            "image": {
+                "full": "TFT9_Irelia.TFT_Set9.png",
+                "sprite": "tft-champion0.png",
+                "group": "tft-champion",
+                "x": 0,
+                "y": 0,
+                "w": 48,
+                "h": 48
+            }
+        },
+        ...
+</code></pre>
+
+	<h3 id="data-dragon_items">Items</h3>
+	<p>
+		<a href="https://ddragon.leagueoflegends.com/cdn/13.24.1/data/en_US/tft-item.json"
+			>https://ddragon.leagueoflegends.com/cdn/13.24.1/data/en_US/tft-item.json</a
+		>
+		Includes id, translated name, and image for all items for all active sets. Note that items is a
+		broad category and this includes equippable components and items, consumables, and armory
+		options. Icons are under <code>img/tft-item</code>.
+	</p>
+	<pre><code>{
+    "type": "tft-item",
+    "version": "0.0.0",
+    "data": {
+        "TFT_Consumable_NeekosHelp": {
+            "id": "TFT_Consumable_NeekosHelp",
+            "name": "Champion Duplicator",
+            "image": {
+                "full": "TFT_Consumable_NeekosHelp.png",
+                "sprite": "tft-item0.png",
+                "group": "tft-item",
+                "x": 0,
+                "y": 0,
+                "w": 48,
+                "h": 48
+            }
+        },
+    ...
+
+</code></pre>
+
+	<h3 id="data-dragon_queues">Queues</h3>
+	<p>
+		<a href="https://ddragon.leagueoflegends.com/cdn/13.24.1/data/en_US/tft-queues.json"
+			>https://ddragon.leagueoflegends.com/cdn/13.24.1/data/en_US/tft-queues.json</a
+		>
+		Includes queue id, translated name, queue type (can be cross-referenced with tft-regalia), and
+		image. Icons are under <code>img/tft-queue</code>.
+	</p>
+	<pre><code>{
+    "type": "tft-queue-types",
+    "version": "0.0.0",
+    "data": {
+        "1090": {
+            "id": "1090",
+            "name": "NORMAL",
+            "queueType": "NORMAL_TFT",
+            "image": {
+                "full": "1090.png",
+                "sprite": "tft-queue-type0.png",
+                "group": "tft-queue-type",
+                "x": 0,
+                "y": 0,
+                "w": 48,
+                "h": 48
+            }
+        },
+    ...
+</code></pre>
+
+	<h3 id="data-dragon_regalia">Regalia</h3>
+	<p>
+		<a href="https://ddragon.leagueoflegends.com/cdn/13.24.1/data/en_US/tft-regalia.json"
+			>https://ddragon.leagueoflegends.com/cdn/13.24.1/data/en_US/tft-regalia.json</a
+		>
+		Includes the image for the ranked and rated icons. Underneath "data" is each queue type (can be
+		cross-referenced with the data in tft-queues.json); underneath each of those is the tiers and
+		the associated images. Icons are under <code>img/tft-regalia</code>.
+	</p>
+	<pre><code>{
+    "type": "tft-regalia",
+    "version": "0.0.0",
+    "data": {
+        "RANKED_TFT": {
+            "Bronze": {
+                "image": {
+                    "full": "TFT_Regalia_Bronze.png",
+                    "sprite": "tft-regalia0.png",
+                    "group": "tft-regalia",
+                    "x": 0,
+                    "y": 0,
+                    "w": 48,
+                    "h": 48
+                }
+            },
+     ...
+</code></pre>
+
+	<h3 id="data-dragon_tacticians">Tacticians</h3>
+	<p>
+		<a href="https://ddragon.leagueoflegends.com/cdn/13.24.1/data/en_US/tft-tactician.json"
+			>https://ddragon.leagueoflegends.com/cdn/13.24.1/data/en_US/tft-tactician.json</a
+		>
+		Includes the id, tier, translated name, and image for all tacticians (Chibis and little
+		legends). Icons are under <code>img/tft-tactician</code>.
+	</p>
+	<pre><code>{
+    "type": "tft-tactician",
+    "version": "0.0.0",
+    "data": {
+        "13010": {
+            "id": "13010",
+            "tier": "1",
+            "name": "Beatmaker Ossia",
+            "image": {
+                "full": "Tooltip_AkaliDragon_Beatmaker_Tier1.png",
+                "sprite": "tft-tactician0.png",
+                "group": "tft-tactician",
+                "x": 0,
+                "y": 0,
+                "w": 48,
+                "h": 48
+            }
+        },
+    ...
+</code></pre>
+
+	<h3 id="data-dragon_traits">Traits</h3>
+	<p>
+		<a href="https://ddragon.leagueoflegends.com/cdn/13.24.1/data/en_US/tft-trait.json"
+			>https://ddragon.leagueoflegends.com/cdn/13.24.1/data/en_US/tft-trait.json</a
+		>
+		Includes the id, translated name, and image for all traits for all active sets. Icons under
+		<code>img/tft-trait</code>.
+	</p>
+	<h2 id="data-dragon_previous-sets">Previous Sets</h2>
+	<p>
+		<a href="https://static.developer.riotgames.com/docs/tft/set5patch1112.zip">Reckoning</a><br />
+		<a href="https://static.developer.riotgames.com/docs/tft/set4update.zip"
+			>Fates: Festival of Beasts</a
+		><br />
+		<a href="https://static.developer.riotgames.com/docs/tft/set4.zip">Fates</a><br />
+		<a href="https://static.developer.riotgames.com/docs/tft/set3update.zip"
+			>Galaxies: Return to the Stars</a
+		><br />
+		<a href="https://static.developer.riotgames.com/docs/tft/set3.zip">Galaxies</a><br />
+		<a href="https://static.developer.riotgames.com/docs/tft/set2.zip">Rise of the Elements</a>
+	</p>
+	<style>
+
+		/* Removes Grey Cell Background */
+		.content table>tbody>tr:nth-of-type(even)
+		{
+		   background-color: transparent;!important;
+		}
+
+		/* Sets Border Width, Type, and Color for Leftmost Table Column Border */
+		.content table tr th:first-child, .content table tr td:first-child
+		{
+		   border-left: 1px solid #000;
+		}
+
+		/* Sets Background Color, Font Color, and Padding for Table Heading Row */
+		.content table>thead tr th
+		{
+		   background: #000;
+		   color: #ffffff!important;
+		   padding: 6px 13px!important;
+		}
+
+		/* Sets Border Width, Type and Color for Very Top Table Border */
+		.content table tr th
+
+		{
+		   border-top: 1px solid #000;
+		}
+
+		/* Sets Border Width, Type, and Color for Bottom and Right Sides of Cells */
+		.content table tr th, .content table tr td
+
+		{
+		   border-right:1px solid #000;
+		   border-bottom:1px solid #000;
+		}
+
+		/* Adds 10px of Empty Space Before the Top of the H3 Heading */
+		h3
+		{
+		   margin-top: 10px;
+		}
+
+		/* Adds 10px of Empty Space Before the Top of the H4 Heading */
+		h4
+		{
+		   margin-top: 10px;
+		}
+
+
+		/* Removes Grey and White Lines from Code Block */
+		.content pre>code
+
+		{
+		   background: #f7f7f9;
+		}
+
+		/* Changes Font Color of Inline Code Snippet to Black from Red */
+		.content code
+		{
+		   color: #000;
+		}</style
+	><style class="darkreader darkreader--sync" media="screen"></style>
+	<h1 id="getting-help-and-staying-up-to-date">Getting Help and Staying Up-to-date</h1>
+	<p>
+		If you run into any difficulties or are having technical issues, please join
+		<a href="https://discord.gg/riotgamesdevrel" target="_blank">Developer Discord</a> for support.
+		Follow our <a href="https://twitter.com/RiotGamesDevRel" target="_blank">Twitter/X</a> for the
+		latest updates.
+	</p>
+</div>
