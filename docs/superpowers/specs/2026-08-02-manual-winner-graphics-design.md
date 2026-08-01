@@ -29,7 +29,6 @@ Riot API work remains a later experiment. The MVP must work without `RIOT_API_KE
 - `docs/communitydragon/assets.md`
   - Data Dragon is Riot's official static data and asset source for LoL/TFT where Riot publishes supported JSON and image bundles.
   - CommunityDragon is a community-maintained export of LoL/TFT client and game files. It is broader than Data Dragon for many TFT assets, but it is not official, not guaranteed complete, and paths can move.
-  - CommunityDragon asset paths can move.
   - Directory JSON listings and CDragon TFT JSON are useful sync inputs.
   - DDragon and CDragon (Especially CDragon) may lag behind patches because publishing is manual.
 
@@ -180,8 +179,8 @@ Augments are optional for publishing.
 2. Pin or sync the CommunityDragon/Data Dragon catalog for that tournament.
 3. Build the tournament roster:
    - add players manually
-   - import players from CSV
-   - preview CSV rows before writing
+   - import players from a player import bundle
+   - preview CSV rows and image matches before writing
    - search/filter existing players
    - checkbox-select multiple players
    - batch add selected players to the active tournament roster
@@ -198,32 +197,65 @@ Augments are optional for publishing.
 
 Draft edits must never leak to `/gfx`. The broadcast route changes only when the operator presses publish or hide.
 
-## CSV Import
+## Player Import Bundle
 
-MVP import format is CSV only.
+MVP import format is a directory bundle, not a raw CSV alone.
 
-Required columns:
+Bundle structure:
+
+- `players.csv`
+- `player_images/`
+
+`players.csv` contains structured player data only. It does not set app-owned internal media paths directly.
+
+Required CSV columns:
 
 - `full_name`
 - `display_name`
-
-Optional columns:
-
 - `riot_id`
+
+Optional CSV columns:
+
 - `riot_game_name`
 - `riot_tagline`
-- `image_path`
 
 Import must have a preview step that shows:
 
 - parsed rows
 - missing required fields
 - duplicate candidates
+- matched player images
+- players with no matching image
+- image files that do not match any CSV Riot ID
+- duplicate image candidates
+- invalid Riot IDs
 - rows that will create players
 - rows that will update existing players
 - rows that will be skipped
 
-CSV import normalizes Riot identity when either `riot_id` or both split Riot ID columns are present. The MVP leaves actual image file upload and manual image matching outside CSV import; `image_path` is accepted only as metadata for pre-existing managed files.
+CSV import normalizes Riot identity from `riot_id`. Split columns are accepted as optional redundant data only when they match the normalized `riot_id`.
+
+Image matching uses Riot ID. Staff must name image files using a filename-safe Riot ID convention:
+
+```txt
+GameName_TAG.ext
+```
+
+Example:
+
+```txt
+players.csv: riot_id = EarlGreyTeemo#sip
+image file: player_images/EarlGreyTeemo_sip.png
+```
+
+Supported image extensions:
+
+- `.png`
+- `.jpg`
+- `.jpeg`
+- `.webp`
+
+On confirmed import, the app copies matched images from `player_images/` into the managed media directory and stores the resulting internal `image_path`. Unmatched players still import without images. Extra image files are reported in preview and are not copied.
 
 ## Catalog Sync And Fallback
 
@@ -298,11 +330,14 @@ Database and schema tests:
 - winner boards keep ordered champions and augments
 - publishing one board does not mutate drafts unexpectedly
 
-CSV import tests:
+Player import bundle tests:
 
 - valid CSV creates players
 - duplicate Riot ID or display name is detected in preview
 - missing required fields are reported before writing
+- Riot ID keyed image files are matched in preview
+- unmatched image files are reported
+- matched image files are copied into managed media only after confirmed import
 - batch add does not duplicate existing tournament roster rows
 
 Catalog sync tests:
@@ -329,4 +364,5 @@ Manual visual validation:
 - MVP does not require motion. Animation can be added after the static graphic is production-safe.
 - Player images are stored in a controlled upload directory and served through a SvelteKit media route, not directly from arbitrary external URLs.
 - Riot ID is stored both as normalized display text and split game-name/tagline fields for later ACCOUNT-V1 automation.
+- Player import is a bundle containing `players.csv` and `player_images/`; image filenames must match normalized Riot ID as `GameName_TAG.ext`.
 - Catalog ingestion starts from CommunityDragon `{patch}/cdragon/tft/{locale}.json`, with Data Dragon champion and augment JSON as fallback.
