@@ -8,9 +8,9 @@ importers:
 
   .:
     dependencies:
-      better-sqlite3:
-        specifier: ^13.0.2
-        version: 13.0.2
+      '@libsql/client':
+        specifier: ^0.17.4
+        version: 0.17.4
       twisted:
         specifier: ^1.82.0
         version: 1.82.0
@@ -39,9 +39,6 @@ importers:
       '@tailwindcss/vite':
         specifier: ^4.3.0
         version: 4.3.3(vite@8.2.0(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1))
-      '@types/better-sqlite3':
-        specifier: ^7.6.13
-        version: 7.6.13
       '@types/node':
         specifier: ^24
         version: 24.13.3
@@ -50,16 +47,16 @@ importers:
         version: 4.1.10(playwright@1.62.1)(vite@8.2.0(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1))(vitest@4.1.10)
       auth:
         specifier: ^1.6.23
-        version: 1.6.25(@better-fetch/fetch@1.3.1)(@sveltejs/kit@2.70.2(@sveltejs/vite-plugin-svelte@7.2.0(svelte@5.56.8)(vite@8.2.0(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)))(svelte@5.56.8)(typescript@6.0.3)(vite@8.2.0(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)))(better-call@1.3.7(zod@4.4.3))(better-sqlite3@13.0.2)(drizzle-kit@0.31.10)(drizzle-orm@0.45.2(@types/better-sqlite3@7.6.13)(better-sqlite3@13.0.2)(kysely@0.29.4))(jose@6.2.5)(kysely@0.29.4)(nanostores@1.4.2)(svelte@5.56.8)(vitest@4.1.10)
+        version: 1.6.25(@better-fetch/fetch@1.3.1)(@sveltejs/kit@2.70.2(@sveltejs/vite-plugin-svelte@7.2.0(svelte@5.56.8)(vite@8.2.0(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)))(svelte@5.56.8)(typescript@6.0.3)(vite@8.2.0(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)))(better-call@1.3.7(zod@4.4.3))(drizzle-kit@0.31.10)(drizzle-orm@0.45.2(@libsql/client@0.17.4)(@types/better-sqlite3@7.6.13)(kysely@0.29.4))(jose@6.2.5)(kysely@0.29.4)(nanostores@1.4.2)(svelte@5.56.8)(vitest@4.1.10)
       better-auth:
         specifier: ^1.6.23
-        version: 1.6.25(@sveltejs/kit@2.70.2(@sveltejs/vite-plugin-svelte@7.2.0(svelte@5.56.8)(vite@8.2.0(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)))(svelte@5.56.8)(typescript@6.0.3)(vite@8.2.0(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)))(better-sqlite3@13.0.2)(drizzle-kit@0.31.10)(drizzle-orm@0.45.2(@types/better-sqlite3@7.6.13)(better-sqlite3@13.0.2)(kysely@0.29.4))(svelte@5.56.8)(vitest@4.1.10)
+        version: 1.6.25(@sveltejs/kit@2.70.2(@sveltejs/vite-plugin-svelte@7.2.0(svelte@5.56.8)(vite@8.2.0(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)))(svelte@5.56.8)(typescript@6.0.3)(vite@8.2.0(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)))(drizzle-kit@0.31.10)(drizzle-orm@0.45.2(@libsql/client@0.17.4)(@types/better-sqlite3@7.6.13)(kysely@0.29.4))(svelte@5.56.8)(vitest@4.1.10)
       drizzle-kit:
         specifier: ^0.31.10
         version: 0.31.10
       drizzle-orm:
         specifier: ^0.45.2
-        version: 0.45.2(@types/better-sqlite3@7.6.13)(better-sqlite3@13.0.2)(kysely@0.29.4)
+        version: 0.45.2(@libsql/client@0.17.4)(@types/better-sqlite3@7.6.13)(kysely@0.29.4)
       eslint:
         specifier: ^10.4.1
         version: 10.8.0(jiti@2.7.0)
@@ -923,6 +920,63 @@ packages:
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
 
+  '@libsql/client@0.17.4':
+    resolution: {integrity: sha512-lYayFWasDV78A+TjlEhr6ubb3odBV6OHjb+wdp8VQcyWWAEIjuwbCHaraEUS4m4yWoo0BvZo96It4VdzZRmRWw==}
+
+  '@libsql/core@0.17.4':
+    resolution: {integrity: sha512-LqF9gIvnJ38nmAH1y/ChizHqDO/MO1wLgA96XrraulEEbqXxLjleSH92YWTolbuJKgPUmGu4aJk9W3UnAcxLOQ==}
+
+  '@libsql/darwin-arm64@0.5.29':
+    resolution: {integrity: sha512-K+2RIB1OGFPYQbfay48GakLhqf3ArcbHqPFu7EZiaUcRgFcdw8RoltsMyvbj5ix2fY0HV3Q3Ioa/ByvQdaSM0A==}
+    cpu: [arm64]
+    os: [darwin]
+
+  '@libsql/darwin-x64@0.5.29':
+    resolution: {integrity: sha512-OtT+KFHsKFy1R5FVadr8FJ2Bb1mghtXTyJkxv0trocq7NuHntSki1eUbxpO5ezJesDvBlqFjnWaYYY516QNLhQ==}
+    cpu: [x64]
+    os: [darwin]
+
+  '@libsql/hrana-client@0.10.0':
+    resolution: {integrity: sha512-OoA4EMqRAC7kn7V2P6EQqRcpZf2W+AjsNIyCizBg339Tq/aMC7sRnzs3SklderhmQWAqEzvv8A2vhxVmWpkVvw==}
+
+  '@libsql/isomorphic-ws@0.1.5':
+    resolution: {integrity: sha512-DtLWIH29onUYR00i0GlQ3UdcTRC6EP4u9w/h9LxpUZJWRMARk6dQwZ6Jkd+QdwVpuAOrdxt18v0K2uIYR3fwFg==}
+
+  '@libsql/linux-arm-gnueabihf@0.5.29':
+    resolution: {integrity: sha512-CD4n4zj7SJTHso4nf5cuMoWoMSS7asn5hHygsDuhRl8jjjCTT3yE+xdUvI4J7zsyb53VO5ISh4cwwOtf6k2UhQ==}
+    cpu: [arm]
+    os: [linux]
+
+  '@libsql/linux-arm-musleabihf@0.5.29':
+    resolution: {integrity: sha512-2Z9qBVpEJV7OeflzIR3+l5yAd4uTOLxklScYTwpZnkm2vDSGlC1PRlueLaufc4EFITkLKXK2MWBpexuNJfMVcg==}
+    cpu: [arm]
+    os: [linux]
+
+  '@libsql/linux-arm64-gnu@0.5.29':
+    resolution: {integrity: sha512-gURBqaiXIGGwFNEaUj8Ldk7Hps4STtG+31aEidCk5evMMdtsdfL3HPCpvys+ZF/tkOs2MWlRWoSq7SOuCE9k3w==}
+    cpu: [arm64]
+    os: [linux]
+
+  '@libsql/linux-arm64-musl@0.5.29':
+    resolution: {integrity: sha512-fwgYZ0H8mUkyVqXZHF3mT/92iIh1N94Owi/f66cPVNsk9BdGKq5gVpoKO+7UxaNzuEH1roJp2QEwsCZMvBLpqg==}
+    cpu: [arm64]
+    os: [linux]
+
+  '@libsql/linux-x64-gnu@0.5.29':
+    resolution: {integrity: sha512-y14V0vY0nmMC6G0pHeJcEarcnGU2H6cm21ZceRkacWHvQAEhAG0latQkCtoS2njFOXiYIg+JYPfAoWKbi82rkg==}
+    cpu: [x64]
+    os: [linux]
+
+  '@libsql/linux-x64-musl@0.5.29':
+    resolution: {integrity: sha512-gquqwA/39tH4pFl+J9n3SOMSymjX+6kZ3kWgY3b94nXFTwac9bnFNMffIomgvlFaC4ArVqMnOZD3nuJ3H3VO1w==}
+    cpu: [x64]
+    os: [linux]
+
+  '@libsql/win32-x64-msvc@0.5.29':
+    resolution: {integrity: sha512-4/0CvEdhi6+KjMxMaVbFM2n2Z44escBRoEYpR+gZg64DdetzGnYm8mcNLcoySaDJZNaBd6wz5DNdgRmcI4hXcg==}
+    cpu: [x64]
+    os: [win32]
+
   '@mrleebo/prisma-ast@0.13.1':
     resolution: {integrity: sha512-XyroGQXcHrZdvmrGJvsA9KNeOOgGMg1Vg9OlheUsBOSKznLMDl+YChxbkboRHvtFYJEMRYmlV3uoo/njCw05iw==}
     engines: {node: '>=16'}
@@ -933,6 +987,9 @@ packages:
     peerDependencies:
       '@emnapi/core': ^1.7.1 || ^2.0.0-alpha.3
       '@emnapi/runtime': ^1.7.1 || ^2.0.0-alpha.3
+
+  '@neon-rs/load@0.0.4':
+    resolution: {integrity: sha512-kTPhdZyTQxB+2wpiRcFWrDcejc4JI6tkPuS7UZCG4l6Zvc5kU/gGQ/ozvHTh1XR5tS+UlfAfGuPajjzQjCiHCw==}
 
   '@noble/ciphers@2.2.0':
     resolution: {integrity: sha512-Z6pjIZ/8IJcCGzb2S/0Px5J81yij85xASuk1teLNeg75bfT07MV3a/O2Mtn1I2se43k3lkVEcFaR10N4cgQcZA==}
@@ -1240,6 +1297,9 @@ packages:
   '@types/trusted-types@2.0.7':
     resolution: {integrity: sha512-ScaPdn1dQczgbl0QFTeTOmVHFULt394XJgOQNoyVhZ6r2vLnMLJfBPd53SB52T/3G36VI1/g2MZaX0cwDuXsfw==}
 
+  '@types/ws@8.18.1':
+    resolution: {integrity: sha512-ThVF6DCVhA8kUGy+aazFQ4kXQ7E1Ty7A3ypFOe0IcJV8O/M511G99AW24irKrW56Wt44yG9+ij8FaqoBGkuBXg==}
+
   '@vitest/browser-playwright@4.1.10':
     resolution: {integrity: sha512-nMoXGEiRpT7m3W7NsbvrM2aKNwiNHZf+zEpUCvMteGjZFvfT96Q9fh7QyB98dvDWXiKvrLxA7bJ1mCOOv+JQPw==}
     peerDependencies:
@@ -1541,10 +1601,6 @@ packages:
       zod:
         optional: true
 
-  better-sqlite3@13.0.2:
-    resolution: {integrity: sha512-jW6oufeDhXZaiX9Lw5A+oerVClx4iFrI6uDj1zu7SqUAjak9vbJvA0NEcKLNxHiQHb6kYCoFzzXYV0YOauhV3g==}
-    engines: {node: '>=22'}
-
   brace-expansion@5.0.9:
     resolution: {integrity: sha512-ScQ4IuvIEF1TMlP7Zt+vjJ//9zlPb2SDcxWxM3bk8s6t6GGdJ7KO1dCcTidOPJKePW30LE/2cT7wCyPho9/Wxg==}
     engines: {node: 20 || >=22}
@@ -1654,6 +1710,10 @@ packages:
 
   destr@2.0.5:
     resolution: {integrity: sha512-ugFTXCtDZunbzasqBxrK93Ik/DRYsO6S/fedkWEMKqt04xZ4csmnmwGDBAb07QWNaGMAmnTIemsYZCksjATwsA==}
+
+  detect-libc@2.0.2:
+    resolution: {integrity: sha512-UX6sGumvvqSaXgdKGUsgZWqcUyIXZ/vZTrlRT/iobiKhGL0zL4d3osHj3uqllWJK+i+sixDS/3COVEOFbupFyw==}
+    engines: {node: '>=8'}
 
   detect-libc@2.1.2:
     resolution: {integrity: sha512-Btj2BOOO83o3WyH59e8MgXsxEQVcarkUOpEYrubB0urwnN10yQ364rsiByU11nZlqWYZm05i/of7io4mzihBtQ==}
@@ -2007,6 +2067,9 @@ packages:
   jose@6.2.5:
     resolution: {integrity: sha512-2E5L2yRp03FnwreJLJX8/r7mHiZICCf8kG7fAsTWkSQTDAcc46NIZoQLKy+EJ8sPoJlxyS4OQR5H70LjIZZlIQ==}
 
+  js-base64@3.9.2:
+    resolution: {integrity: sha512-6zayE8QlUdiweYI6cETD/XBSqFcoCUlufn/29PJR99r82x1yDnIprRca0YvAYpAW+ez0GuQkVBC6xG5QkD7OjA==}
+
   js-tokens@4.0.0:
     resolution: {integrity: sha512-RdJUflcE3cUzKiMqQgsCu06FPu9UdIJO0beYbPhHN4k6apgJtifcoCtT9bcxOpYBtpD2kCM6Sbzg4CausW/PKQ==}
 
@@ -2050,6 +2113,11 @@ packages:
   levn@0.4.1:
     resolution: {integrity: sha512-+bT2uH4E5LGE7h/n3evcS/sQlJXCpIp6ym8OWJ5eV6+67Dsql/LaaT7qJBAt2rzfoa/5QBGBhxDix1dMt2kQKQ==}
     engines: {node: '>= 0.8.0'}
+
+  libsql@0.5.29:
+    resolution: {integrity: sha512-8lMP8iMgiBzzoNbAPQ59qdVcj6UaE/Vnm+fiwX4doX4Narook0a4GPKWBEv+CR8a1OwbfkgL18uBfBjWdF0Fzg==}
+    cpu: [x64, arm64, wasm32, arm]
+    os: [darwin, linux, win32]
 
   lightningcss-android-arm64@1.32.0:
     resolution: {integrity: sha512-YK7/ClTt4kAK0vo6w3X+Pnm0D2cf2vPHbhOXdoNti1Ga0al1P4TBZhwjATvjNwLEBCnKvjJc2jQgHXH0NEwlAg==}
@@ -2246,10 +2314,6 @@ packages:
   natural-compare@1.4.0:
     resolution: {integrity: sha512-OWND8ei3VtNC9h7V60qff3SVobHr996CTwgxubgyQYEpg290h9J0buyECNNJexkFm5sOajh5G116RYA1c8ZMSw==}
 
-  node-addon-api@8.9.0:
-    resolution: {integrity: sha512-ekZMeaaIzSQTSpr7X2X3iJM7lTzgnx8ahAG9pJfT/7+14mlEM8ZYQ9cgCDvSSRbReFK0oHli3WrZdCiRsgAT9Q==}
-    engines: {node: ^18 || ^20 || >= 21}
-
   node-releases@2.0.51:
     resolution: {integrity: sha512-wRNIrw4DmVLKQlbgOMdkMx27Wrpzes2hh5Jtbi2bjPd+4wJstWIqP5A+lscnqbm0xxmT5Bpg8Lec5ItEBwx6BQ==}
     engines: {node: '>=18'}
@@ -2417,6 +2481,9 @@ packages:
     resolution: {integrity: sha512-OpN0zzVdiaiAhxpuuj5efpIS4sY9j7bY6uR5mnj5yPzGkdkjNKSJeUThPb60Jw29QuAZgA4o+/iB49kFiaBX6g==}
     engines: {node: '>=14'}
     hasBin: true
+
+  promise-limit@2.7.0:
+    resolution: {integrity: sha512-7nJ6v5lnJsXwGprnGXga4wx6d1POjvi5Qmf1ivTRxTjH4Z/9Czja/UCMLVmB9N93GeWOU93XaFaEt6jbuoagNw==}
 
   promise-queue@2.2.5:
     resolution: {integrity: sha512-p/iXrPSVfnqPft24ZdNNLECw/UrtLTpT3jpAAMzl/o5/rDsGCPo3/CQS2611flL6LkoEJ3oQZw7C8Q80ZISXRQ==}
@@ -2996,12 +3063,12 @@ snapshots:
       nanostores: 1.4.2
       zod: 4.4.3
 
-  '@better-auth/drizzle-adapter@1.6.25(@better-auth/core@1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(better-call@1.3.7(zod@4.4.3))(jose@6.2.5)(kysely@0.29.4)(nanostores@1.4.2))(@better-auth/utils@0.4.2)(drizzle-orm@0.45.2(@types/better-sqlite3@7.6.13)(better-sqlite3@13.0.2)(kysely@0.29.4))':
+  '@better-auth/drizzle-adapter@1.6.25(@better-auth/core@1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(better-call@1.3.7(zod@4.4.3))(jose@6.2.5)(kysely@0.29.4)(nanostores@1.4.2))(@better-auth/utils@0.4.2)(drizzle-orm@0.45.2(@libsql/client@0.17.4)(@types/better-sqlite3@7.6.13)(kysely@0.29.4))':
     dependencies:
       '@better-auth/core': 1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(better-call@1.3.7(zod@4.4.3))(jose@6.2.5)(kysely@0.29.4)(nanostores@1.4.2)
       '@better-auth/utils': 0.4.2
     optionalDependencies:
-      drizzle-orm: 0.45.2(@types/better-sqlite3@7.6.13)(better-sqlite3@13.0.2)(kysely@0.29.4)
+      drizzle-orm: 0.45.2(@libsql/client@0.17.4)(@types/better-sqlite3@7.6.13)(kysely@0.29.4)
 
   '@better-auth/kysely-adapter@1.6.25(@better-auth/core@1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(better-call@1.3.7(zod@4.4.3))(jose@6.2.5)(kysely@0.29.4)(nanostores@1.4.2))(@better-auth/utils@0.4.2)(kysely@0.29.4)':
     dependencies:
@@ -3404,6 +3471,64 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.5
 
+  '@libsql/client@0.17.4':
+    dependencies:
+      '@libsql/core': 0.17.4
+      '@libsql/hrana-client': 0.10.0
+      js-base64: 3.9.2
+      libsql: 0.5.29
+      promise-limit: 2.7.0
+    transitivePeerDependencies:
+      - bufferutil
+      - utf-8-validate
+
+  '@libsql/core@0.17.4':
+    dependencies:
+      js-base64: 3.9.2
+
+  '@libsql/darwin-arm64@0.5.29':
+    optional: true
+
+  '@libsql/darwin-x64@0.5.29':
+    optional: true
+
+  '@libsql/hrana-client@0.10.0':
+    dependencies:
+      '@libsql/isomorphic-ws': 0.1.5
+      js-base64: 3.9.2
+    transitivePeerDependencies:
+      - bufferutil
+      - utf-8-validate
+
+  '@libsql/isomorphic-ws@0.1.5':
+    dependencies:
+      '@types/ws': 8.18.1
+      ws: 8.21.1
+    transitivePeerDependencies:
+      - bufferutil
+      - utf-8-validate
+
+  '@libsql/linux-arm-gnueabihf@0.5.29':
+    optional: true
+
+  '@libsql/linux-arm-musleabihf@0.5.29':
+    optional: true
+
+  '@libsql/linux-arm64-gnu@0.5.29':
+    optional: true
+
+  '@libsql/linux-arm64-musl@0.5.29':
+    optional: true
+
+  '@libsql/linux-x64-gnu@0.5.29':
+    optional: true
+
+  '@libsql/linux-x64-musl@0.5.29':
+    optional: true
+
+  '@libsql/win32-x64-msvc@0.5.29':
+    optional: true
+
   '@mrleebo/prisma-ast@0.13.1':
     dependencies:
       chevrotain: 10.5.0
@@ -3415,6 +3540,8 @@ snapshots:
       '@emnapi/runtime': 2.0.0-alpha.3
       '@tybys/wasm-util': 0.10.3
     optional: true
+
+  '@neon-rs/load@0.0.4': {}
 
   '@noble/ciphers@2.2.0': {}
 
@@ -3648,6 +3775,7 @@ snapshots:
   '@types/better-sqlite3@7.6.13':
     dependencies:
       '@types/node': 24.13.3
+    optional: true
 
   '@types/chai@5.2.3':
     dependencies:
@@ -3669,6 +3797,10 @@ snapshots:
       undici-types: 7.18.2
 
   '@types/trusted-types@2.0.7': {}
+
+  '@types/ws@8.18.1':
+    dependencies:
+      '@types/node': 24.13.3
 
   '@vitest/browser-playwright@4.1.10(playwright@1.62.1)(vite@8.2.0(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1))(vitest@4.1.10)':
     dependencies:
@@ -4105,7 +4237,7 @@ snapshots:
 
   assertion-error@2.0.1: {}
 
-  auth@1.6.25(@better-fetch/fetch@1.3.1)(@sveltejs/kit@2.70.2(@sveltejs/vite-plugin-svelte@7.2.0(svelte@5.56.8)(vite@8.2.0(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)))(svelte@5.56.8)(typescript@6.0.3)(vite@8.2.0(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)))(better-call@1.3.7(zod@4.4.3))(better-sqlite3@13.0.2)(drizzle-kit@0.31.10)(drizzle-orm@0.45.2(@types/better-sqlite3@7.6.13)(better-sqlite3@13.0.2)(kysely@0.29.4))(jose@6.2.5)(kysely@0.29.4)(nanostores@1.4.2)(svelte@5.56.8)(vitest@4.1.10):
+  auth@1.6.25(@better-fetch/fetch@1.3.1)(@sveltejs/kit@2.70.2(@sveltejs/vite-plugin-svelte@7.2.0(svelte@5.56.8)(vite@8.2.0(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)))(svelte@5.56.8)(typescript@6.0.3)(vite@8.2.0(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)))(better-call@1.3.7(zod@4.4.3))(drizzle-kit@0.31.10)(drizzle-orm@0.45.2(@libsql/client@0.17.4)(@types/better-sqlite3@7.6.13)(kysely@0.29.4))(jose@6.2.5)(kysely@0.29.4)(nanostores@1.4.2)(svelte@5.56.8)(vitest@4.1.10):
     dependencies:
       '@babel/core': 7.29.7
       '@babel/preset-react': 7.29.7(@babel/core@7.29.7)
@@ -4115,7 +4247,7 @@ snapshots:
       '@better-auth/utils': 0.4.2
       '@clack/prompts': 1.7.0
       '@mrleebo/prisma-ast': 0.13.1
-      better-auth: 1.6.25(@sveltejs/kit@2.70.2(@sveltejs/vite-plugin-svelte@7.2.0(svelte@5.56.8)(vite@8.2.0(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)))(svelte@5.56.8)(typescript@6.0.3)(vite@8.2.0(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)))(better-sqlite3@13.0.2)(drizzle-kit@0.31.10)(drizzle-orm@0.45.2(@types/better-sqlite3@7.6.13)(better-sqlite3@13.0.2)(kysely@0.29.4))(svelte@5.56.8)(vitest@4.1.10)
+      better-auth: 1.6.25(@sveltejs/kit@2.70.2(@sveltejs/vite-plugin-svelte@7.2.0(svelte@5.56.8)(vite@8.2.0(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)))(svelte@5.56.8)(typescript@6.0.3)(vite@8.2.0(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)))(drizzle-kit@0.31.10)(drizzle-orm@0.45.2(@libsql/client@0.17.4)(@types/better-sqlite3@7.6.13)(kysely@0.29.4))(svelte@5.56.8)(vitest@4.1.10)
       c12: 3.3.4
       chalk: 5.6.2
       commander: 12.1.0
@@ -4163,10 +4295,10 @@ snapshots:
 
   baseline-browser-mapping@2.11.9: {}
 
-  better-auth@1.6.25(@sveltejs/kit@2.70.2(@sveltejs/vite-plugin-svelte@7.2.0(svelte@5.56.8)(vite@8.2.0(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)))(svelte@5.56.8)(typescript@6.0.3)(vite@8.2.0(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)))(better-sqlite3@13.0.2)(drizzle-kit@0.31.10)(drizzle-orm@0.45.2(@types/better-sqlite3@7.6.13)(better-sqlite3@13.0.2)(kysely@0.29.4))(svelte@5.56.8)(vitest@4.1.10):
+  better-auth@1.6.25(@sveltejs/kit@2.70.2(@sveltejs/vite-plugin-svelte@7.2.0(svelte@5.56.8)(vite@8.2.0(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)))(svelte@5.56.8)(typescript@6.0.3)(vite@8.2.0(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)))(drizzle-kit@0.31.10)(drizzle-orm@0.45.2(@libsql/client@0.17.4)(@types/better-sqlite3@7.6.13)(kysely@0.29.4))(svelte@5.56.8)(vitest@4.1.10):
     dependencies:
       '@better-auth/core': 1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(better-call@1.3.7(zod@4.4.3))(jose@6.2.5)(kysely@0.29.4)(nanostores@1.4.2)
-      '@better-auth/drizzle-adapter': 1.6.25(@better-auth/core@1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(better-call@1.3.7(zod@4.4.3))(jose@6.2.5)(kysely@0.29.4)(nanostores@1.4.2))(@better-auth/utils@0.4.2)(drizzle-orm@0.45.2(@types/better-sqlite3@7.6.13)(better-sqlite3@13.0.2)(kysely@0.29.4))
+      '@better-auth/drizzle-adapter': 1.6.25(@better-auth/core@1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(better-call@1.3.7(zod@4.4.3))(jose@6.2.5)(kysely@0.29.4)(nanostores@1.4.2))(@better-auth/utils@0.4.2)(drizzle-orm@0.45.2(@libsql/client@0.17.4)(@types/better-sqlite3@7.6.13)(kysely@0.29.4))
       '@better-auth/kysely-adapter': 1.6.25(@better-auth/core@1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(better-call@1.3.7(zod@4.4.3))(jose@6.2.5)(kysely@0.29.4)(nanostores@1.4.2))(@better-auth/utils@0.4.2)(kysely@0.29.4)
       '@better-auth/memory-adapter': 1.6.25(@better-auth/core@1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(better-call@1.3.7(zod@4.4.3))(jose@6.2.5)(kysely@0.29.4)(nanostores@1.4.2))(@better-auth/utils@0.4.2)
       '@better-auth/mongo-adapter': 1.6.25(@better-auth/core@1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(better-call@1.3.7(zod@4.4.3))(jose@6.2.5)(kysely@0.29.4)(nanostores@1.4.2))(@better-auth/utils@0.4.2)
@@ -4184,9 +4316,8 @@ snapshots:
       zod: 4.4.3
     optionalDependencies:
       '@sveltejs/kit': 2.70.2(@sveltejs/vite-plugin-svelte@7.2.0(svelte@5.56.8)(vite@8.2.0(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)))(svelte@5.56.8)(typescript@6.0.3)(vite@8.2.0(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1))
-      better-sqlite3: 13.0.2
       drizzle-kit: 0.31.10
-      drizzle-orm: 0.45.2(@types/better-sqlite3@7.6.13)(better-sqlite3@13.0.2)(kysely@0.29.4)
+      drizzle-orm: 0.45.2(@libsql/client@0.17.4)(@types/better-sqlite3@7.6.13)(kysely@0.29.4)
       svelte: 5.56.8
       vitest: 4.1.10(@types/node@24.13.3)(@vitest/browser-playwright@4.1.10)(vite@8.2.0(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1))
     transitivePeerDependencies:
@@ -4201,10 +4332,6 @@ snapshots:
       set-cookie-parser: 3.1.2
     optionalDependencies:
       zod: 4.4.3
-
-  better-sqlite3@13.0.2:
-    dependencies:
-      node-addon-api: 8.9.0
 
   brace-expansion@5.0.9:
     dependencies:
@@ -4303,6 +4430,8 @@ snapshots:
 
   destr@2.0.5: {}
 
+  detect-libc@2.0.2: {}
+
   detect-libc@2.1.2: {}
 
   devalue@5.9.0: {}
@@ -4316,10 +4445,10 @@ snapshots:
       esbuild: 0.25.12
       tsx: 4.23.1
 
-  drizzle-orm@0.45.2(@types/better-sqlite3@7.6.13)(better-sqlite3@13.0.2)(kysely@0.29.4):
+  drizzle-orm@0.45.2(@libsql/client@0.17.4)(@types/better-sqlite3@7.6.13)(kysely@0.29.4):
     optionalDependencies:
+      '@libsql/client': 0.17.4
       '@types/better-sqlite3': 7.6.13
-      better-sqlite3: 13.0.2
       kysely: 0.29.4
 
   electron-to-chromium@1.5.399: {}
@@ -4623,6 +4752,8 @@ snapshots:
 
   jose@6.2.5: {}
 
+  js-base64@3.9.2: {}
+
   js-tokens@4.0.0: {}
 
   jsesc@3.1.0: {}
@@ -4651,6 +4782,21 @@ snapshots:
     dependencies:
       prelude-ls: 1.2.1
       type-check: 0.4.0
+
+  libsql@0.5.29:
+    dependencies:
+      '@neon-rs/load': 0.0.4
+      detect-libc: 2.0.2
+    optionalDependencies:
+      '@libsql/darwin-arm64': 0.5.29
+      '@libsql/darwin-x64': 0.5.29
+      '@libsql/linux-arm-gnueabihf': 0.5.29
+      '@libsql/linux-arm-musleabihf': 0.5.29
+      '@libsql/linux-arm64-gnu': 0.5.29
+      '@libsql/linux-arm64-musl': 0.5.29
+      '@libsql/linux-x64-gnu': 0.5.29
+      '@libsql/linux-x64-musl': 0.5.29
+      '@libsql/win32-x64-msvc': 0.5.29
 
   lightningcss-android-arm64@1.32.0:
     optional: true
@@ -4784,8 +4930,6 @@ snapshots:
 
   natural-compare@1.4.0: {}
 
-  node-addon-api@8.9.0: {}
-
   node-releases@2.0.51: {}
 
   obug@2.1.4: {}
@@ -4884,6 +5028,8 @@ snapshots:
       prettier-plugin-svelte: 4.1.1(prettier@3.9.6)(svelte@5.56.8)
 
   prettier@3.9.6: {}
+
+  promise-limit@2.7.0: {}
 
   promise-queue@2.2.5: {}
 

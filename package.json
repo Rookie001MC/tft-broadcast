@@ -30,7 +30,6 @@
 		"@sveltejs/kit": "^2.63.0",
 		"@sveltejs/vite-plugin-svelte": "^7.1.2",
 		"@tailwindcss/vite": "^4.3.0",
-		"@types/better-sqlite3": "^7.6.13",
 		"@types/node": "^24",
 		"@vitest/browser-playwright": "^4.1.8",
 		"auth": "^1.6.23",
@@ -54,7 +53,7 @@
 		"vitest-browser-svelte": "^2.1.1"
 	},
 	"dependencies": {
-		"better-sqlite3": "^13.0.2",
+		"@libsql/client": "^0.17.4",
 		"twisted": "^1.82.0"
 	}
 }
