@@ -27,6 +27,8 @@ Riot API work remains a later experiment. The MVP must work without `RIOT_API_KE
   - Riot ID is useful to store for future automation.
   - The UI should treat it as optional during MVP setup.
 - `docs/communitydragon/assets.md`
+  - Data Dragon is Riot's official static data and asset source for LoL/TFT where Riot publishes supported JSON and image bundles.
+  - CommunityDragon is a community-maintained export of LoL/TFT client and game files. It is broader than Data Dragon for many TFT assets, but it is not official, not guaranteed complete, and paths can move.
   - CommunityDragon asset paths can move.
   - Directory JSON listings and CDragon TFT JSON are useful sync inputs.
   - DDragon and CDragon (Especially CDragon) may lag behind patches because publishing is manual.
@@ -42,7 +44,9 @@ Riot API work remains a later experiment. The MVP must work without `RIOT_API_KE
 ## Non-Goals
 
 - No Riot match-history automation in the MVP.
+  - Must work without any internet data first, as reliability has not been proven for TFT-MATCH-V1.
 - No live client integration.
+  - Unfeasble in anyway, the LCU API doesn't even spit out TFT data.
 - No real-time scouting or gameplay recommendations.
 - No win-rate or statistical overlays.
 - No full tournament bracket or standings management.
