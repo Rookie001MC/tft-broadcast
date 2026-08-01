@@ -16,7 +16,7 @@
 		"db:generate": "drizzle-kit generate",
 		"db:migrate": "drizzle-kit migrate",
 		"db:studio": "drizzle-kit studio",
-		"auth:schema": "auth generate --config src/lib/server/auth.js --output src/lib/server/db/auth.schema.js --yes"
+		"auth:schema": "auth generate --config src/lib/server/auth.js --output src/lib/server/db/schema/auth.js --yes"
 	},
 	"devDependencies": {
 		"@eslint/js": "^10.0.1",
