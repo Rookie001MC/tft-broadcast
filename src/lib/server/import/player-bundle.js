@@ -143,6 +143,31 @@ async function collectEntries(zipBytes) {
 	});
 }
 
+/**
+ * Reopens a validated bundle and returns the bytes for the exact image paths
+ * selected by its preview.
+ *
+ * @param {Uint8Array | Buffer} zipBytes
+ * @param {string[]} imagePaths
+ * @returns {Promise<Map<string, Buffer>>}
+ */
+export async function readPlayerBundleImages(zipBytes, imagePaths) {
+	const requested = new Set(imagePaths);
+	if (requested.size !== imagePaths.length) throw new Error('Duplicate requested image path');
+	const entries = await collectEntries(zipBytes);
+	const selected = entries.filter(({ name }) => requested.has(name));
+	if (selected.length !== requested.size) throw new Error('Previewed image is missing from bundle');
+
+	const zip = await openZip(zipBytes);
+	try {
+		const images = new Map();
+		for (const { entry, name } of selected) images.set(name, await readEntry(zip, entry));
+		return images;
+	} finally {
+		zip.close();
+	}
+}
+
 /** @param {string} value */
 function key(value) {
 	return value.trim().toLocaleLowerCase('en-US');
