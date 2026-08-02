@@ -1,9 +1,9 @@
 <script>
-    import GraphicsLayout from '$lib/layouts/GraphicsLayout.svelte';
+	import GraphicsLayout from '$lib/layouts/GraphicsLayout.svelte';
 
-    let { children } = $props();
+	let { children } = $props();
 </script>
 
 <GraphicsLayout>
-    {@render children()}
+	{@render children()}
 </GraphicsLayout>

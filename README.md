@@ -9,6 +9,7 @@ Used only for our own club's tournaments, by our Production Team, private (for n
 APIs used: TFT-MATCH-V1, ACCOUNT-V1.
 
 Tech Stack:
-  - Frontend and Backend: SvelteKit v3
-  - Database: SQLite (`better-sqlite3`), managed via Drizzle ORM
-  - Styling: TailwindCSS, Skeleton UI
+
+- Frontend and Backend: SvelteKit v3
+- Database: SQLite (`better-sqlite3`), managed via Drizzle ORM
+- Styling: TailwindCSS, Skeleton UI

@@ -1,14 +1,14 @@
 <script>
-    let { children } = $props();
+	let { children } = $props();
 </script>
 
 <div id="graphics-container">
-    {@render children()}
+	{@render children()}
 </div>
 
 <style>
-    #graphics-container {
-        width: 1920px;
-        height: 1080px;
-    }
+	#graphics-container {
+		width: 1920px;
+		height: 1080px;
+	}
 </style>
