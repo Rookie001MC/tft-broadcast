@@ -14,7 +14,8 @@ describe('manual winner graphics schema', () => {
 			'winnerBoardChampions',
 			'winnerBoardAugments',
 			'graphicState',
-			'playerImportPreviews'
+			'playerImportPreviews',
+			'firstOperatorClaim'
 		]);
 
 		for (const name of tableNames) expect(schema[name]).toBeDefined();

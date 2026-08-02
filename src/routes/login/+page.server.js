@@ -15,7 +15,7 @@ export const actions = {
 		const email = typeof rawEmail === 'string' ? rawEmail.trim() : '';
 		const password = typeof rawPassword === 'string' ? rawPassword : '';
 		const next = url.searchParams.get('next');
-		const safeNext = next?.startsWith('/admin') ? next : '/admin';
+		const safeNext = next === '/admin' || next?.startsWith('/admin/') ? next : '/admin';
 
 		try {
 			await auth.api.signInEmail({

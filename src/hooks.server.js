@@ -1,5 +1,6 @@
 import { building } from '$app/environment';
 import { auth } from '$lib/server/auth';
+import { isAdminPath, requireAdmin } from '$lib/server/auth/guards.js';
 import { svelteKitHandler } from 'better-auth/svelte-kit';
 
 /** @type {import('@sveltejs/kit').Handle} */ const handleBetterAuth = async ({
@@ -12,6 +13,8 @@ import { svelteKitHandler } from 'better-auth/svelte-kit';
 		event.locals.session = session.session;
 		event.locals.user = session.user;
 	}
+
+	if (isAdminPath(event.url.pathname)) requireAdmin(event);
 
 	return svelteKitHandler({ event, resolve, auth, building });
 };

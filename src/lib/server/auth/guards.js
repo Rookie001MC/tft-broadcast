@@ -1,6 +1,11 @@
 import { redirect } from '@sveltejs/kit';
 import { user } from '$lib/server/db/schema/auth.js';
 
+/** @param {string} pathname */
+export function isAdminPath(pathname) {
+	return pathname === '/admin' || pathname.startsWith('/admin/');
+}
+
 /** @param {any} database */
 export async function hasAnyUser(database) {
 	const rows = await database.select({ id: user.id }).from(user).limit(1);

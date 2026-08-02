@@ -2,6 +2,7 @@ import { fail, redirect } from '@sveltejs/kit';
 import { auth } from '$lib/server/auth';
 import { db } from '$lib/server/db';
 import { hasAnyUser } from '$lib/server/auth/guards.js';
+import { FIRST_OPERATOR_CLAIM_HEADER, releaseFirstOperatorClaim } from '$lib/server/auth/claims.js';
 
 /** @type {import('./$types').PageServerLoad} */
 export async function load() {
@@ -25,13 +26,21 @@ export const actions = {
 		}
 
 		if (await hasAnyUser(db)) redirect(303, '/login');
+		const claimToken = crypto.randomUUID();
+		const headers = new Headers(request.headers);
+		headers.set(FIRST_OPERATOR_CLAIM_HEADER, claimToken);
 
 		try {
 			await auth.api.signUpEmail({
-				headers: request.headers,
+				headers,
 				body: { name, email, password }
 			});
 		} catch {
+			try {
+				if (!(await hasAnyUser(db))) await releaseFirstOperatorClaim(db, claimToken);
+			} catch {
+				// A pending claim is recoverable after the bounded stale interval.
+			}
 			return fail(400, { message: 'Unable to create the operator account.' });
 		}
 
