@@ -99,9 +99,10 @@ describe('staged player imports', () => {
 	afterEach(() => client.close());
 
 	test('stages without player or managed-image writes, then commits the exact previewed bundle', async () => {
+		const zipBytes = playerBundle();
 		const staged = await stagePlayerImport({
 			db: database,
-			zipBytes: playerBundle(),
+			zipBytes,
 			mediaRoot,
 			existingPlayers: []
 		});
@@ -112,7 +113,7 @@ describe('staged player imports', () => {
 		const [previewRow] = await database.select().from(playerImportPreviews);
 		expect(previewRow.stagedPath).toBe(`import-staging/${staged.token}.zip`);
 		expect(await readFile(resolveContainedPath(mediaRoot, previewRow.stagedPath))).toEqual(
-			Buffer.from(playerBundle())
+			Buffer.from(zipBytes)
 		);
 
 		const result = await commitStagedPlayerImport({ db: database, token: staged.token, mediaRoot });
