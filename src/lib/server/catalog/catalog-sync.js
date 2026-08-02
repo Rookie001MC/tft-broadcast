@@ -292,6 +292,7 @@ async function tryDdragon({ patch, locale, fetchJson }) {
 					resolvedVersion,
 					'tft-augment'
 				);
+				if (augments.length === 0) augmentWarning = 'Augments were unavailable from Data Dragon.';
 			} catch {
 				augmentWarning = 'Augments were unavailable from Data Dragon.';
 			}

@@ -390,6 +390,32 @@ describe('catalog synchronization', () => {
 		expect(result.warning).toContain('Augments');
 	});
 
+	test('warns when Data Dragon returns no usable augment records', async () => {
+		/** @type {string[]} */
+		const calls = [];
+		const cdragon = `${CDRAGON_ROOT}/14.10/cdragon/tft/en_us.json`;
+		const champions = `${DDRAGON_ROOT}/cdn/14.10/data/en_US/tft-champion.json`;
+		const augments = `${DDRAGON_ROOT}/cdn/14.10/data/en_US/tft-augments.json`;
+		const result = await syncAndActivateCatalog({
+			db: database,
+			tournamentId: 'tournament-1',
+			patch: '14.10',
+			locale: 'en_us',
+			fetchJson: fixtureFetch(
+				{
+					[cdragon]: new Error('missing'),
+					[champions]: ddragonChampionFixture('Ahri English'),
+					[augments]: { data: {} }
+				},
+				calls
+			)
+		});
+
+		expect(calls).toEqual([cdragon, champions, augments]);
+		expect(result).toMatchObject({ activated: true, source: 'datadragon', augments: [] });
+		expect(result.warning).toContain('Augments');
+	});
+
 	test('checks tournament existence before network access', async () => {
 		/** @type {string[]} */
 		const calls = [];
