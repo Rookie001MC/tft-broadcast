@@ -1,8 +1,8 @@
 import { createClient } from '@libsql/client';
 import { drizzle } from 'drizzle-orm/libsql';
 import { zipSync } from 'fflate';
-import { mkdtemp, readdir, rm } from 'node:fs/promises';
-import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+import { access, mkdir, mkdtemp, readFile, readdir, rm, utimes, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
@@ -235,6 +235,46 @@ describe('staged player imports', () => {
 		expect(await exists(resolveContainedPath(mediaRoot, preview.stagedPath))).toBe(true);
 	});
 
+	test('revalidates the preview inside the write transaction and cleans images after a roster race', async () => {
+		const staged = await stagePlayerImport({
+			db: database,
+			zipBytes: playerBundle(),
+			mediaRoot,
+			existingPlayers: []
+		});
+		const now = new Date();
+		const racingDatabase = new Proxy(database, {
+			get(target, property, receiver) {
+				if (property === 'transaction') {
+					return async (/** @type {(tx: any) => Promise<unknown>} */ callback) => {
+						await database.insert(players).values({
+							id: 'racing-player',
+							riotId: 'PlayerOne#tag',
+							riotIdKey: 'playerone#tag',
+							riotGameName: 'PlayerOne',
+							riotTagline: 'tag',
+							fullName: 'Racing Player',
+							displayName: 'Racing Player',
+							createdAt: now,
+							updatedAt: now
+						});
+						return database.transaction(callback);
+					};
+				}
+				const value = Reflect.get(target, property, receiver);
+				return typeof value === 'function' ? value.bind(target) : value;
+			}
+		});
+
+		await expect(
+			commitStagedPlayerImport({ db: racingDatabase, token: staged.token, mediaRoot })
+		).rejects.toThrow('Import preview is stale');
+		expect(await readdir(path.join(mediaRoot, 'player-images'))).toEqual([]);
+		const [preview] = await database.select().from(playerImportPreviews);
+		expect(preview.status).toBe('previewed');
+		expect((await database.select().from(players)).map(({ id }) => id)).toEqual(['racing-player']);
+	});
+
 	test('removes expired staging files and cleans up a new file when its preview insert fails', async () => {
 		const orphanRelativePath = 'import-staging/orphan.zip';
 		await mkdir(resolveContainedPath(mediaRoot, 'import-staging'), { recursive: true });
@@ -273,6 +313,70 @@ describe('staged player imports', () => {
 			})
 		).rejects.toThrow();
 		expect(await readdir(resolveContainedPath(mediaRoot, 'import-staging'))).toHaveLength(1);
+	});
+
+	test('keeps an expired preview row when its valid staging path cannot be deleted', async () => {
+		const token = 'retry-cleanup';
+		const stagedPath = `import-staging/${token}.zip`;
+		await mkdir(resolveContainedPath(mediaRoot, stagedPath), { recursive: true });
+		await writeFile(resolveContainedPath(mediaRoot, `${stagedPath}/child`), 'blocks deletion');
+		await database.insert(playerImportPreviews).values({
+			token,
+			stagedPath,
+			sha256: 'old',
+			previewJson: '{}',
+			status: 'previewed',
+			expiresAt: new Date(Date.now() - 1),
+			createdAt: new Date(Date.now() - 60_000)
+		});
+
+		await stagePlayerImport({
+			db: database,
+			zipBytes: playerBundle(),
+			mediaRoot,
+			existingPlayers: []
+		});
+
+		expect(
+			(await database.select().from(playerImportPreviews)).some(
+				(preview) => preview.token === token
+			)
+		).toBe(true);
+		expect(await exists(resolveContainedPath(mediaRoot, `${stagedPath}/child`))).toBe(true);
+	});
+
+	test('reconciles old untracked staging ZIPs and managed images without touching referenced files', async () => {
+		const stagingOrphan = `import-staging/${randomUUID()}.zip`;
+		const imageOrphan = `player-images/orphan-${randomUUID()}.png`;
+		const referencedImage = `player-images/referenced-${randomUUID()}.png`;
+		await mkdir(resolveContainedPath(mediaRoot, 'import-staging'), { recursive: true });
+		await mkdir(resolveContainedPath(mediaRoot, 'player-images'), { recursive: true });
+		for (const relativePath of [stagingOrphan, imageOrphan, referencedImage]) {
+			const absolutePath = resolveContainedPath(mediaRoot, relativePath);
+			await writeFile(absolutePath, ONE_BY_ONE_PNG);
+			const old = new Date(Date.now() - 2 * 60 * 60 * 1000);
+			await utimes(absolutePath, old, old);
+		}
+		const now = new Date();
+		await database.insert(players).values({
+			id: 'referenced-player',
+			fullName: 'Referenced',
+			displayName: 'Referenced',
+			imagePath: referencedImage,
+			createdAt: now,
+			updatedAt: now
+		});
+
+		await stagePlayerImport({
+			db: database,
+			zipBytes: playerBundle(),
+			mediaRoot,
+			existingPlayers: []
+		});
+
+		expect(await exists(resolveContainedPath(mediaRoot, stagingOrphan))).toBe(false);
+		expect(await exists(resolveContainedPath(mediaRoot, imageOrphan))).toBe(false);
+		expect(await exists(resolveContainedPath(mediaRoot, referencedImage))).toBe(true);
 	});
 });
 

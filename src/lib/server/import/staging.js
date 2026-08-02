@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { and, eq, lte } from 'drizzle-orm';
 import { playerImportPreviews } from '$lib/server/db/schema/imports.js';
@@ -12,6 +12,11 @@ import {
 import { inspectPlayerBundle, readPlayerBundleImages } from './player-bundle.js';
 
 const PREVIEW_LIFETIME_MS = 30 * 60 * 1000;
+const ORPHAN_GRACE_MS = 60 * 60 * 1000;
+const STAGED_ZIP_NAME =
+	/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.zip$/i;
+const MANAGED_IMAGE_NAME =
+	/^[a-zA-Z0-9_-]+-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.(?:png|jpg|webp)$/i;
 
 /** @param {Uint8Array} bytes */
 function sha256(bytes) {
@@ -29,10 +34,15 @@ function assertExpectedStagedPath(stagedPath, token) {
 		throw new Error('Invalid staged import path');
 }
 
+/** @param {unknown} error */
+function isNotFound(error) {
+	return typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT';
+}
+
 /**
  * Remove expired preview records and their app-contained staging files.
- * File deletion is best effort so a missing or corrupt path cannot block later
- * imports; the database row is still retired.
+ * Missing files count as already removed. Unsafe paths or other deletion
+ * failures retain the database row so a later cleanup can retry safely.
  *
  * @param {any} db
  * @param {string} mediaRoot
@@ -48,13 +58,84 @@ async function cleanupExpiredPreviews(db, mediaRoot, now) {
 		try {
 			assertExpectedStagedPath(preview.stagedPath, preview.token);
 			await deleteManagedFile(mediaRoot, preview.stagedPath);
-		} catch {
-			// Stale records must not make new previews unavailable.
+		} catch (error) {
+			if (!isNotFound(error)) continue;
 		}
+
+		await db
+			.delete(playerImportPreviews)
+			.where(
+				and(eq(playerImportPreviews.token, preview.token), lte(playerImportPreviews.expiresAt, now))
+			);
+	}
+}
+
+/**
+ * Retry cleanup for files left without database metadata by an insert failure
+ * or transaction rollback. Only old, direct children matching names generated
+ * by this module are eligible, avoiding both active-import races and arbitrary
+ * path deletion.
+ *
+ * @param {any} db
+ * @param {string} mediaRoot
+ * @param {Date} now
+ */
+async function reconcileOrphanFiles(db, mediaRoot, now) {
+	const cutoff = now.getTime() - ORPHAN_GRACE_MS;
+	/** @type {Array<{ stagedPath: string }>} */
+	const previewRows = await db
+		.select({ stagedPath: playerImportPreviews.stagedPath })
+		.from(playerImportPreviews);
+	const referencedStaging = new Set(
+		previewRows.map(({ stagedPath }) => stagedPath.replaceAll('\\', '/'))
+	);
+	/** @type {Array<{ imagePath: string | null }>} */
+	const playerRows = await db.select({ imagePath: players.imagePath }).from(players);
+	const referencedImages = new Set(
+		playerRows.flatMap(({ imagePath }) => (imagePath ? [imagePath.replaceAll('\\', '/')] : []))
+	);
+
+	await reconcileDirectory({
+		mediaRoot,
+		directory: 'import-staging',
+		namePattern: STAGED_ZIP_NAME,
+		referencedPaths: referencedStaging,
+		cutoff
+	});
+	await reconcileDirectory({
+		mediaRoot,
+		directory: 'player-images',
+		namePattern: MANAGED_IMAGE_NAME,
+		referencedPaths: referencedImages,
+		cutoff
+	});
+}
+
+/**
+ * @param {{ mediaRoot: string, directory: string, namePattern: RegExp, referencedPaths: Set<string>, cutoff: number }} input
+ */
+async function reconcileDirectory({ mediaRoot, directory, namePattern, referencedPaths, cutoff }) {
+	const absoluteDirectory = resolveContainedPath(mediaRoot, directory);
+	let entries;
+	try {
+		entries = await readdir(absoluteDirectory, { withFileTypes: true });
+	} catch (error) {
+		if (isNotFound(error)) return;
+		throw error;
 	}
 
-	if (expired.length > 0)
-		await db.delete(playerImportPreviews).where(lte(playerImportPreviews.expiresAt, now));
+	for (const entry of entries) {
+		if (!entry.isFile() || !namePattern.test(entry.name)) continue;
+		const relativePath = path.posix.join(directory, entry.name);
+		if (referencedPaths.has(relativePath)) continue;
+		try {
+			const metadata = await stat(resolveContainedPath(absoluteDirectory, entry.name));
+			if (metadata.mtimeMs > cutoff) continue;
+			await deleteManagedFile(mediaRoot, relativePath);
+		} catch {
+			// The contained orphan remains visible for the next reconciliation pass.
+		}
+	}
 }
 
 /**
@@ -63,6 +144,7 @@ async function cleanupExpiredPreviews(db, mediaRoot, now) {
 export async function stagePlayerImport({ db, zipBytes, mediaRoot, existingPlayers }) {
 	const createdAt = new Date();
 	await cleanupExpiredPreviews(db, mediaRoot, createdAt);
+	await reconcileOrphanFiles(db, mediaRoot, createdAt);
 	const preview = await inspectPlayerBundle(zipBytes, existingPlayers);
 	const token = randomUUID();
 	const stagedPath = path.posix.join('import-staging', `${token}.zip`);
@@ -146,6 +228,14 @@ export async function commitStagedPlayerImport({ db, token, mediaRoot }) {
 		}
 
 		await db.transaction(async (/** @type {any} */ tx) => {
+			const transactionPlayers = await tx.select().from(players);
+			const transactionPreview = await inspectPlayerBundle(zipBytes, transactionPlayers);
+			if (
+				!transactionPreview.canCommit ||
+				normalizedJson(transactionPreview) !== normalizedJson(stored.previewJson)
+			)
+				throw new Error('Import preview is stale');
+
 			const now = new Date();
 			for (const prepared of preparedRows) {
 				const { row, existing, playerId, imagePath } = prepared;
