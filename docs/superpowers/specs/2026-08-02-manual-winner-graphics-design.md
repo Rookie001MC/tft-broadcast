@@ -59,6 +59,8 @@ The SvelteKit app has two primary surfaces.
 
 `/gfx` is the public broadcast browser source. It renders a fixed 1920x1080 scene from the currently published graphic state. It does not expose editing and does not fetch Riot data.
 
+The application runs as one SvelteKit service backed by libSQL. Operators and broadcast machines may access that service from separate hosts on the same trusted network or VLAN; workflows must not depend on access to the server's local filesystem from the browser machine.
+
 Server-side modules are split by responsibility:
 
 - `catalog`: syncs and stores pinned CommunityDragon/Data Dragon snapshots and asset references.
@@ -66,6 +68,18 @@ Server-side modules are split by responsibility:
 - `tournaments`: stores tournament records and tournament roster membership.
 - `winnerBoards`: stores draft and published winner board state.
 - `uploads`: stores optional operator-uploaded player images under a controlled local directory.
+
+All multi-step writes use libSQL transactions. In particular, draft replacement, catalog snapshot activation, publish, and hide operations either complete fully or leave the previous persisted and live state unchanged.
+
+## Authentication And Access
+
+- `/gfx` remains public for OBS/vMix browser sources.
+- `/admin` and all of its server actions require an authenticated Better Auth session.
+- `/setup` is available only while the Better Auth `user` table is empty. It creates the first operator account and redirects to `/admin`.
+- Once any user exists, `/setup` redirects to `/login` and cannot create another account.
+- `/login` is the only public sign-in surface. Public self-registration is not exposed.
+- The Better Auth sign-up API itself rejects registration after the first user exists; hiding a registration page is not considered enforcement.
+- `/admin` provides a POST-only logout action.
 
 ## Data Model
 
@@ -179,7 +193,7 @@ Augments are optional for publishing.
 2. Pin or sync the CommunityDragon/Data Dragon catalog for that tournament.
 3. Build the tournament roster:
    - add players manually
-   - import players from a player import bundle
+   - upload players from a ZIP player import bundle
    - preview CSV rows and image matches before writing
    - search/filter existing players
    - checkbox-select multiple players
@@ -199,12 +213,14 @@ Draft edits must never leak to `/gfx`. The broadcast route changes only when the
 
 ## Player Import Bundle
 
-MVP import format is a directory bundle, not a raw CSV alone.
+MVP import content is a directory bundle transported as a `.zip` upload, not a raw CSV alone and not a server filesystem path.
 
 Bundle structure:
 
 - `players.csv`
 - `player_images/`
+
+The ZIP root contains those entries directly. Absolute paths, `..` traversal, symlinks, encrypted entries, nested archives, and entries outside those two locations are rejected. Upload size, entry count, and expanded byte limits are enforced before preview extraction.
 
 `players.csv` contains structured player data only. It does not set app-owned internal media paths directly.
 
@@ -233,6 +249,8 @@ Import must have a preview step that shows:
 - rows that will update existing players
 - rows that will be skipped
 
+Preview stores the validated ZIP in an app-controlled staging directory and returns an opaque, expiring import token. Confirmation accepts only that token, revalidates its digest and expiry, and commits the exact bytes that were previewed. Expired staging records and files are removed opportunistically.
+
 CSV import normalizes Riot identity from `riot_id`. Split columns are accepted as optional redundant data only when they match the normalized `riot_id`.
 
 Image matching uses Riot ID. Staff must name image files using a filename-safe Riot ID convention:
@@ -256,6 +274,8 @@ Supported image extensions:
 - `.webp`
 
 On confirmed import, the app copies matched images from `player_images/` into the managed media directory and stores the resulting internal `image_path`. Unmatched players still import without images. Extra image files are reported in preview and are not copied.
+
+CSV parsing supports quoted fields, escaped quotes, commas inside quoted values, and CRLF/LF input. Riot IDs and image-key matching are case-insensitive for duplicate detection while preserving normalized display casing. Optional split Riot ID columns must match `riot_id` when present.
 
 ## Catalog Sync And Fallback
 
@@ -283,6 +303,10 @@ Because CommunityDragon and Data Dragon can lag behind game release patches, mis
 - show the operator that the requested/latest patch was not available
 - allow the tournament to continue with the pinned previous snapshot
 
+The lookup order is CommunityDragon requested locale, CommunityDragon `en_us`, Data Dragon requested locale, then Data Dragon `en_US`. CommunityDragon `latest` is resolved through `content-metadata.json` to an immutable major/minor patch path before catalog or asset URLs are stored. Data Dragon `latest` is resolved through its version list before using CDN endpoints. A Data Dragon snapshot is usable when champions load; augments may be empty because augments are optional for publishing.
+
+Catalog icon references are normalized into renderable HTTPS URLs during ingestion. `/gfx` never receives raw client asset paths such as `/lol-game-data/assets/...`.
+
 Network failure must leave the current active catalog untouched.
 
 ## Publishing Rules
@@ -292,6 +316,8 @@ Publishing requires:
 - tournament selected
 - winner selected
 - at least one champion selected
+- winner belongs to the selected tournament roster
+- every champion and augment belongs to the tournament's active catalog snapshot
 
 Publishing does not require:
 
@@ -302,11 +328,14 @@ Publishing does not require:
 
 Admin actions fail closed. Failed save, upload, import, catalog sync, publish, or hide actions must not corrupt the live graphic state.
 
+Saving a draft creates or replaces a selected draft transactionally and returns its ID to the admin page. Publishing that ID transactionally hides the previous published board and publishes the selected draft. Operators never type board IDs manually.
+
 ## Upload Rules
 
 Uploads are for optional player images.
 
 - Accept image MIME types only.
+- Verify image content signatures for PNG, JPEG, and WebP instead of trusting filename extensions or browser-provided MIME alone.
 - Store files under an app-controlled local upload directory.
 - Store DB references to local paths.
 - Serve player images through a controlled SvelteKit media route by database id.
@@ -321,6 +350,8 @@ When no board is published, or the board is hidden, `/gfx` renders a clean empty
 
 The admin preview renders the same component or data contract as `/gfx` so operators see what will go live.
 
+An already-open `/gfx` client polls a lightweight published-state version endpoint once per second. The endpoint uses ETag/304 responses when unchanged; a changed version invalidates and reloads the published board. This supports several OBS/vMix and operator machines on the same VLAN without process-local pub/sub state.
+
 ## Testing And Validation
 
 Database and schema tests:
@@ -329,6 +360,7 @@ Database and schema tests:
 - players can be reused across tournaments
 - winner boards keep ordered champions and augments
 - publishing one board does not mutate drafts unexpectedly
+- failed transactional publish leaves the previous board live
 
 Player import bundle tests:
 
@@ -339,6 +371,7 @@ Player import bundle tests:
 - unmatched image files are reported
 - matched image files are copied into managed media only after confirmed import
 - batch add does not duplicate existing tournament roster rows
+- ZIP traversal, symlinks, unsupported content signatures, expired tokens, and digest mismatches are rejected
 
 Catalog sync tests:
 
@@ -352,6 +385,10 @@ Route/action tests:
 - publish works without winner image
 - publish works without augments
 - `/gfx` renders empty state when hidden or unpublished
+- `/setup` works only before the first user exists
+- anonymous `/admin` requests redirect to `/login`
+- tournament roster and pinned-catalog boundaries are enforced server-side
+- unchanged published-state version requests return HTTP 304
 
 Manual visual validation:
 
@@ -366,3 +403,7 @@ Manual visual validation:
 - Riot ID is stored both as normalized display text and split game-name/tagline fields for later ACCOUNT-V1 automation.
 - Player import is a bundle containing `players.csv` and `player_images/`; image filenames must match normalized Riot ID as `GameName_TAG.ext`.
 - Catalog ingestion starts from CommunityDragon `{patch}/cdragon/tft/{locale}.json`, with Data Dragon champion and augment JSON as fallback.
+- Keep the existing `@libsql/client` Drizzle driver and existing Vitest browser/server project configuration.
+- Transport player import bundles as ZIP uploads with staged, expiring preview tokens.
+- Enforce Better Auth for `/admin`; bootstrap the first account through one-time `/setup`.
+- Refresh open broadcast sources with one-second ETag/version polling.

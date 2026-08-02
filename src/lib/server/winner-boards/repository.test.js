@@ -1,6 +1,10 @@
 import { createClient } from '@libsql/client';
+import { execFile } from 'node:child_process';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { drizzle } from 'drizzle-orm/libsql';
-import { asc, eq } from 'drizzle-orm';
+import { and, asc, eq } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { catalogAugments, catalogChampions, catalogSnapshots } from '../db/schema/catalog.js';
 import { players } from '../db/schema/players.js';
@@ -469,6 +473,21 @@ describe('winner board repository', () => {
 		expect(stored.title).toBe('TFT Champion');
 	});
 
+	it('never replaces a hidden board that was previously published', async () => {
+		const board = await saveDraftWinnerBoard(database, validInput());
+		await publishWinnerBoard(database, board.id);
+		await hidePublishedBoard(database);
+
+		await expect(
+			saveDraftWinnerBoard(database, { ...validInput(), boardId: board.id, title: 'Changed' })
+		).rejects.toThrow('Published winner board cannot be edited');
+		const [stored] = await database
+			.select()
+			.from(winnerBoards)
+			.where(eq(winnerBoards.id, board.id));
+		expect(stored).toMatchObject({ title: 'TFT Champion', status: 'hidden' });
+	});
+
 	it('does not let a scoped draft ID update a board from another tournament', async () => {
 		const board = await saveDraftWinnerBoard(database, validInput());
 
@@ -554,6 +573,60 @@ describe('winner board repository', () => {
 		]);
 	});
 
+	it('rejects publish when the draft winner has left the roster without touching live state', async () => {
+		const live = await saveDraftWinnerBoard(database, validInput());
+		await publishWinnerBoard(database, live.id);
+		const draft = await saveDraftWinnerBoard(database, { ...validInput(), title: 'Next Winner' });
+		await database
+			.delete(tournamentPlayers)
+			.where(
+				and(
+					eq(tournamentPlayers.tournamentId, 'tournament-one'),
+					eq(tournamentPlayers.playerId, 'player-one')
+				)
+			);
+
+		await expect(publishWinnerBoard(database, draft.id)).rejects.toThrow(
+			'Winner must belong to tournament roster'
+		);
+		await expectLiveStateUnchanged(database, live.id, draft.id, 1);
+	});
+
+	it('rejects publish after the tournament switches catalogs without touching live state', async () => {
+		const live = await saveDraftWinnerBoard(database, validInput());
+		await publishWinnerBoard(database, live.id);
+		const draft = await saveDraftWinnerBoard(database, { ...validInput(), title: 'Next Winner' });
+		await database
+			.update(tournaments)
+			.set({ activeCatalogSnapshotId: 'snapshot-other' })
+			.where(eq(tournaments.id, 'tournament-one'));
+
+		await expect(publishWinnerBoard(database, draft.id)).rejects.toThrow(
+			'Champion does not belong to active catalog'
+		);
+		await expectLiveStateUnchanged(database, live.id, draft.id, 1);
+	});
+
+	it('rejects publish when a draft augment is outside the current catalog', async () => {
+		const live = await saveDraftWinnerBoard(database, validInput());
+		await publishWinnerBoard(database, live.id);
+		const draft = await saveDraftWinnerBoard(database, { ...validInput(), title: 'Next Winner' });
+		await database
+			.update(winnerBoardAugments)
+			.set({ catalogAugmentId: 'augment-other' })
+			.where(
+				and(
+					eq(winnerBoardAugments.winnerBoardId, draft.id),
+					eq(winnerBoardAugments.displayOrder, 0)
+				)
+			);
+
+		await expect(publishWinnerBoard(database, draft.id)).rejects.toThrow(
+			'Augment does not belong to active catalog'
+		);
+		await expectLiveStateUnchanged(database, live.id, draft.id, 1);
+	});
+
 	it('hides the pointed live board once and repeated hides are idempotent', async () => {
 		expect(await getGraphicVersion(database)).toBe(0);
 		expect(await getPublishedWinnerBoard(database)).toBeNull();
@@ -573,3 +646,158 @@ describe('winner board repository', () => {
 		expect(await getGraphicVersion(database)).toBe(2);
 	});
 });
+
+const NATIVE_DATABASE_PATH_ENV = 'TFT_WINNER_BOARD_NATIVE_DATABASE_PATH';
+const nativeDatabasePath = process.env[NATIVE_DATABASE_PATH_ENV];
+
+describe('winner board repository with native file-backed transactions', () => {
+	if (nativeDatabasePath) {
+		it(
+			'runs the native transaction child scenario',
+			() => runNativeScenario(nativeDatabasePath),
+			15_000
+		);
+	} else {
+		it('keeps published reads coherent and serializes concurrent publish and hide operations', async () => {
+			const directory = await mkdtemp(path.join(tmpdir(), 'tft-winner-boards-'));
+			const databasePath = path.join(directory, 'repository.db').replaceAll('\\', '/');
+			try {
+				await runNativeScenarioChild(databasePath);
+				expect(true).toBe(true);
+			} finally {
+				await rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+			}
+		}, 30_000);
+	}
+});
+
+/** @param {string} databasePath */
+function runNativeScenarioChild(databasePath) {
+	return new Promise((resolve, reject) => {
+		execFile(
+			process.execPath,
+			[
+				path.resolve('node_modules/vitest/vitest.mjs'),
+				'run',
+				'--project',
+				'server',
+				'src/lib/server/winner-boards/repository.test.js',
+				'-t',
+				'native transaction child scenario'
+			],
+			{
+				cwd: process.cwd(),
+				env: { ...process.env, [NATIVE_DATABASE_PATH_ENV]: databasePath },
+				timeout: 20_000,
+				windowsHide: true
+			},
+			(error, stdout, stderr) => {
+				if (error) {
+					reject(
+						new Error(`Native transaction child failed:\n${stdout}\n${stderr}`, { cause: error })
+					);
+					return;
+				}
+				resolve(undefined);
+			}
+		);
+	});
+}
+
+/** @param {string} databasePath */
+async function runNativeScenario(databasePath) {
+	const url = `file:${databasePath}`;
+	const readerClient = createClient({ url });
+	const writerClient = createClient({ url });
+	try {
+		await readerClient.execute('PRAGMA busy_timeout = 5000');
+		await writerClient.execute('PRAGMA busy_timeout = 5000');
+		await createSchema(readerClient);
+		const readerDatabase = drizzle(readerClient);
+		const writerDatabase = drizzle(writerClient);
+		await seed(readerDatabase);
+		const oldBoard = await saveDraftWinnerBoard(readerDatabase, validInput());
+		await publishWinnerBoard(readerDatabase, oldBoard.id);
+		const newBoard = await saveDraftWinnerBoard(readerDatabase, {
+			...validInput(),
+			title: 'New Winner'
+		});
+
+		/** @type {any} */
+		const instrumentedReader = readerDatabase;
+		const originalAll = instrumentedReader.all.bind(instrumentedReader);
+		/** @type {() => void} */
+		let releasePointerRead = () => {};
+		const pointerReadReleased = new Promise((resolve) => {
+			releasePointerRead = () => resolve(undefined);
+		});
+		/** @type {() => void} */
+		let signalPointerRead = () => {};
+		const pointerWasRead = new Promise((resolve) => {
+			signalPointerRead = () => resolve(undefined);
+		});
+		instrumentedReader.all = async (/** @type {any[]} */ ...args) => {
+			const rows = await originalAll(...args);
+			signalPointerRead();
+			await pointerReadReleased;
+			return rows;
+		};
+
+		const coherentRead = getPublishedWinnerBoard(instrumentedReader);
+		await pointerWasRead;
+		let publishSettled = false;
+		const concurrentPublish = publishWinnerBoard(writerDatabase, newBoard.id).finally(() => {
+			publishSettled = true;
+		});
+		await new Promise((resolve) => setTimeout(resolve, 25));
+		expect(publishSettled).toBe(true);
+		releasePointerRead();
+
+		expect(await coherentRead).toMatchObject({ id: oldBoard.id, title: 'TFT Champion' });
+		await concurrentPublish;
+		expect(await getPublishedWinnerBoard(writerDatabase)).toMatchObject({
+			id: newBoard.id,
+			title: 'New Winner'
+		});
+
+		const lastDraft = await saveDraftWinnerBoard(writerDatabase, {
+			...validInput(),
+			title: 'Last Winner'
+		});
+		await Promise.all([
+			publishWinnerBoard(writerDatabase, lastDraft.id),
+			hidePublishedBoard(instrumentedReader)
+		]);
+		const [state] = await writerDatabase
+			.select()
+			.from(graphicState)
+			.where(eq(graphicState.id, 'live'));
+		expect(state.version).toBe(4);
+		const storedBoards = await writerDatabase.select().from(winnerBoards);
+		const publishedBoards = storedBoards.filter(({ status }) => status === 'published');
+		if (state.publishedWinnerBoardId) {
+			expect(state.publishedWinnerBoardId).toBe(lastDraft.id);
+			expect(publishedBoards.map(({ id }) => id)).toEqual([lastDraft.id]);
+		} else {
+			expect(publishedBoards).toEqual([]);
+		}
+	} finally {
+		readerClient.close();
+		writerClient.close();
+	}
+}
+
+/**
+ * @param {ReturnType<typeof drizzle>} database
+ * @param {string} liveBoardId
+ * @param {string} draftBoardId
+ * @param {number} version
+ */
+async function expectLiveStateUnchanged(database, liveBoardId, draftBoardId, version) {
+	expect(await database.select().from(graphicState)).toMatchObject([
+		{ publishedWinnerBoardId: liveBoardId, version }
+	]);
+	const storedBoards = await database.select().from(winnerBoards);
+	expect(storedBoards.find(({ id }) => id === liveBoardId)?.status).toBe('published');
+	expect(storedBoards.find(({ id }) => id === draftBoardId)?.status).toBe('draft');
+}
