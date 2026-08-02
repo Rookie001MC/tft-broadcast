@@ -39,7 +39,7 @@ export const actions = {
 			try {
 				if (!(await hasAnyUser(db))) await releaseFirstOperatorClaim(db, claimToken);
 			} catch {
-				// A pending claim is recoverable after the bounded stale interval.
+				// A stranded pending claim stays fail-closed for explicit operator intervention.
 			}
 			return fail(400, { message: 'Unable to create the operator account.' });
 		}

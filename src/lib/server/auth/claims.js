@@ -1,9 +1,8 @@
-import { and, eq, lte } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { user } from '$lib/server/db/schema/auth.js';
 import { firstOperatorClaim } from '$lib/server/db/schema/setup.js';
 
 export const FIRST_OPERATOR_CLAIM_HEADER = 'x-first-operator-claim';
-export const FIRST_OPERATOR_CLAIM_STALE_MS = 2 * 60 * 1000;
 
 const FIRST_OPERATOR_CLAIM_ID = 1;
 const CLAIM_TRANSACTION_ATTEMPTS = 3;
@@ -44,37 +43,23 @@ async function attemptFirstOperatorClaim(database, token, now) {
 			})
 			.onConflictDoNothing()
 			.returning({ id: firstOperatorClaim.id });
-		if (inserted.length === 1) return true;
 
-		const staleBefore = new Date(now.getTime() - FIRST_OPERATOR_CLAIM_STALE_MS);
-		const recovered = await transaction
-			.update(firstOperatorClaim)
-			.set({ token, claimedAt: now, completedAt: null })
-			.where(
-				and(
-					eq(firstOperatorClaim.id, FIRST_OPERATOR_CLAIM_ID),
-					eq(firstOperatorClaim.status, 'pending'),
-					lte(firstOperatorClaim.claimedAt, staleBefore)
-				)
-			)
-			.returning({ id: firstOperatorClaim.id });
-
-		return recovered.length === 1;
+		return inserted.length === 1;
 	});
 }
 
 /**
  * Atomically confirms that no user exists and acquires the singleton setup claim.
- * A pending claim gets one recovery attempt after the fixed stale interval.
+ * Existing pending and completed claims fail closed and are never replaced.
  *
  * @param {any} database
  * @param {string} token
- * @param {Date} [now]
  */
-export async function claimFirstOperator(database, token, now = new Date()) {
+export async function claimFirstOperator(database, token) {
+	const claimedAt = new Date();
 	for (let attempt = 0; attempt < CLAIM_TRANSACTION_ATTEMPTS; attempt += 1) {
 		try {
-			return await attemptFirstOperatorClaim(database, token, now);
+			return await attemptFirstOperatorClaim(database, token, claimedAt);
 		} catch (error) {
 			if (!isDatabaseLocked(error)) throw error;
 			if (attempt === CLAIM_TRANSACTION_ATTEMPTS - 1) return false;

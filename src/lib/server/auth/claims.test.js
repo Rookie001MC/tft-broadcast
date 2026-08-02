@@ -3,7 +3,6 @@ import { drizzle } from 'drizzle-orm/libsql';
 import { afterAll, beforeAll, beforeEach, describe, expect, test, vi } from 'vitest';
 import { firstOperatorClaim } from '$lib/server/db/schema/setup.js';
 import {
-	FIRST_OPERATOR_CLAIM_STALE_MS,
 	claimFirstOperator,
 	completeFirstOperatorClaim,
 	releaseFirstOperatorClaim
@@ -81,49 +80,51 @@ describe('first-operator claim', () => {
 		await expect(claimFirstOperator(database, 'claim-a')).resolves.toBe(false);
 	});
 
-	test('recovers one stale pending claim after the bounded timeout', async () => {
-		const now = new Date('2026-08-02T12:00:00.000Z');
+	test('never replaces an arbitrarily old pending claim', async () => {
+		const claimedAt = new Date('2000-01-01T00:00:00.000Z');
 		await client.execute({
 			sql: `
 				INSERT INTO first_operator_claim (id, token, status, claimed_at)
 				VALUES (1, ?, 'pending', ?)
 			`,
-			args: ['stale-claim', now.getTime() - FIRST_OPERATOR_CLAIM_STALE_MS - 1]
+			args: ['original-claim', claimedAt.getTime()]
 		});
 
-		await expect(claimFirstOperator(database, 'replacement-claim', now)).resolves.toBe(true);
+		await expect(claimFirstOperator(database, 'replacement-claim')).resolves.toBe(false);
 		const [row] = await database.select().from(firstOperatorClaim);
 		expect(row).toEqual(
-			expect.objectContaining({ token: 'replacement-claim', status: 'pending', claimedAt: now })
+			expect.objectContaining({ token: 'original-claim', status: 'pending', claimedAt })
 		);
 	});
 
-	test('does not recover a pending claim before the timeout', async () => {
-		const now = new Date('2026-08-02T12:00:00.000Z');
-		await expect(claimFirstOperator(database, 'claim-a', now)).resolves.toBe(true);
+	test('rejects every late-resume claimant while the original token remains pending', async () => {
+		await expect(claimFirstOperator(database, 'original-claim')).resolves.toBe(true);
+		const resumedAges = [
+			new Date('2026-08-02T11:58:00.000Z'),
+			new Date('2026-07-02T12:00:00.000Z'),
+			new Date('2020-01-01T00:00:00.000Z')
+		];
 
-		await expect(
-			claimFirstOperator(
-				database,
-				'claim-b',
-				new Date(now.getTime() + FIRST_OPERATOR_CLAIM_STALE_MS - 1)
-			)
-		).resolves.toBe(false);
+		for (const [index, claimedAt] of resumedAges.entries()) {
+			await client.execute({
+				sql: 'UPDATE first_operator_claim SET claimed_at = ? WHERE id = 1',
+				args: [claimedAt.getTime()]
+			});
+			await expect(claimFirstOperator(database, `late-claim-${index}`)).resolves.toBe(false);
+		}
+
+		const [row] = await database.select().from(firstOperatorClaim);
+		expect(row.token).toBe('original-claim');
+		expect(row.status).toBe('pending');
 	});
 
 	test('a completed claim permanently closes first-operator setup', async () => {
 		const now = new Date('2026-08-02T12:00:00.000Z');
-		await claimFirstOperator(database, 'claim-a', now);
+		await claimFirstOperator(database, 'claim-a');
 		await completeFirstOperatorClaim(database, 'claim-a', now);
 		await releaseFirstOperatorClaim(database, 'claim-a');
 
-		await expect(
-			claimFirstOperator(
-				database,
-				'claim-b',
-				new Date(now.getTime() + FIRST_OPERATOR_CLAIM_STALE_MS * 2)
-			)
-		).resolves.toBe(false);
+		await expect(claimFirstOperator(database, 'claim-b')).resolves.toBe(false);
 		const [row] = await database.select().from(firstOperatorClaim);
 		expect(row.status).toBe('complete');
 	});
