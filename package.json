@@ -57,6 +57,7 @@
 	},
 	"dependencies": {
 		"@libsql/client": "^0.17.4",
+		"@lucide/svelte": "^1.28.0",
 		"csv-parse": "^7.0.1",
 		"file-type": "^22.0.1",
 		"twisted": "^1.82.0",
