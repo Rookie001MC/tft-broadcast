@@ -4,7 +4,12 @@ import { and, asc, eq } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { players } from '../db/schema/players.js';
 import { tournamentPlayers, tournaments } from '../db/schema/tournaments.js';
-import { addRosterPlayers, createTournament, moveRosterPlayer, removeRosterPlayer } from './repository.js';
+import {
+	addRosterPlayers,
+	createTournament,
+	moveRosterPlayer,
+	removeRosterPlayer
+} from './repository.js';
 
 const schemaStatements = [
 	`CREATE TABLE players (
@@ -142,7 +147,10 @@ describe('tournaments repository', () => {
 		expect(added).toBe(2);
 		expect(
 			await database
-				.select({ playerId: tournamentPlayers.playerId, displayOrder: tournamentPlayers.displayOrder })
+				.select({
+					playerId: tournamentPlayers.playerId,
+					displayOrder: tournamentPlayers.displayOrder
+				})
 				.from(tournamentPlayers)
 				.where(eq(tournamentPlayers.tournamentId, 'tournament-one'))
 				.orderBy(asc(tournamentPlayers.displayOrder), asc(tournamentPlayers.playerId))
@@ -162,7 +170,10 @@ describe('tournaments repository', () => {
 
 		expect(
 			await database
-				.select({ playerId: tournamentPlayers.playerId, displayOrder: tournamentPlayers.displayOrder })
+				.select({
+					playerId: tournamentPlayers.playerId,
+					displayOrder: tournamentPlayers.displayOrder
+				})
 				.from(tournamentPlayers)
 				.where(eq(tournamentPlayers.tournamentId, 'tournament-one'))
 				.orderBy(asc(tournamentPlayers.displayOrder), asc(tournamentPlayers.playerId))
@@ -185,7 +196,10 @@ describe('tournaments repository', () => {
 
 		expect(
 			await database
-				.select({ playerId: tournamentPlayers.playerId, displayOrder: tournamentPlayers.displayOrder })
+				.select({
+					playerId: tournamentPlayers.playerId,
+					displayOrder: tournamentPlayers.displayOrder
+				})
 				.from(tournamentPlayers)
 				.where(eq(tournamentPlayers.tournamentId, 'tournament-one'))
 				.orderBy(asc(tournamentPlayers.displayOrder), asc(tournamentPlayers.playerId))
@@ -201,7 +215,11 @@ describe('tournaments repository', () => {
 			removeRosterPlayer(database, { tournamentId: 'missing', playerId: 'player-one' })
 		).rejects.toThrow('Tournament was not found');
 		await expect(
-			moveRosterPlayer(database, { tournamentId: 'missing', playerId: 'player-one', displayOrder: 0 })
+			moveRosterPlayer(database, {
+				tournamentId: 'missing',
+				playerId: 'player-one',
+				displayOrder: 0
+			})
 		).rejects.toThrow('Tournament was not found');
 	});
 });

@@ -1,6 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { and, asc, eq } from 'drizzle-orm';
-import { catalogAugments, catalogChampions, catalogSnapshots } from '$lib/server/db/schema/catalog.js';
+import {
+	catalogAugments,
+	catalogChampions,
+	catalogSnapshots
+} from '$lib/server/db/schema/catalog.js';
 import { playerImportPreviews } from '$lib/server/db/schema/imports.js';
 import { players } from '$lib/server/db/schema/players.js';
 import { tournamentPlayers, tournaments } from '$lib/server/db/schema/tournaments.js';
@@ -15,10 +19,14 @@ async function allTournaments(database) {
 /** @param {any} database @param {string | null} tournamentId */
 async function getSelectedTournament(database, tournamentId) {
 	const tournamentsList = await allTournaments(database);
-	if (tournamentsList.length === 0) return { tournaments: tournamentsList, selectedTournament: null };
+	if (tournamentsList.length === 0)
+		return { tournaments: tournamentsList, selectedTournament: null };
 
 	const selectedTournament =
-		(tournamentId && tournamentsList.find((/** @type {{ id: string }} */ tournament) => tournament.id === tournamentId)) ??
+		(tournamentId &&
+			tournamentsList.find(
+				(/** @type {{ id: string }} */ tournament) => tournament.id === tournamentId
+			)) ??
 		tournamentsList[0];
 	return { tournaments: tournamentsList, selectedTournament };
 }
@@ -56,7 +64,9 @@ async function getActiveCatalogAssets(database, activeCatalogSnapshotId) {
 	const [snapshot] = await database
 		.select()
 		.from(catalogSnapshots)
-		.where(and(eq(catalogSnapshots.id, activeCatalogSnapshotId), eq(catalogSnapshots.isAvailable, true)))
+		.where(
+			and(eq(catalogSnapshots.id, activeCatalogSnapshotId), eq(catalogSnapshots.isAvailable, true))
+		)
 		.limit(1);
 	if (!snapshot) return { snapshot: null, champions: [], augments: [] };
 
@@ -109,13 +119,19 @@ async function getImportPreviewState(database) {
 /** @param {any} database @param {string} tournamentId */
 async function getTournamentRosters(database, tournamentId) {
 	const roster = await getRoster(database, tournamentId);
-	const playersForSelection = await database.select().from(players).orderBy(asc(players.displayName), asc(players.id));
+	const playersForSelection = await database
+		.select()
+		.from(players)
+		.orderBy(asc(players.displayName), asc(players.id));
 	return { roster, playersForSelection };
 }
 
 /** @param {any} database @param {string | null} tournamentId */
 export async function loadTournamentAdminData(database, tournamentId) {
-	const { tournaments: all, selectedTournament } = await getSelectedTournament(database, tournamentId);
+	const { tournaments: all, selectedTournament } = await getSelectedTournament(
+		database,
+		tournamentId
+	);
 	if (!selectedTournament) {
 		return {
 			tournaments: all,
@@ -151,12 +167,14 @@ export async function loadTournamentAdminData(database, tournamentId) {
 
 /** @param {string} value */
 function slugify(value) {
-	return value
-		.trim()
-		.toLocaleLowerCase('en-US')
-		.replace(/[^a-z0-9]+/g, '-')
-		.replace(/^-+|-+$/g, '')
-		.slice(0, 64) || randomUUID();
+	return (
+		value
+			.trim()
+			.toLocaleLowerCase('en-US')
+			.replace(/[^a-z0-9]+/g, '-')
+			.replace(/^-+|-+$/g, '')
+			.slice(0, 64) || randomUUID()
+	);
 }
 
 /** @param {any} database @param {{ name: string }} input */
@@ -167,7 +185,14 @@ export async function createTournament(database, input) {
 	const slug = slugify(name);
 	const [created] = await database
 		.insert(tournaments)
-		.values({ id: randomUUID(), name, slug, activeCatalogSnapshotId: null, createdAt: now, updatedAt: now })
+		.values({
+			id: randomUUID(),
+			name,
+			slug,
+			activeCatalogSnapshotId: null,
+			createdAt: now,
+			updatedAt: now
+		})
 		.returning();
 	return created ?? null;
 }
@@ -227,7 +252,12 @@ export async function removeRosterPlayer(database, input) {
 		if (!existingTournament) throw new Error('Tournament was not found');
 		await transaction
 			.delete(tournamentPlayers)
-			.where(and(eq(tournamentPlayers.tournamentId, input.tournamentId), eq(tournamentPlayers.playerId, input.playerId)));
+			.where(
+				and(
+					eq(tournamentPlayers.tournamentId, input.tournamentId),
+					eq(tournamentPlayers.playerId, input.playerId)
+				)
+			);
 		const ordered = await transaction
 			.select({ playerId: tournamentPlayers.playerId })
 			.from(tournamentPlayers)
@@ -237,7 +267,12 @@ export async function removeRosterPlayer(database, input) {
 			await transaction
 				.update(tournamentPlayers)
 				.set({ displayOrder })
-				.where(and(eq(tournamentPlayers.tournamentId, input.tournamentId), eq(tournamentPlayers.playerId, row.playerId)));
+				.where(
+					and(
+						eq(tournamentPlayers.tournamentId, input.tournamentId),
+						eq(tournamentPlayers.playerId, row.playerId)
+					)
+				);
 		}
 		return true;
 	});
@@ -253,11 +288,16 @@ export async function moveRosterPlayer(database, input) {
 			.limit(1);
 		if (!existingTournament) throw new Error('Tournament was not found');
 		const roster = await transaction
-			.select({ playerId: tournamentPlayers.playerId, displayOrder: tournamentPlayers.displayOrder })
+			.select({
+				playerId: tournamentPlayers.playerId,
+				displayOrder: tournamentPlayers.displayOrder
+			})
 			.from(tournamentPlayers)
 			.where(eq(tournamentPlayers.tournamentId, input.tournamentId))
 			.orderBy(asc(tournamentPlayers.displayOrder), asc(tournamentPlayers.playerId));
-		const currentIndex = roster.findIndex((/** @type {{ playerId: string }} */ row) => row.playerId === input.playerId);
+		const currentIndex = roster.findIndex(
+			(/** @type {{ playerId: string }} */ row) => row.playerId === input.playerId
+		);
 		if (currentIndex === -1) throw new Error('Roster player was not found');
 		const boundedTarget = Math.max(0, Math.min(input.displayOrder, roster.length - 1));
 		if (boundedTarget === currentIndex) return true;
@@ -267,7 +307,12 @@ export async function moveRosterPlayer(database, input) {
 			await transaction
 				.update(tournamentPlayers)
 				.set({ displayOrder })
-				.where(and(eq(tournamentPlayers.tournamentId, input.tournamentId), eq(tournamentPlayers.playerId, row.playerId)));
+				.where(
+					and(
+						eq(tournamentPlayers.tournamentId, input.tournamentId),
+						eq(tournamentPlayers.playerId, row.playerId)
+					)
+				);
 		}
 		return true;
 	});

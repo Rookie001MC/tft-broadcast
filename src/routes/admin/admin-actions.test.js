@@ -19,7 +19,9 @@ const mocks = vi.hoisted(() => ({
 vi.mock('$env/dynamic/private', () => ({ env: { MEDIA_ROOT: 'media' } }));
 vi.mock('$lib/server/auth', () => ({ auth: { api: { signOut: mocks.signOut } } }));
 vi.mock('$lib/server/db', () => ({ db: {} }));
-vi.mock('$lib/server/catalog/catalog-sync.js', () => ({ syncAndActivateCatalog: mocks.syncAndActivateCatalog }));
+vi.mock('$lib/server/catalog/catalog-sync.js', () => ({
+	syncAndActivateCatalog: mocks.syncAndActivateCatalog
+}));
 vi.mock('$lib/server/import/staging.js', () => ({
 	stagePlayerImport: mocks.stagePlayerImport,
 	commitStagedPlayerImport: mocks.commitStagedPlayerImport
@@ -54,17 +56,23 @@ describe('admin route authorization', () => {
 	beforeEach(() => vi.clearAllMocks());
 
 	test('redirects anonymous loads to login before loading data', async () => {
-		await expect(load(asEvent({ locals: {}, url: new URL('https://broadcast.example/admin') }))).rejects.toEqual(
-			expect.objectContaining({ status: 303, location: '/login?next=%2Fadmin' })
-		);
+		await expect(
+			load(asEvent({ locals: {}, url: new URL('https://broadcast.example/admin') }))
+		).rejects.toEqual(expect.objectContaining({ status: 303, location: '/login?next=%2Fadmin' }));
 		expect(mocks.loadTournamentAdminData).not.toHaveBeenCalled();
 	});
 
 	for (const [name, action] of Object.entries(actions)) {
 		test(`${name} redirects anonymous submissions to login before any write`, async () => {
-			await expect(action(asEvent({ locals: {}, request: emptyRequest() , url: new URL('https://broadcast.example/admin') }))).rejects.toEqual(
-				expect.objectContaining({ status: 303, location: '/login?next=%2Fadmin' })
-			);
+			await expect(
+				action(
+					asEvent({
+						locals: {},
+						request: emptyRequest(),
+						url: new URL('https://broadcast.example/admin')
+					})
+				)
+			).rejects.toEqual(expect.objectContaining({ status: 303, location: '/login?next=%2Fadmin' }));
 			expect(mocks.createTournament).not.toHaveBeenCalled();
 			expect(mocks.createPlayer).not.toHaveBeenCalled();
 			expect(mocks.stagePlayerImport).not.toHaveBeenCalled();

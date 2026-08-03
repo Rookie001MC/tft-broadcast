@@ -14,7 +14,11 @@ import {
 	moveRosterPlayer,
 	removeRosterPlayer
 } from '$lib/server/tournaments/repository.js';
-import { hidePublishedBoard, publishWinnerBoard, saveDraftWinnerBoard } from '$lib/server/winner-boards/repository.js';
+import {
+	hidePublishedBoard,
+	publishWinnerBoard,
+	saveDraftWinnerBoard
+} from '$lib/server/winner-boards/repository.js';
 
 const MAX_BUNDLE_BYTES = 25 * 1024 * 1024;
 const MEDIA_ROOT = env.MEDIA_ROOT ?? 'media';
@@ -91,7 +95,10 @@ export const actions = {
 				return fail(400, { action: 'previewBundle', message: 'A ZIP file is required.' });
 			}
 			if (!rawFile.name.toLowerCase().endsWith('.zip')) {
-				return fail(400, { action: 'previewBundle', message: 'The uploaded file must be named .zip.' });
+				return fail(400, {
+					action: 'previewBundle',
+					message: 'The uploaded file must be named .zip.'
+				});
 			}
 			if (rawFile.size > MAX_BUNDLE_BYTES) {
 				return fail(400, { action: 'previewBundle', message: 'ZIP file is too large.' });
@@ -128,7 +135,10 @@ export const actions = {
 			const { form, tournamentId } = await requireTournamentId(event);
 			const playerIds = toStringValues(form.getAll('playerIds'));
 			if (playerIds.length === 0) {
-				return fail(400, { action: 'addRosterPlayers', message: 'At least one player is required.' });
+				return fail(400, {
+					action: 'addRosterPlayers',
+					message: 'At least one player is required.'
+				});
 			}
 			await addRosterPlayers(db, { tournamentId, playerIds });
 			return { action: 'addRosterPlayers', tournamentId };
@@ -157,7 +167,10 @@ export const actions = {
 			const playerId = text(form.get('playerId'));
 			const displayOrder = Number(form.get('displayOrder'));
 			if (!playerId || !Number.isInteger(displayOrder)) {
-				return fail(400, { action: 'moveRosterPlayer', message: 'A player and valid order are required.' });
+				return fail(400, {
+					action: 'moveRosterPlayer',
+					message: 'A player and valid order are required.'
+				});
 			}
 			await moveRosterPlayer(db, { tournamentId, playerId, displayOrder });
 			return { action: 'moveRosterPlayer', tournamentId, playerId, displayOrder };
