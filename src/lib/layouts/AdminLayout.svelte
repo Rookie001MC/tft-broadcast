@@ -1,14 +1,14 @@
 <script>
 	import siteConfig from '$lib/config.js';
 	import {getPageMetaContext, setPageMetaContext} from "$lib/context/pageMetaContext.js";
+	import Header from "$lib/components/Header.svelte"
+	import Sidebar from "$lib/components/Sidebar.svelte"
 	/** @import { Snippet } from 'svelte' */
 
 	/**
 	 * @type {{ children: Snippet}}
 	 */
 	let { children } = $props();
-
-	import Header from "$lib/components/Header.svelte"
 
 	const pageMeta = $state({title: undefined, description: undefined})
 	setPageMetaContext(pageMeta);
@@ -29,10 +29,11 @@
 	<!-- Body Grid -->
 	<div class="grid grid-cols-[auto_1fr]">
 		<!-- Sidebar -->
+		<Sidebar />
 		<!-- <Sidebar /> -->
 
 		<!-- Content -->
-		<main class="">
+		<main class="h-full w-full space-y-4">
 			{@render children()}
 		</main>
 	</div>

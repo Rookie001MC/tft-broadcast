@@ -8,7 +8,7 @@
 	let { headerTitle } = $props();
 </script>
 
-<AppBar>
+<AppBar class="preset-filled-surface-200-800">
 	<!-- 1. Set dynamic layout columns -->
 	<AppBar.Toolbar class="grid-cols-[auto_1fr_auto] md:grid-cols-[auto_auto]">
 		<AppBar.Lead>
