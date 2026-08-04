@@ -1,12 +1,18 @@
 <script>
+	import {getPageMetaContext} from "$lib/context/pageMetaContext.js";
 	/** @type {import('./$types').PageProps} */
 	let { form } = $props();
-</script>
 
-<svelte:head>
-	<title>Operator login | TFT Broadcast</title>
-	<meta name="description" content="Sign in to the TFT broadcast control room." />
-</svelte:head>
+	const pageMeta = {
+		title: "Operator Login",
+		description: "Sign in to the TFT broadcast control room."
+
+	}
+	const pageMetaContext = getPageMetaContext();
+	pageMetaContext.title = "Operator Login";
+	pageMetaContext.description = "Sign in to the TFT broadcast control room.";
+
+</script>
 
 <main class="grid min-h-screen place-items-center bg-slate-950 px-5 py-12 text-slate-100">
 	<section
