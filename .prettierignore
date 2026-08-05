@@ -12,3 +12,8 @@ bun.lockb
 /src/lib/openapi/
 /src/lib/server/db/schema/auth.js
 /.superpowers/sdd/
+/.vscode/
+/AGENTS.md
+/docs/communitydragon/
+/docs/riotgames/
+/docs/superpowers/

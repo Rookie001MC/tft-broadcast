@@ -61,15 +61,16 @@ export const actions = {
 	createTournament: async (event) => {
 		requireAdmin(event);
 		const form = await event.request.formData();
+		let tournament;
 		try {
-			const tournament = await createTournament(db, { name: text(form.get('name')) });
+			tournament = await createTournament(db, { name: text(form.get('name')) });
 			if (!tournament) {
 				return fail(400, { action: 'createTournament', message: 'Tournament was not created.' });
 			}
-			redirect(303, `/admin?tournament=${tournament.id}`);
 		} catch (error) {
 			return actionFailure('createTournament', error);
 		}
+		redirect(303, `/admin?tournament=${tournament.id}`);
 	},
 	createPlayer: async (event) => {
 		requireAdmin(event);

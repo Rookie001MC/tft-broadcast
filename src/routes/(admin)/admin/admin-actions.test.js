@@ -88,3 +88,26 @@ describe('admin route authorization', () => {
 		});
 	}
 });
+
+describe('admin action results', () => {
+	beforeEach(() => vi.clearAllMocks());
+
+	test('redirects to the newly created tournament without catching the redirect', async () => {
+		mocks.createTournament.mockResolvedValue({ id: 'tournament-1' });
+		const form = new FormData();
+		form.set('name', 'HCMUSEC Finals');
+		const request = new Request('https://broadcast.example/admin', { method: 'POST', body: form });
+
+		await expect(
+			actions.createTournament(
+				asEvent({
+					locals: { user: { id: 'operator-1' } },
+					request,
+					url: new URL(request.url)
+				})
+			)
+		).rejects.toEqual(
+			expect.objectContaining({ status: 303, location: '/admin?tournament=tournament-1' })
+		);
+	});
+});

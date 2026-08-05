@@ -8,4 +8,5 @@ import { createContext } from 'svelte';
 
 /** @typedef {[() => PageMeta, (context: PageMeta) => PageMeta]} PageMetaContext */
 
-export const [getPageMetaContext, setPageMetaContext] = /** @type {PageMetaContext} */ createContext();
+export const [getPageMetaContext, setPageMetaContext] =
+	/** @type {PageMetaContext} */ createContext();

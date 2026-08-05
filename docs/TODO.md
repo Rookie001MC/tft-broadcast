@@ -1,20 +1,20 @@
-# TODO for the TFT Production Graphics Control
+# TFT Production Graphics Status
 
-## Scope
+The production MVP is manual-first. Riot match-history automation remains outside the critical path until its reliability can be evaluated separately.
 
-At best, we can only get Match Winner, indirectly via querying [TFT-MATCH-V1](https://developer.riotgames.com/apis#tft-match-v1),
-or typed in manually like an Excel spreadsheet (fuck I hate touching vMix Data Sources)
+## Completed
 
-## TODOs
+- [x] Combined auth, catalog, player, tournament, import, winner-board, and live-state schema.
+- [x] Safe ZIP player import preview, expiring token confirmation, and controlled managed images.
+- [x] CommunityDragon/Data Dragon normalization, fallback, and transactional catalog activation.
+- [x] Authenticated Skeleton UI operator control surface with scoped roster and board composition.
+- [x] Shared exact 1920×1080 preview and public `/gfx` broadcast renderer.
+- [x] Transactional publish/hide controls and one-second ETag polling.
+- [x] Server, browser-component, and multi-page end-to-end workflow coverage.
+- [x] Standalone Node build and trusted LAN/VLAN deployment runbook.
 
-### Sketching Data Schema
+## Follow-up
 
-### Get TFT Assets via CommunityDragon
-
-### Plan data flow for the Manual control
-
-### Rough plan for the Manual control
-
-### Experiment and evaluate with the Riot Games API
-
-### Start the fucking implementing
+- [ ] Rehearse the deployment on the final production VLAN and firewall rule before the first show.
+- [ ] Experiment with TFT-MATCH-V1 separately; do not couple it to manual publishing until reliability is proven.
+- [ ] Consider motion and additional graphic layouts after the static workflow has operated successfully in production.

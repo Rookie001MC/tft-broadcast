@@ -1,11 +1,43 @@
 import { defineConfig } from 'vitest/config';
 import { playwright } from '@vitest/browser-playwright';
 import tailwindcss from '@tailwindcss/vite';
-import adapter from '@sveltejs/adapter-auto';
+import adapter from '@sveltejs/adapter-node';
 import { sveltekit } from '@sveltejs/kit/vite';
 
+function browserTestMediaStub() {
+	return {
+		name: 'browser-test-media-stub',
+		apply: /** @param {unknown} _config @param {{ mode: string }} environment */ (
+			_config,
+			environment
+		) => environment.mode === 'test',
+		/** @param {import('vite').ViteDevServer} server */
+		configureServer(server) {
+			server.middlewares.use(
+				'/media/player-images/',
+				/**
+				 * @param {import('node:http').IncomingMessage} _request
+				 * @param {import('node:http').ServerResponse} response
+				 */
+				(_request, response) => {
+					response.statusCode = 404;
+					response.end();
+				}
+			);
+		}
+	};
+}
+
 export default defineConfig({
+	optimizeDeps: {
+		include: [
+			'@lucide/svelte/icons/external-link',
+			'@lucide/svelte/icons/eye-off',
+			'@lucide/svelte/icons/radio'
+		]
+	},
 	plugins: [
+		browserTestMediaStub(),
 		tailwindcss(),
 		sveltekit({
 			compilerOptions: {
@@ -14,10 +46,7 @@ export default defineConfig({
 					filename.split(/[/\\]/).includes('node_modules') ? undefined : true
 			},
 
-			// adapter-auto only supports some environments, see https://svelte.dev/docs/kit/adapter-auto for a list.
-			// If your environment is not supported, or you settled on a specific environment, switch out the adapter.
-			// See https://svelte.dev/docs/kit/adapters for more information about adapters.
-			adapter: adapter(),
+			adapter: adapter({ precompress: true }),
 
 			typescript: {
 				config: (config) => {

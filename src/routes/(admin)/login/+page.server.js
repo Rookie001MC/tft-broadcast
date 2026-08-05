@@ -1,18 +1,15 @@
 import { fail, redirect } from '@sveltejs/kit';
 import { auth } from '$lib/server/auth';
-import { db } from "$lib/server/db";
-import { user } from "$lib/server/db/schema";
+import { db } from '$lib/server/db';
+import { hasAnyUser } from '$lib/server/auth/guards.js';
+
 /** @type {import('./$types').PageServerLoad} */
-export async function load({ locals }) {
+export function load({ locals }) {
 	if (locals.user) redirect(303, '/admin');
 
-	// Check if there's already a user in the database.
-	// Redirect to Setup if no user is there yet.
-	const users = await db.select().from(user)
-	if (users.length === 0) {
-		redirect(303, '/setup');
-	}
-
+	return hasAnyUser(db).then((hasUser) => {
+		if (!hasUser) redirect(303, '/setup');
+	});
 }
 
 /** @satisfies {import('./$types').Actions} */

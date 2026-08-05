@@ -10,21 +10,11 @@ import {
 	winnerBoards
 } from '../db/schema/winner-boards.js';
 
+/** @import { WinnerBoardView } from '$lib/winner-board.js' */
+
 const LIVE_STATE_ID = 'live';
 const WRITE_TRANSACTION_ATTEMPTS = 10;
 let liveWriteTail = Promise.resolve();
-
-/**
- * @typedef {{
- *   id: string,
- *   title: string,
- *   tournamentId: string,
- *   publishedAt: Date | null,
- *   winner: { id: string, displayName: string, riotId: string | null, imagePath: string | null },
- *   champions: Array<{ id: string, displayName: string, iconPath: string | null, starLevel: number | null, displayOrder: number }>,
- *   augments: Array<{ id: string, displayName: string, iconPath: string | null, displayOrder: number }>
- * }} WinnerBoardView
- */
 
 /**
  * @typedef {{
@@ -174,12 +164,14 @@ async function validateTournamentScope(transaction, scope) {
  * @param {string} boardId
  * @returns {Promise<WinnerBoardView | null>}
  */
-async function getWinnerBoardView(database, boardId) {
+export async function getWinnerBoardView(database, boardId) {
 	const [board] = await database
 		.select({
 			id: winnerBoards.id,
 			title: winnerBoards.title,
 			tournamentId: winnerBoards.tournamentId,
+			status: winnerBoards.status,
+			updatedAt: winnerBoards.updatedAt,
 			publishedAt: winnerBoards.publishedAt,
 			winnerId: players.id,
 			winnerDisplayName: players.displayName,
@@ -220,6 +212,8 @@ async function getWinnerBoardView(database, boardId) {
 		id: board.id,
 		title: board.title,
 		tournamentId: board.tournamentId,
+		status: board.status,
+		updatedAt: board.updatedAt,
 		publishedAt: board.publishedAt,
 		winner: {
 			id: board.winnerId,
@@ -506,6 +500,8 @@ export async function getPublishedWinnerBoard(database) {
 		id: /** @type {string} */ (row.id),
 		title: /** @type {string} */ (row.title),
 		tournamentId: /** @type {string} */ (row.tournamentId),
+		status: 'published',
+		updatedAt: new Date(/** @type {number} */ (row.publishedAt ?? 0)),
 		publishedAt:
 			row.publishedAt === null ? null : new Date(/** @type {number} */ (row.publishedAt)),
 		winner: {

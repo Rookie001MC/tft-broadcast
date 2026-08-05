@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, desc, eq } from 'drizzle-orm';
 import {
 	catalogAugments,
 	catalogChampions,
@@ -9,7 +9,10 @@ import { playerImportPreviews } from '$lib/server/db/schema/imports.js';
 import { players } from '$lib/server/db/schema/players.js';
 import { tournamentPlayers, tournaments } from '$lib/server/db/schema/tournaments.js';
 import { winnerBoards } from '$lib/server/db/schema/winner-boards.js';
-import { getPublishedWinnerBoard } from '$lib/server/winner-boards/repository.js';
+import {
+	getPublishedWinnerBoard,
+	getWinnerBoardView
+} from '$lib/server/winner-boards/repository.js';
 
 /** @param {any} database */
 async function allTournaments(database) {
@@ -86,18 +89,15 @@ async function getActiveCatalogAssets(database, activeCatalogSnapshotId) {
 
 /** @param {any} database @param {string} tournamentId */
 async function getTournamentDrafts(database, tournamentId) {
-	return database
-		.select({
-			id: winnerBoards.id,
-			title: winnerBoards.title,
-			status: winnerBoards.status,
-			winnerPlayerId: winnerBoards.winnerPlayerId,
-			publishedAt: winnerBoards.publishedAt,
-			updatedAt: winnerBoards.updatedAt
-		})
+	const rows = await database
+		.select({ id: winnerBoards.id })
 		.from(winnerBoards)
-		.where(eq(winnerBoards.tournamentId, tournamentId))
-		.orderBy(asc(winnerBoards.updatedAt), asc(winnerBoards.id));
+		.where(and(eq(winnerBoards.tournamentId, tournamentId), eq(winnerBoards.status, 'draft')))
+		.orderBy(desc(winnerBoards.updatedAt), asc(winnerBoards.id));
+	const views = await Promise.all(
+		rows.map((/** @type {{ id: string }} */ { id }) => getWinnerBoardView(database, id))
+	);
+	return views.filter(Boolean);
 }
 
 /** @param {any} database */
@@ -111,9 +111,16 @@ async function getImportPreviewState(database) {
 			previewJson: playerImportPreviews.previewJson
 		})
 		.from(playerImportPreviews)
-		.orderBy(asc(playerImportPreviews.createdAt))
+		.orderBy(desc(playerImportPreviews.createdAt))
 		.limit(1);
-	return preview ?? null;
+	if (!preview) return null;
+	return {
+		...preview,
+		preview:
+			typeof preview.previewJson === 'string'
+				? JSON.parse(preview.previewJson)
+				: preview.previewJson
+	};
 }
 
 /** @param {any} database @param {string} tournamentId */

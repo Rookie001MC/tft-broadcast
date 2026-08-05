@@ -1,26 +1,29 @@
 <script>
-    import { getPageMetaContext } from "$lib/context/pageMetaContext";
-    /** @type {import('./$types').PageProps} */
+	import { getPageMetaContext } from '$lib/context/pageMetaContext';
+	/** @type {import('./$types').PageProps} */
 	let { form } = $props();
 
 	const pageMetaContext = getPageMetaContext();
 	const pageMeta = {
-     	title: "Operator Login",
-     	description: "Sign in to the TFT broadcast control room.",
-	}
+		title: 'Operator Login',
+		description: 'Sign in to the TFT broadcast control room.'
+	};
 	pageMetaContext.title = pageMeta.title;
 	pageMetaContext.description = pageMeta.description;
 </script>
 
-<div class="bg-surface-50-950 grid min-h-screen place-items-center px-4 py-12">
-	<section class="card preset-outlined-surface-200-800 w-full max-w-md space-y-0 overflow-hidden" aria-labelledby="login-title">
+<div class="grid min-h-screen place-items-center bg-surface-50-950 px-4 py-12">
+	<section
+		class="w-full max-w-md space-y-0 overflow-hidden card preset-outlined-surface-200-800"
+		aria-labelledby="login-title"
+	>
 		<!-- Header -->
 		<header class="border-b border-surface-200-800 p-8 pb-6">
-			<p class="text-primary-500 mb-2 font-mono text-xs font-semibold tracking-widest uppercase">
+			<p class="mb-2 font-mono text-xs font-semibold tracking-widest text-primary-500 uppercase">
 				TFT Broadcast · Operator
 			</p>
 			<h1 id="login-title" class="h2">Enter the control room</h1>
-			<p class="text-surface-600-400 mt-1 text-sm">
+			<p class="mt-1 text-sm text-surface-600-400">
 				Sign in to manage tournament data and on-air graphics.
 			</p>
 		</header>
@@ -60,9 +63,7 @@
 					/>
 				</label>
 
-				<button type="submit" class="btn preset-filled-primary-500 w-full">
-					Sign in
-				</button>
+				<button type="submit" class="btn w-full preset-filled-primary-500"> Sign in </button>
 			</form>
 		</div>
 	</section>

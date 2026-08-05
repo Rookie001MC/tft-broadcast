@@ -5,18 +5,24 @@
 
 <svelte:head>
 	<title>Set up operator access | TFT Broadcast</title>
-	<meta name="description" content="Create the first operator account for the TFT broadcast control room." />
+	<meta
+		name="description"
+		content="Create the first operator account for the TFT broadcast control room."
+	/>
 </svelte:head>
 
-<div class="bg-surface-50-950 grid min-h-screen place-items-center px-4 py-12">
-	<section class="card preset-outlined-surface-200-800 w-full max-w-md space-y-0 overflow-hidden" aria-labelledby="setup-title">
+<div class="grid min-h-screen place-items-center bg-surface-50-950 px-4 py-12">
+	<section
+		class="w-full max-w-md space-y-0 overflow-hidden card preset-outlined-surface-200-800"
+		aria-labelledby="setup-title"
+	>
 		<!-- Header -->
 		<header class="border-b border-surface-200-800 p-8 pb-6">
-			<p class="text-primary-500 mb-2 font-mono text-xs font-semibold tracking-widest uppercase">
+			<p class="mb-2 font-mono text-xs font-semibold tracking-widest text-primary-500 uppercase">
 				Control room · First run
 			</p>
 			<h1 id="setup-title" class="h2">Create operator access</h1>
-			<p class="text-surface-600-400 mt-1 text-sm">
+			<p class="mt-1 text-sm text-surface-600-400">
 				This account controls tournament data and on-air graphics. Registration closes after setup.
 			</p>
 		</header>
@@ -74,7 +80,7 @@
 					</span>
 				</label>
 
-				<button type="submit" class="btn preset-filled-primary-500 w-full">
+				<button type="submit" class="btn w-full preset-filled-primary-500">
 					Create operator account
 				</button>
 			</form>
