@@ -14,11 +14,11 @@
 	setPageMetaContext(pageMeta);
 	const headerTitle = $derived(pageMeta.title)
 	const description = $derived(pageMeta.description)
-	const TITLE_SEPERATOR = '-'
+	const TITLE_SEPARATOR = '-'
 </script>
 
 <svelte:head>
-	<title>{headerTitle != null ? `${headerTitle} ${TITLE_SEPERATOR} ` : ''}{siteConfig.siteName}</title>
+	<title>{headerTitle != null ? `${headerTitle} ${TITLE_SEPARATOR} ` : ''}{siteConfig.siteName}</title>
 	<meta name="description" content={  description ? description : siteConfig.siteDescription} />
 </svelte:head>
 
@@ -33,7 +33,7 @@
 		<!-- <Sidebar /> -->
 
 		<!-- Content -->
-		<main class="h-full w-full space-y-4">
+		<main class="">
 			{@render children()}
 		</main>
 	</div>
