@@ -5,88 +5,79 @@
 
 <svelte:head>
 	<title>Set up operator access | TFT Broadcast</title>
-	<meta
-		name="description"
-		content="Create the first operator account for the TFT broadcast control room."
-	/>
+	<meta name="description" content="Create the first operator account for the TFT broadcast control room." />
 </svelte:head>
 
-<main class="grid min-h-screen place-items-center bg-slate-950 px-5 py-12 text-slate-100">
-	<section
-		class="w-full max-w-md overflow-hidden border border-slate-700 bg-slate-900 shadow-2xl shadow-cyan-950/30"
-		aria-labelledby="setup-title"
-	>
-		<div class="border-l-4 border-cyan-400 px-7 py-6">
-			<p class="font-mono text-xs font-semibold tracking-[0.22em] text-cyan-300 uppercase">
+<div class="bg-surface-50-950 grid min-h-screen place-items-center px-4 py-12">
+	<section class="card preset-outlined-surface-200-800 w-full max-w-md space-y-0 overflow-hidden" aria-labelledby="setup-title">
+		<!-- Header -->
+		<header class="border-b border-surface-200-800 p-8 pb-6">
+			<p class="text-primary-500 mb-2 font-mono text-xs font-semibold tracking-widest uppercase">
 				Control room · First run
 			</p>
-			<h1 id="setup-title" class="mt-3 text-3xl font-black tracking-tight">
-				Create operator access
-			</h1>
-			<p class="mt-2 text-sm leading-6 text-slate-400">
+			<h1 id="setup-title" class="h2">Create operator access</h1>
+			<p class="text-surface-600-400 mt-1 text-sm">
 				This account controls tournament data and on-air graphics. Registration closes after setup.
 			</p>
-		</div>
+		</header>
 
-		<div class="border-t border-slate-700 px-7 py-7">
+		<!-- Form body -->
+		<div class="space-y-5 p-8">
 			{#if form?.message}
-				<p
-					class="mb-5 border border-red-400/50 bg-red-950/60 px-4 py-3 text-sm text-red-100"
-					role="alert"
-				>
+				<aside class="card preset-tonal-error p-4 text-sm" role="alert">
 					{form.message}
-				</p>
+				</aside>
 			{/if}
 
-			<form method="POST" class="grid gap-5">
-				<label class="grid gap-2 text-sm font-semibold text-slate-200" for="name">
-					Operator name
+			<form method="POST" class="space-y-4">
+				<label class="label" for="name">
+					<span class="label-text">Operator name</span>
 					<input
-						class="h-11 border border-slate-600 bg-slate-950 px-3 text-base text-white transition outline-none placeholder:text-slate-600 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/20"
+						class="input"
 						id="name"
 						name="name"
 						type="text"
 						autocomplete="name"
+						placeholder="Jane Doe"
 						required
 					/>
 				</label>
 
-				<label class="grid gap-2 text-sm font-semibold text-slate-200" for="email">
-					Email
+				<label class="label" for="email">
+					<span class="label-text">Email</span>
 					<input
-						class="h-11 border border-slate-600 bg-slate-950 px-3 text-base text-white transition outline-none placeholder:text-slate-600 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/20"
+						class="input"
 						id="email"
 						name="email"
 						type="email"
 						autocomplete="email"
+						placeholder="you@example.com"
 						required
 					/>
 				</label>
 
-				<label class="grid gap-2 text-sm font-semibold text-slate-200" for="password">
-					Password
+				<label class="label" for="password">
+					<span class="label-text">Password</span>
 					<input
-						class="h-11 border border-slate-600 bg-slate-950 px-3 text-base text-white transition outline-none placeholder:text-slate-600 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/20"
+						class="input"
 						id="password"
 						name="password"
 						type="password"
 						autocomplete="new-password"
+						placeholder="••••••••"
 						minlength="12"
 						aria-describedby="password-hint"
 						required
 					/>
-					<span id="password-hint" class="font-normal text-slate-500">
+					<span id="password-hint" class="text-surface-500-400 text-xs">
 						Use at least 12 characters.
 					</span>
 				</label>
 
-				<button
-					class="mt-1 h-12 bg-cyan-400 px-4 font-black tracking-wide text-slate-950 uppercase transition hover:bg-cyan-300 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-cyan-300"
-					type="submit"
-				>
+				<button type="submit" class="btn preset-filled-primary-500 w-full">
 					Create operator account
 				</button>
 			</form>
 		</div>
 	</section>
-</main>
+</div>

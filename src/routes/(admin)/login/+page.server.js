@@ -1,9 +1,18 @@
 import { fail, redirect } from '@sveltejs/kit';
 import { auth } from '$lib/server/auth';
-
+import { db } from "$lib/server/db";
+import { user } from "$lib/server/db/schema";
 /** @type {import('./$types').PageServerLoad} */
-export function load({ locals }) {
+export async function load({ locals }) {
 	if (locals.user) redirect(303, '/admin');
+
+	// Check if there's already a user in the database.
+	// Redirect to Setup if no user is there yet.
+	const users = await db.select().from(user)
+	if (users.length === 0) {
+		redirect(303, '/setup');
+	}
+
 }
 
 /** @satisfies {import('./$types').Actions} */
