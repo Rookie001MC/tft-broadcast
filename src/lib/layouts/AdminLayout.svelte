@@ -14,7 +14,7 @@
 	setPageMetaContext(pageMeta);
 	const headerTitle = $derived(pageMeta.title);
 	const description = $derived(pageMeta.description);
-	const TITLE_SEPARATOR = '-';
+	const TITLE_SEPARATOR = siteConfig.separator;
 </script>
 
 <svelte:head>
