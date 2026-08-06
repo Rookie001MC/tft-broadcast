@@ -36,14 +36,12 @@
 		<AppBar.Trail>
 			<div class="flex items-center gap-1">
 				<Popover>
-					<Popover.Trigger>
-						<button
-							type="button"
-							class="btn-icon hover:preset-tonal-primary"
-							aria-label="User profile"
-						>
-							<CircleUserIcon class="size-5" />
-						</button>
+					<Popover.Trigger
+						type="button"
+						class="btn-icon hover:preset-tonal-primary"
+						aria-label="User profile"
+					>
+						<CircleUserIcon class="size-5" />
 					</Popover.Trigger>
 					<Portal>
 						<Popover.Positioner>
@@ -62,12 +60,15 @@
 									<hr class="border-surface-500" />
 
 									<form method="POST" action="?/logout">
-										<button type="submit" class="btn hover:preset-tonal-error" aria-label="Sign out">
+										<button
+											type="submit"
+											class="btn hover:preset-tonal-error"
+											aria-label="Sign out"
+										>
 											<LogOutIcon class="size-5" />
 											<span class="ml-2">Sign out</span>
 										</button>
 									</form>
-									
 								</div>
 							</Popover.Content>
 						</Popover.Positioner>
