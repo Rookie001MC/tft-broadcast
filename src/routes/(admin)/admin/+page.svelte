@@ -18,21 +18,21 @@
 	);
 
 	const pageMeta = getPageMetaContext();
-	pageMeta.title = 'Winner graphics';
-	pageMeta.description = 'Tournament-scoped winner board production controls.';
+	pageMeta.title = 'Dashboard';
+	pageMeta.description = 'VNUHCM - University of Science Esports Club - Teamfight Tactics Winner Broadcast Graphics Control';
 </script>
 
 <div class="mx-auto max-w-[1700px] space-y-6 pb-16">
 	<div class="flex flex-wrap items-end justify-between gap-3">
 		<div>
 			<p class="text-sm font-semibold text-primary-600-400">Production control</p>
-			<h1 class="h1">Manual winner graphics</h1>
+			<h1 class="h1">Dashboard</h1>
 			<p class="mt-2 max-w-3xl text-surface-600-400">
 				Build from a pinned tournament roster and catalog, review the exact output, then
 				deliberately publish it to the broadcast route.
 			</p>
 		</div>
-		<a class="btn preset-tonal-surface" href={resolve('/gfx')} target="_blank" rel="noreferrer"
+		<a class="btn preset-tonal-tertiary" href={resolve('/gfx')} target="_blank" rel="noreferrer"
 			>Open broadcast canvas</a
 		>
 	</div>
