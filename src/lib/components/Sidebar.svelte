@@ -7,6 +7,7 @@
 	import SwordsIcon from '@lucide/svelte/icons/swords';
 	import MonitorPlayIcon from '@lucide/svelte/icons/monitor-play';
 	import SettingsIcon from '@lucide/svelte/icons/settings';
+	import { Image } from '@lucide/svelte';
 
 	const navGroups = [
 		{
@@ -15,7 +16,7 @@
 				{ href: '/admin', label: 'Dashboard', icon: LayoutDashboardIcon },
 				{ href: '/admin/players', label: 'Players', icon: UsersIcon },
 				{ href: '/admin/tournaments', label: 'Tournaments', icon: TrophyIcon },
-				{ href: '/admin/matches', label: 'Matches', icon: SwordsIcon }
+				{ href: '/admin/game-resources', label: 'Game Resources', icon: Image },
 			]
 		},
 		{
