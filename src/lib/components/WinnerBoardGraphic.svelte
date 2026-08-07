@@ -6,7 +6,7 @@
 
 	/** @param {string | null} path */
 	function catalogImage(path) {
-		return path?.startsWith('https://') ? path : null;
+		return path?.startsWith('https://') || path?.startsWith('/media/catalog-assets/') ? path : null;
 	}
 
 	/** @param {string} name */

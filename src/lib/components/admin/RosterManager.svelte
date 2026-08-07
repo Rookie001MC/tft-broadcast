@@ -1,6 +1,5 @@
 <script>
 	import SearchIcon from '@lucide/svelte/icons/search';
-	import UserPlusIcon from '@lucide/svelte/icons/user-plus';
 	import ChevronUpIcon from '@lucide/svelte/icons/chevron-up';
 	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
 	import TrashIcon from '@lucide/svelte/icons/trash-2';
@@ -32,53 +31,31 @@
 			</p>
 			<h2 class="h3">Players & ordering</h2>
 			<p class="mt-1 text-sm text-surface-600-400">
-				Create reusable players, then add and order them inside the selected event.
+				Add reusable players and order them inside the selected event.
 			</p>
 		</div>
 		<span class="badge preset-tonal-surface">{roster.length} rostered</span>
 	</header>
 
-	<div class="grid gap-6 2xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-		<div class="space-y-5">
-			<form method="POST" action="?/createPlayer" class="fieldset space-y-3">
-				<legend class="legend">Manual player</legend>
-				<label class="label"
-					><span class="label-text">Full name</span><input
-						class="input"
-						name="fullName"
-						required
-					/></label
-				>
-				<label class="label"
-					><span class="label-text">Display name</span><input
-						class="input"
-						name="displayName"
-						required
-					/></label
-				>
-				<label class="label"
-					><span class="label-text">Riot ID <span class="text-surface-500">(optional)</span></span
-					><input class="input" name="riotId" placeholder="GameName#TAG" /></label
-				>
-				<button class="btn preset-tonal-primary" type="submit"
-					><UserPlusIcon class="size-4" /> Create player</button
-				>
-			</form>
-
+	<div class="grid gap-6 2xl:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
+		<div>
 			<form method="POST" action="?/addRosterPlayers" class="space-y-3">
 				<input type="hidden" name="tournamentId" value={tournament?.id ?? ''} />
-				<label class="label">
-					<span class="label-text">Search reusable players</span>
-					<div class="input-group input-group-divider grid-cols-[auto_1fr]">
-						<div class="ig-cell"><SearchIcon class="size-4" /></div>
+				<div class="space-y-1">
+					<label class="label label-text" for="roster-player-search">Search reusable players</label>
+					<div class="field-group grid-cols-[auto_1fr]">
+						<span class="label label-text preset-tonal-surface" aria-hidden="true">
+							<SearchIcon class="size-4" />
+						</span>
 						<input
-							class="ig-input"
+							class="input"
+							id="roster-player-search"
 							type="search"
 							bind:value={search}
 							placeholder="Name or Riot ID"
 						/>
 					</div>
-				</label>
+				</div>
 				<div
 					class="max-h-56 space-y-1 overflow-auto rounded-container border border-surface-200-800 p-2"
 				>
@@ -165,7 +142,7 @@
 		</div>
 	</div>
 
-	{#if form?.action && ['createPlayer', 'addRosterPlayers', 'removeRosterPlayer', 'moveRosterPlayer'].includes(form.action) && form.message}
+	{#if form?.action && ['addRosterPlayers', 'removeRosterPlayer', 'moveRosterPlayer'].includes(form.action) && form.message}
 		<p class="mt-4 rounded-base preset-tonal-error p-3 text-sm">{form.message}</p>
 	{/if}
 </section>

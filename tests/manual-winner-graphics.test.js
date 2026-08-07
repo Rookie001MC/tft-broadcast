@@ -1,8 +1,14 @@
 import { expect, test } from '@playwright/test';
 import { createClient } from '@libsql/client';
 import { strToU8, zipSync } from 'fflate';
+import { mkdir, rm, writeFile } from 'node:fs/promises';
+import path from 'node:path';
 
 const database = createClient({ url: 'file:test-e2e.db' });
+const PNG = Buffer.from(
+	'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+	'base64'
+);
 
 test.setTimeout(90_000);
 
@@ -26,11 +32,19 @@ async function resetDatabase() {
 		'user'
 	];
 	for (const table of tables) await database.execute(`DELETE FROM ${table}`);
+	await rm(path.resolve('media/e2e/catalog-assets'), { recursive: true, force: true });
 }
 
 /** @param {string} tournamentId */
 async function seedCatalog(tournamentId) {
 	const now = Date.now();
+	const championPath = '/media/catalog-assets/e2e-snapshot/champions/e2e-champion.png';
+	const augmentPath = '/media/catalog-assets/e2e-snapshot/augments/e2e-augment.png';
+	for (const mediaPath of [championPath, augmentPath]) {
+		const filename = path.resolve('media/e2e', mediaPath.replace('/media/', ''));
+		await mkdir(path.dirname(filename), { recursive: true });
+		await writeFile(filename, PNG);
+	}
 	await database.batch(
 		[
 			{
@@ -58,7 +72,7 @@ async function seedCatalog(tournamentId) {
 					'e2e-snapshot',
 					'TFT16_TestChampion',
 					'Test Champion',
-					'https://raw.communitydragon.org/16.15/plugins/rcp-be-lol-game-data/global/default/assets/test-champion.png',
+					championPath,
 					4,
 					'{}'
 				]
@@ -72,7 +86,7 @@ async function seedCatalog(tournamentId) {
 					'e2e-snapshot',
 					'TFT16_TestAugment',
 					'Test Augment',
-					'https://raw.communitydragon.org/16.15/plugins/rcp-be-lol-game-data/global/default/assets/test-augment.png',
+					augmentPath,
 					2,
 					'{}'
 				]
@@ -119,12 +133,27 @@ test('operator workflow publishes and hides an already-open broadcast source', a
 	await admin.getByRole('button', { name: 'Sign in' }).click();
 	await expect(admin).toHaveURL(/\/admin$/);
 
-	await admin.getByLabel('New tournament').fill('HCMUSEC TFT Finals');
+	for (const [path, heading] of [
+		['/admin', 'Dashboard'],
+		['/admin/players', 'Players'],
+		['/admin/tournaments', 'Tournaments'],
+		['/admin/game-resources', 'Game Resources'],
+		['/admin/graphics', 'Graphics'],
+		['/admin/settings', 'Settings']
+	]) {
+		const response = await admin.goto(path);
+		expect(response?.ok()).toBe(true);
+		await expect(admin.getByRole('heading', { level: 1, name: heading }).last()).toBeVisible();
+	}
+
+	await admin.goto('/admin/tournaments');
+	await admin.getByLabel('Tournament name').fill('HCMUSEC TFT Finals');
 	await admin.getByRole('button', { name: 'Create', exact: true }).click();
-	await expect(admin).toHaveURL(/\/admin\?tournament=/);
+	await expect(admin).toHaveURL(/\/admin\/tournaments\?tournament=/);
 	const tournamentId = new URL(admin.url()).searchParams.get('tournament');
 	expect(tournamentId).toBeTruthy();
 
+	await admin.goto('/admin/players');
 	const bundle = zipSync({
 		'players.csv': strToU8(
 			'full_name,display_name,riot_id\r\nPlayer One,Player One,PlayerOne#TAG\r\nPlayer Two,Player Two,PlayerTwo#TAG\r\n'
@@ -140,6 +169,7 @@ test('operator workflow publishes and hides an already-open broadcast source', a
 	await expect(admin.locator('#imports tbody tr').filter({ hasText: 'Player One' })).toBeVisible();
 	await admin.getByRole('button', { name: 'Confirm exact preview' }).click();
 
+	await admin.goto(`/admin/tournaments?tournament=${tournamentId}`);
 	await admin.getByRole('checkbox', { name: /Player One/ }).check();
 	await admin.getByRole('checkbox', { name: /Player Two/ }).check();
 	await admin.getByRole('button', { name: 'Add selected players' }).click();
@@ -149,8 +179,11 @@ test('operator workflow publishes and hides an already-open broadcast source', a
 	await expect(rosterRows.nth(0)).toContainText('Player Two');
 
 	await seedCatalog(/** @type {string} */ (tournamentId));
-	await admin.reload();
+	await admin.goto(`/admin/game-resources?tournament=${tournamentId}`);
 	await expect(admin.getByText('Catalog ready')).toBeVisible();
+	await expect(admin.getByRole('cell', { name: 'Test Champion', exact: true })).toBeVisible();
+
+	await admin.goto(`/admin/graphics?tournament=${tournamentId}`);
 
 	const broadcast = await context.newPage();
 	await broadcast.goto('/gfx');
@@ -171,6 +204,7 @@ test('operator workflow publishes and hides an already-open broadcast source', a
 	await expect(admin.getByText('Live: Player Two')).toBeVisible();
 	await expect(broadcast.getByText('Player Two', { exact: true })).toBeVisible({ timeout: 4000 });
 	await expect(broadcast.getByText('Grand Final Winner', { exact: true })).toBeVisible();
+	await expect(broadcast.locator('img[src^="/media/catalog-assets/"]')).toHaveCount(2);
 	const publishedVersion = await request.get('/gfx/version');
 	expect(await publishedVersion.json()).toEqual({ version: 1 });
 

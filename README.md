@@ -12,7 +12,7 @@ The MVP does not query Riot match history. It uses pinned CommunityDragon or Dat
 - Tournament- and catalog-scoped winner drafts with ordered champions, optional star levels, and optional augments.
 - An exact shared admin preview and public 1920×1080 `/gfx` renderer.
 - Transactional publish/hide state with one-second ETag polling for already-open broadcast clients.
-- Controlled `/media/player-images/:playerId` delivery; arbitrary file paths and player image URLs are not exposed.
+- Controlled local player and immutable catalog media delivery; arbitrary filesystem paths are not exposed.
 
 ## Local setup
 
@@ -55,6 +55,8 @@ node --env-file=.env build
 5. From an operator machine, open `http://192.168.50.10:3000/admin`. Configure OBS/vMix on the broadcast machine with `http://192.168.50.10:3000/gfx` at 1920×1080.
 
 If a trusted reverse proxy terminates HTTPS, configure its forwarded headers and SvelteKit's trusted proxy environment deliberately. Do not accept spoofable forwarded headers directly from untrusted clients.
+
+Catalog synchronization streams newline-delimited progress from `/admin/game-resources/sync`. Disable proxy buffering for this route (for example, with the included `X-Accel-Buffering: no` response header in nginx-compatible proxies). The in-process per-tournament sync lock assumes this standalone Node app runs as a single instance. `MEDIA_ROOT` must have enough free space for the compressed Data Dragon package, its temporary extraction, and retained immutable snapshots; interrupted staging directories older than 24 hours are removed on the next sync. Downloads are capped at 2 GiB compressed and 8 GiB extracted, with 512 MiB per archive entry and 10 MiB per installed catalog image.
 
 ## Operator workflow
 

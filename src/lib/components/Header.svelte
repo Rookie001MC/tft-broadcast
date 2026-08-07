@@ -59,7 +59,7 @@
 									{/if}
 									<hr class="border-surface-500" />
 
-									<form method="POST" action="?/logout">
+									<form method="POST" action={`${resolve('/admin/settings')}?/logout`}>
 										<button
 											type="submit"
 											class="btn hover:preset-tonal-error"

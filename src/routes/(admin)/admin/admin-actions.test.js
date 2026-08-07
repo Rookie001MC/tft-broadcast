@@ -40,10 +40,24 @@ vi.mock('$lib/server/winner-boards/repository.js', () => ({
 	saveDraftWinnerBoard: mocks.saveDraftWinnerBoard
 }));
 
-import { actions, load } from './+page.server.js';
+import { load } from './+page.server.js';
+import { actions as playerActions } from './players/+page.server.js';
+import { actions as tournamentActions } from './tournaments/+page.server.js';
+import { actions as catalogActions } from './game-resources/+page.server.js';
+import { actions as graphicActions } from './graphics/+page.server.js';
+import { actions as settingsActions } from './settings/+page.server.js';
+
+/** @type {Array<[string, Record<string, (event: any) => Promise<any>>]>} */
+const actionRoutes = [
+	['/admin/players', playerActions],
+	['/admin/tournaments', tournamentActions],
+	['/admin/game-resources', catalogActions],
+	['/admin/graphics', graphicActions],
+	['/admin/settings', settingsActions]
+];
 
 /** @param {string} url */
-function emptyRequest(url = 'https://broadcast.example/admin') {
+function emptyRequest(url) {
 	return new Request(url, { method: 'POST' });
 }
 
@@ -55,51 +69,45 @@ function asEvent(event) {
 describe('admin route authorization', () => {
 	beforeEach(() => vi.clearAllMocks());
 
-	test('redirects anonymous loads to login before loading data', async () => {
+	test('redirects anonymous dashboard loads to login before loading data', async () => {
 		await expect(
 			load(asEvent({ locals: {}, url: new URL('https://broadcast.example/admin') }))
 		).rejects.toEqual(expect.objectContaining({ status: 303, location: '/login?next=%2Fadmin' }));
 		expect(mocks.loadTournamentAdminData).not.toHaveBeenCalled();
 	});
 
-	for (const [name, action] of Object.entries(actions)) {
-		test(`${name} redirects anonymous submissions to login before any write`, async () => {
-			await expect(
-				action(
-					asEvent({
-						locals: {},
-						request: emptyRequest(),
-						url: new URL('https://broadcast.example/admin')
+	for (const [path, actions] of actionRoutes) {
+		for (const [name, action] of Object.entries(actions)) {
+			test(`${path} ${name} redirects anonymous submissions before any write`, async () => {
+				const url = `https://broadcast.example${path}`;
+				await expect(
+					action(asEvent({ locals: {}, request: emptyRequest(url), url: new URL(url) }))
+				).rejects.toEqual(
+					expect.objectContaining({
+						status: 303,
+						location: `/login?next=${encodeURIComponent(path)}`
 					})
-				)
-			).rejects.toEqual(expect.objectContaining({ status: 303, location: '/login?next=%2Fadmin' }));
-			expect(mocks.createTournament).not.toHaveBeenCalled();
-			expect(mocks.createPlayer).not.toHaveBeenCalled();
-			expect(mocks.stagePlayerImport).not.toHaveBeenCalled();
-			expect(mocks.commitStagedPlayerImport).not.toHaveBeenCalled();
-			expect(mocks.addRosterPlayers).not.toHaveBeenCalled();
-			expect(mocks.removeRosterPlayer).not.toHaveBeenCalled();
-			expect(mocks.moveRosterPlayer).not.toHaveBeenCalled();
-			expect(mocks.syncAndActivateCatalog).not.toHaveBeenCalled();
-			expect(mocks.saveDraftWinnerBoard).not.toHaveBeenCalled();
-			expect(mocks.publishWinnerBoard).not.toHaveBeenCalled();
-			expect(mocks.hidePublishedBoard).not.toHaveBeenCalled();
-			expect(mocks.signOut).not.toHaveBeenCalled();
-		});
+				);
+				for (const mock of Object.values(mocks)) expect(mock).not.toHaveBeenCalled();
+			});
+		}
 	}
 });
 
 describe('admin action results', () => {
 	beforeEach(() => vi.clearAllMocks());
 
-	test('redirects to the newly created tournament without catching the redirect', async () => {
+	test('redirects to the newly created tournament route without catching the redirect', async () => {
 		mocks.createTournament.mockResolvedValue({ id: 'tournament-1' });
 		const form = new FormData();
 		form.set('name', 'HCMUSEC Finals');
-		const request = new Request('https://broadcast.example/admin', { method: 'POST', body: form });
+		const request = new Request('https://broadcast.example/admin/tournaments', {
+			method: 'POST',
+			body: form
+		});
 
 		await expect(
-			actions.createTournament(
+			tournamentActions.createTournament(
 				asEvent({
 					locals: { user: { id: 'operator-1' } },
 					request,
@@ -107,7 +115,10 @@ describe('admin action results', () => {
 				})
 			)
 		).rejects.toEqual(
-			expect.objectContaining({ status: 303, location: '/admin?tournament=tournament-1' })
+			expect.objectContaining({
+				status: 303,
+				location: '/admin/tournaments?tournament=tournament-1'
+			})
 		);
 	});
 });
