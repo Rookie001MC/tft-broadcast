@@ -1,8 +1,9 @@
-import { createReadStream, createWriteStream } from 'node:fs';
+import { constants as fsConstants, createReadStream, createWriteStream } from 'node:fs';
 import { copyFile, mkdir, readdir, readFile, rename, rm, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
+import { setTimeout as delay } from 'node:timers/promises';
 import { createGunzip } from 'node:zlib';
 import { fileTypeFromBuffer, fileTypeFromFile } from 'file-type';
 import tar from 'tar-stream';
@@ -15,6 +16,7 @@ export const MAX_EXTRACTED_BYTES = DEFAULT_MAX_EXTRACTED_BYTES;
 export const MAX_ARCHIVE_ENTRY_BYTES = 512 * 1024 * 1024;
 export const MAX_CATALOG_IMAGE_BYTES = 10 * 1024 * 1024;
 const STALE_STAGING_MS = 24 * 60 * 60 * 1000;
+const TRANSIENT_RENAME_ERRORS = new Set(['EACCES', 'EBUSY', 'EPERM']);
 const SUPPORTED_IMAGES = new Map([
 	['image/png', '.png'],
 	['image/jpeg', '.jpg'],
@@ -386,12 +388,46 @@ export function pinSnapshotPath(template, snapshotId) {
 	return template.replace('__SNAPSHOT__', snapshotId);
 }
 
-/** @param {string} mediaRoot @param {string} snapshotId */
-export async function promoteCatalogAssets(mediaRoot, snapshotId) {
-	const stagingAssets = resolveContainedPath(mediaRoot, `catalog-staging/${snapshotId}/assets`);
+/** @param {string} source @param {string} destination */
+async function renameCatalogDirectory(source, destination) {
+	for (let attempt = 0; attempt < 6; attempt += 1) {
+		try {
+			await rename(source, destination);
+			return;
+		} catch (error) {
+			const code = error instanceof Error && 'code' in error ? error.code : null;
+			if (!TRANSIENT_RENAME_ERRORS.has(/** @type {string} */ (code)) || attempt === 5) throw error;
+			await delay(50 * 2 ** attempt);
+		}
+	}
+}
+
+/** @param {string} mediaRoot @param {string} snapshotId @param {'communitydragon' | 'datadragon'} source */
+export async function promoteCatalogAssets(mediaRoot, snapshotId, source) {
+	const stagingAssets = resolveContainedPath(
+		mediaRoot,
+		`catalog-staging/${snapshotId}/${source}/assets`
+	);
 	const finalAssets = resolveContainedPath(mediaRoot, `catalog-assets/${snapshotId}`);
 	await mkdir(path.dirname(finalAssets), { recursive: true });
-	await rename(stagingAssets, finalAssets);
+	try {
+		await renameCatalogDirectory(stagingAssets, finalAssets);
+	} catch (error) {
+		const code = error instanceof Error && 'code' in error ? error.code : null;
+		if (!TRANSIENT_RENAME_ERRORS.has(/** @type {string} */ (code))) throw error;
+		await mkdir(finalAssets);
+		try {
+			for (const sourceFile of await listFiles(stagingAssets)) {
+				const relativePath = path.relative(stagingAssets, sourceFile);
+				const destination = resolveContainedPath(finalAssets, relativePath);
+				await mkdir(path.dirname(destination), { recursive: true });
+				await copyFile(sourceFile, destination, fsConstants.COPYFILE_EXCL);
+			}
+		} catch (copyError) {
+			await rm(finalAssets, { recursive: true, force: true });
+			throw copyError;
+		}
+	}
 	return finalAssets;
 }
 

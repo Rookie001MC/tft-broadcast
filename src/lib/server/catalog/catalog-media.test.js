@@ -4,12 +4,21 @@ import path from 'node:path';
 import { createGzip } from 'node:zlib';
 import { zipSync } from 'fflate';
 import tar from 'tar-stream';
-import { afterEach, beforeEach, describe, expect, test } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+
+const fsMocks = vi.hoisted(() => ({ rename: vi.fn() }));
+
+vi.mock('node:fs/promises', async (importOriginal) => {
+	const actual = /** @type {typeof import('node:fs/promises')} */ (await importOriginal());
+	fsMocks.rename.mockImplementation(actual.rename);
+	return { ...actual, rename: fsMocks.rename };
+});
 import {
 	cleanupStaleCatalogStaging,
 	downloadCatalogImages,
 	extractTarGz,
 	extractZip,
+	promoteCatalogAssets,
 	readManagedCatalogAsset
 } from './catalog-media.js';
 
@@ -47,6 +56,7 @@ describe('catalog package extraction', () => {
 	let root;
 
 	beforeEach(async () => {
+		fsMocks.rename.mockClear();
 		root = await mkdtemp(path.join(tmpdir(), 'tft-catalog-media-'));
 	});
 
@@ -150,6 +160,40 @@ describe('catalog package extraction', () => {
 			}
 		});
 		expect(maximum).toBe(8);
+	});
+
+	test('atomically promotes assets directly from the completed source staging directory', async () => {
+		const staged = path.join(
+			root,
+			'catalog-staging/snapshot-1/communitydragon/assets/champions/ahri.png'
+		);
+		await mkdir(path.dirname(staged), { recursive: true });
+		await writeFile(staged, PNG);
+
+		await promoteCatalogAssets(root, 'snapshot-1', 'communitydragon');
+
+		expect(await readFile(path.join(root, 'catalog-assets/snapshot-1/champions/ahri.png'))).toEqual(
+			PNG
+		);
+		expect(await stat(staged).catch(() => null)).toBeNull();
+	});
+
+	test('copies a complete snapshot when Windows persistently denies the directory rename', async () => {
+		const staged = path.join(
+			root,
+			'catalog-staging/snapshot-1/communitydragon/assets/champions/ahri.png'
+		);
+		await mkdir(path.dirname(staged), { recursive: true });
+		await writeFile(staged, PNG);
+		const denied = Object.assign(new Error('rename denied'), { code: 'EPERM' });
+		for (let attempt = 0; attempt < 6; attempt += 1) fsMocks.rename.mockRejectedValueOnce(denied);
+
+		await promoteCatalogAssets(root, 'snapshot-1', 'communitydragon');
+
+		expect(await readFile(path.join(root, 'catalog-assets/snapshot-1/champions/ahri.png'))).toEqual(
+			PNG
+		);
+		expect(fsMocks.rename).toHaveBeenCalledTimes(6);
 	});
 
 	test('serves only contained, detected catalog images from managed storage', async () => {

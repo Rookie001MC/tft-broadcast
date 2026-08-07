@@ -482,6 +482,7 @@ describe('catalog synchronization', () => {
 		);
 		const catalogUrl = `${CDRAGON_ROOT}/14.10/cdragon/tft/en_us.json`;
 		const imageUrl = `${CDRAGON_ROOT}/14.10/plugins/rcp-be-lol-game-data/global/default/assets/ux/tft/champions/ahri.png`;
+		const logger = { warn: vi.fn(), error: vi.fn() };
 		await expect(
 			syncAndActivateCatalog({
 				db: database,
@@ -490,9 +491,18 @@ describe('catalog synchronization', () => {
 				locale: 'en_us',
 				mediaRoot,
 				fetchJson: fixtureJson({ [catalogUrl]: cdragonFixture({ augment: false }) }, []),
-				fetchResponse: fixtureResponse({ [imageUrl]: new Response(PNG) })
+				fetchResponse: fixtureResponse({ [imageUrl]: new Response(PNG) }),
+				logger
 			})
-		).rejects.toThrow();
+		).rejects.toThrow(/database could not activate.*Sync reference:/);
+		expect(logger.error).toHaveBeenCalledWith(
+			'catalog_sync_unexpected_failure',
+			expect.objectContaining({
+				tournamentId: 'tournament-1',
+				phase: 'activating',
+				cause: 'activation failed'
+			})
+		);
 		expect(await readdir(path.join(mediaRoot, 'catalog-assets'))).toEqual([]);
 		expect(await database.select().from(catalogSnapshots)).toEqual([]);
 	});

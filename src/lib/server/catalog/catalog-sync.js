@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, rename, rm } from 'node:fs/promises';
+import { mkdir, readFile, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { eq } from 'drizzle-orm';
 import { LolApi } from 'twisted';
@@ -255,6 +255,22 @@ function failureCause(error) {
 	return error instanceof Error ? error.message : String(error);
 }
 
+/** @param {unknown} error */
+function deepestError(error) {
+	let current = error;
+	const seen = new Set();
+	while (
+		current instanceof Error &&
+		'cause' in current &&
+		current.cause instanceof Error &&
+		!seen.has(current.cause)
+	) {
+		seen.add(current);
+		current = current.cause;
+	}
+	return current;
+}
+
 /** @param {unknown} error @returns {CatalogFailureCategory} */
 function failureCategory(error) {
 	const message = failureCause(error);
@@ -291,6 +307,15 @@ function latestSourceAttempts(attempts) {
 function totalFailureMessage(attempts) {
 	const details = latestSourceAttempts(attempts).map(publicAttemptSummary).join(' ');
 	return `${details || 'Catalog sources failed.'} The prior snapshot remains active.`;
+}
+
+/** @param {CatalogSyncPhase} phase @param {string} syncId */
+function operationFailureMessage(phase, syncId) {
+	if (phase === 'installing')
+		return `Catalog images were downloaded, but the local asset snapshot could not be installed. Check MEDIA_ROOT access and server diagnostics. The prior snapshot remains active. Sync reference: ${syncId}.`;
+	if (phase === 'activating')
+		return `Catalog assets were installed, but the database could not activate the snapshot. Check server diagnostics. The prior snapshot remains active. Sync reference: ${syncId}.`;
+	return `Catalog synchronization failed during ${phase}. Check server diagnostics. The prior snapshot remains active. Sync reference: ${syncId}.`;
 }
 
 /** @param {unknown} caught */
@@ -654,6 +679,13 @@ export async function syncAndActivateCatalog({
 	onProgress = () => {},
 	logger = console
 }) {
+	/** @type {CatalogSyncPhase} */
+	let currentPhase = 'resolving';
+	/** @param {CatalogProgress} progress */
+	const reportProgress = (progress) => {
+		currentPhase = progress.phase;
+		onProgress(progress);
+	};
 	const [tournament] = await db
 		.select({ activeCatalogSnapshotId: tournaments.activeCatalogSnapshotId })
 		.from(tournaments)
@@ -703,10 +735,9 @@ export async function syncAndActivateCatalog({
 			fetchResponse,
 			candidateRoot: cdragonRoot,
 			signal,
-			onProgress,
+			onProgress: reportProgress,
 			recordAttempt
 		});
-		let candidateRoot = cdragonRoot;
 		if (!candidate) {
 			const ddragonRoot = path.join(syncRoot, 'datadragon');
 			candidate = await tryDdragon({
@@ -717,10 +748,9 @@ export async function syncAndActivateCatalog({
 				candidateRoot: ddragonRoot,
 				archiveLimits,
 				signal,
-				onProgress,
+				onProgress: reportProgress,
 				recordAttempt
 			});
-			candidateRoot = ddragonRoot;
 		}
 		if (!candidate) {
 			const message = totalFailureMessage(attempts);
@@ -740,7 +770,6 @@ export async function syncAndActivateCatalog({
 				`CommunityDragon failed during ${communityFailure.phase}; Data Dragon was used instead.`,
 				candidate.warning
 			]);
-		await rename(path.join(candidateRoot, 'assets'), path.join(syncRoot, 'assets'));
 		candidate.champions = candidate.champions.map((asset) => ({
 			...asset,
 			iconPath: asset.iconPath ? pinSnapshotPath(asset.iconPath, snapshotId) : null
@@ -749,9 +778,10 @@ export async function syncAndActivateCatalog({
 			...asset,
 			iconPath: asset.iconPath ? pinSnapshotPath(asset.iconPath, snapshotId) : null
 		}));
-		emit(onProgress, 'activating', 'Activating the local catalog snapshot');
-		await promoteCatalogAssets(mediaRoot, snapshotId);
+		emit(reportProgress, 'installing', 'Installing the local catalog asset snapshot');
+		await promoteCatalogAssets(mediaRoot, snapshotId, candidate.source);
 		promoted = true;
+		emit(reportProgress, 'activating', 'Activating the local catalog snapshot');
 		const syncedAt = new Date();
 		await db.transaction(async (/** @type {any} */ tx) => {
 			await tx.insert(catalogSnapshots).values({
@@ -797,8 +827,31 @@ export async function syncAndActivateCatalog({
 			warning: candidate.warning
 		};
 	} catch (error) {
+		if (!(error instanceof CatalogSyncError)) {
+			const mediaPath = path.resolve(mediaRoot);
+			const diagnosticError = deepestError(error);
+			logger.error('catalog_sync_unexpected_failure', {
+				syncId: snapshotId,
+				tournamentId,
+				activeSnapshotId: tournament.activeCatalogSnapshotId,
+				phase: currentPhase,
+				cause: failureCause(diagnosticError).replaceAll(mediaPath, '<MEDIA_ROOT>'),
+				...(diagnosticError instanceof Error &&
+				'code' in diagnosticError &&
+				typeof diagnosticError.code === 'string'
+					? { code: diagnosticError.code }
+					: {}),
+				...(diagnosticError instanceof Error &&
+				'syscall' in diagnosticError &&
+				typeof diagnosticError.syscall === 'string'
+					? { syscall: diagnosticError.syscall }
+					: {})
+			});
+		}
 		if (promoted) await removeCatalogAssets(mediaRoot, snapshotId);
-		throw error;
+		throw error instanceof CatalogSyncError
+			? error
+			: new CatalogSyncError(operationFailureMessage(currentPhase, snapshotId), attempts);
 	} finally {
 		await removeCatalogStaging(mediaRoot, snapshotId);
 	}
