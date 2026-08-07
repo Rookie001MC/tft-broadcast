@@ -19,7 +19,8 @@
 
 	const pageMeta = getPageMetaContext();
 	pageMeta.title = 'Dashboard';
-	pageMeta.description = 'VNUHCM - University of Science Esports Club - Teamfight Tactics Winner Broadcast Graphics Control';
+	pageMeta.description =
+		'VNUHCM - University of Science Esports Club - Teamfight Tactics Winner Broadcast Graphics Control';
 </script>
 
 <div class="mx-auto max-w-[1700px] space-y-6 pb-16">

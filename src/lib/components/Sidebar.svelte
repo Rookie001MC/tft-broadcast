@@ -16,7 +16,7 @@
 				{ href: '/admin', label: 'Dashboard', icon: LayoutDashboardIcon },
 				{ href: '/admin/players', label: 'Players', icon: UsersIcon },
 				{ href: '/admin/tournaments', label: 'Tournaments', icon: TrophyIcon },
-				{ href: '/admin/game-resources', label: 'Game Resources', icon: Image },
+				{ href: '/admin/game-resources', label: 'Game Resources', icon: Image }
 			]
 		},
 		{
