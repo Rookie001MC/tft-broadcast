@@ -5,6 +5,11 @@ const mocks = vi.hoisted(() => ({ syncAndActivateCatalog: vi.fn() }));
 vi.mock('$env/dynamic/private', () => ({ env: { MEDIA_ROOT: 'test-media' } }));
 vi.mock('$lib/server/db', () => ({ db: {} }));
 vi.mock('$lib/server/catalog/catalog-sync.js', () => ({
+	/** @param {unknown} caught */
+	catalogOperatorMessage: (caught) =>
+		(caught && typeof caught === 'object' && 'operatorMessage' in caught
+			? caught.operatorMessage
+			: null) ?? 'Catalog synchronization failed; the prior snapshot remains active.',
 	syncAndActivateCatalog: mocks.syncAndActivateCatalog
 }));
 
@@ -94,6 +99,27 @@ describe('catalog progress stream', () => {
 			type: 'error',
 			message: 'Catalog synchronization failed; the prior snapshot remains active.'
 		});
+	});
+
+	test('streams an actionable catalog failure as error without a completion event', async () => {
+		const caught = /** @type {Error & { operatorMessage: string }} */ (
+			new Error('internal details')
+		);
+		caught.operatorMessage =
+			'CommunityDragon failed during downloading: the source referenced an unsupported asset. Data Dragon failed during downloading: the package exceeded the configured size limit. The prior snapshot remains active.';
+		mocks.syncAndActivateCatalog.mockRejectedValue(caught);
+		const response = await POST(requestEvent());
+		const events = (await response.text())
+			.trim()
+			.split('\n')
+			.map((line) => JSON.parse(line));
+
+		expect(events).toEqual([
+			{
+				type: 'error',
+				message: caught.operatorMessage
+			}
+		]);
 	});
 
 	test('aborts upstream work when the response consumer disconnects', async () => {

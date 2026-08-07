@@ -20,6 +20,11 @@ vi.mock('$env/dynamic/private', () => ({ env: { MEDIA_ROOT: 'media' } }));
 vi.mock('$lib/server/auth', () => ({ auth: { api: { signOut: mocks.signOut } } }));
 vi.mock('$lib/server/db', () => ({ db: {} }));
 vi.mock('$lib/server/catalog/catalog-sync.js', () => ({
+	/** @param {unknown} caught */
+	catalogOperatorMessage: (caught) =>
+		caught instanceof Error
+			? caught.message
+			: 'Catalog synchronization failed; the prior snapshot remains active.',
 	syncAndActivateCatalog: mocks.syncAndActivateCatalog
 }));
 vi.mock('$lib/server/import/staging.js', () => ({
@@ -120,5 +125,31 @@ describe('admin action results', () => {
 				location: '/admin/tournaments?tournament=tournament-1'
 			})
 		);
+	});
+
+	test('returns the safe catalog failure summary from the no-JavaScript action', async () => {
+		const message =
+			'CommunityDragon failed during downloading: the source referenced an unsupported asset. Data Dragon failed during downloading: the package exceeded the configured size limit. The prior snapshot remains active.';
+		mocks.syncAndActivateCatalog.mockRejectedValue(new Error(message));
+		const form = new FormData();
+		form.set('tournamentId', 'tournament-1');
+		form.set('patch', 'latest');
+		form.set('locale', 'vi_vn');
+		const request = new Request('https://broadcast.example/admin/game-resources', {
+			method: 'POST',
+			body: form
+		});
+
+		const result = await catalogActions.syncCatalog(
+			asEvent({
+				locals: { user: { id: 'operator-1' } },
+				request,
+				url: new URL(request.url)
+			})
+		);
+		expect(result).toMatchObject({
+			status: 422,
+			data: { action: 'syncCatalog', message }
+		});
 	});
 });

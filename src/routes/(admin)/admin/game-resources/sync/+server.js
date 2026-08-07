@@ -1,8 +1,12 @@
 import { env } from '$env/dynamic/private';
 import { error } from '@sveltejs/kit';
 import { requireAdmin } from '$lib/server/auth/guards.js';
+import { catalogArchiveLimits } from '$lib/server/catalog/catalog-config.js';
 import { acquireCatalogSync } from '$lib/server/catalog/catalog-lock.js';
-import { syncAndActivateCatalog } from '$lib/server/catalog/catalog-sync.js';
+import {
+	catalogOperatorMessage,
+	syncAndActivateCatalog
+} from '$lib/server/catalog/catalog-sync.js';
 import { db } from '$lib/server/db';
 
 const MEDIA_ROOT = env.MEDIA_ROOT ?? 'media';
@@ -13,33 +17,22 @@ function text(value) {
 	return typeof value === 'string' ? value.trim() : '';
 }
 
-/** @param {unknown} caught */
-function operatorMessage(caught) {
-	if (!(caught instanceof Error)) return 'Catalog synchronization failed.';
-	if (caught.name === 'AbortError') return 'Catalog synchronization was cancelled.';
-	const allowed = [
-		'Tournament not found',
-		'Catalog patch must be',
-		'Catalog locale must',
-		'size limit',
-		'unsafe path',
-		'not allowed'
-	];
-	return allowed.some((value) => caught.message.includes(value))
-		? caught.message
-		: 'Catalog synchronization failed; the prior snapshot remains active.';
-}
-
 /** @type {import('./$types').RequestHandler} */
 export async function POST(event) {
 	requireAdmin(event);
 	const form = await event.request.formData();
 	const tournamentId = text(form.get('tournamentId'));
 	if (!tournamentId) error(400, 'Tournament must be selected');
-	const release = acquireCatalogSync(tournamentId);
-	if (!release) error(409, 'A catalog sync is already running.');
 	const patch = text(form.get('patch')) || 'latest';
 	const locale = text(form.get('locale')) || 'vi_vn';
+	let archiveLimits;
+	try {
+		archiveLimits = catalogArchiveLimits(env);
+	} catch (caught) {
+		error(500, catalogOperatorMessage(caught));
+	}
+	const release = acquireCatalogSync(tournamentId);
+	if (!release) error(409, 'A catalog sync is already running.');
 	const abortController = new AbortController();
 	if (event.request.signal.aborted) abortController.abort(event.request.signal.reason);
 	else
@@ -64,6 +57,7 @@ export async function POST(event) {
 						patch,
 						locale,
 						mediaRoot: MEDIA_ROOT,
+						archiveLimits,
 						signal: abortController.signal,
 						onProgress: send
 					});
@@ -75,7 +69,7 @@ export async function POST(event) {
 						warning: result.warning
 					});
 				} catch (caught) {
-					send({ type: 'error', message: operatorMessage(caught) });
+					send({ type: 'error', message: catalogOperatorMessage(caught) });
 				} finally {
 					release();
 					if (!abortController.signal.aborted) controller.close();

@@ -8,9 +8,10 @@ import { fileTypeFromBuffer, fileTypeFromFile } from 'file-type';
 import tar from 'tar-stream';
 import yauzl from 'yauzl';
 import { resolveContainedPath } from '../media/player-images.js';
+import { DEFAULT_MAX_ARCHIVE_BYTES, DEFAULT_MAX_EXTRACTED_BYTES } from './catalog-config.js';
 
-export const MAX_ARCHIVE_BYTES = 2 * 1024 * 1024 * 1024;
-export const MAX_EXTRACTED_BYTES = 8 * 1024 * 1024 * 1024;
+export const MAX_ARCHIVE_BYTES = DEFAULT_MAX_ARCHIVE_BYTES;
+export const MAX_EXTRACTED_BYTES = DEFAULT_MAX_EXTRACTED_BYTES;
 export const MAX_ARCHIVE_ENTRY_BYTES = 512 * 1024 * 1024;
 export const MAX_CATALOG_IMAGE_BYTES = 10 * 1024 * 1024;
 const STALE_STAGING_MS = 24 * 60 * 60 * 1000;
@@ -86,9 +87,15 @@ export async function downloadResponseToFile({ response, destination, maxBytes, 
 }
 
 /**
- * @param {{ archivePath: string, destination: string, signal?: AbortSignal, onExtracted?: (bytes: number) => void }} input
+ * @param {{ archivePath: string, destination: string, maxExtractedBytes?: number, signal?: AbortSignal, onExtracted?: (bytes: number) => void }} input
  */
-export async function extractTarGz({ archivePath, destination, signal, onExtracted }) {
+export async function extractTarGz({
+	archivePath,
+	destination,
+	maxExtractedBytes = MAX_EXTRACTED_BYTES,
+	signal,
+	onExtracted
+}) {
 	await mkdir(destination, { recursive: true });
 	const extract = tar.extract();
 	// streamx can emit an extraction error after pipeline has already rejected.
@@ -124,7 +131,7 @@ export async function extractTarGz({ archivePath, destination, signal, onExtract
 					transform(chunk, _encoding, callback) {
 						entryBytes += chunk.length;
 						extractedBytes += chunk.length;
-						if (entryBytes > MAX_ARCHIVE_ENTRY_BYTES || extractedBytes > MAX_EXTRACTED_BYTES)
+						if (entryBytes > MAX_ARCHIVE_ENTRY_BYTES || extractedBytes > maxExtractedBytes)
 							callback(new Error('Extracted archive exceeds the configured size limit'));
 						else {
 							onExtracted?.(extractedBytes);
@@ -172,9 +179,15 @@ function openZipEntry(zip, entry) {
 }
 
 /**
- * @param {{ archivePath: string, destination: string, signal?: AbortSignal, onExtracted?: (bytes: number) => void }} input
+ * @param {{ archivePath: string, destination: string, maxExtractedBytes?: number, signal?: AbortSignal, onExtracted?: (bytes: number) => void }} input
  */
-export async function extractZip({ archivePath, destination, signal, onExtracted }) {
+export async function extractZip({
+	archivePath,
+	destination,
+	maxExtractedBytes = MAX_EXTRACTED_BYTES,
+	signal,
+	onExtracted
+}) {
 	await mkdir(destination, { recursive: true });
 	const zip = /** @type {import('yauzl').ZipFile} */ (await openZip(archivePath));
 	let extractedBytes = 0;
@@ -219,7 +232,7 @@ export async function extractZip({ archivePath, destination, signal, onExtracted
 						transform(chunk, _encoding, callback) {
 							entryBytes += chunk.length;
 							extractedBytes += chunk.length;
-							if (entryBytes > MAX_ARCHIVE_ENTRY_BYTES || extractedBytes > MAX_EXTRACTED_BYTES)
+							if (entryBytes > MAX_ARCHIVE_ENTRY_BYTES || extractedBytes > maxExtractedBytes)
 								callback(new Error('Extracted archive exceeds the configured size limit'));
 							else {
 								onExtracted?.(extractedBytes);

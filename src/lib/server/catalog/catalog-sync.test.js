@@ -4,11 +4,17 @@ import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createGzip } from 'node:zlib';
+import { zipSync } from 'fflate';
 import tar from 'tar-stream';
-import { afterEach, beforeEach, describe, expect, test } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { catalogAugments, catalogChampions, catalogSnapshots } from '../db/schema/catalog.js';
 import { tournaments } from '../db/schema/tournaments.js';
-import { resolveDdragonVersion, syncAndActivateCatalog } from './catalog-sync.js';
+import {
+	catalogOperatorMessage,
+	CatalogSyncError,
+	resolveDdragonVersion,
+	syncAndActivateCatalog
+} from './catalog-sync.js';
 
 const CDRAGON_ROOT = 'https://raw.communitydragon.org';
 const DDRAGON_ROOT = 'https://ddragon.leagueoflegends.com';
@@ -17,27 +23,37 @@ const PNG = Buffer.from(
 	'base64'
 );
 
-function cdragonFixture({ icon = true, augment = true } = {}) {
+function cdragonFixture({ icon = true, augment = true, modernPaths = false } = {}) {
+	const championIcon = modernPaths
+		? 'ASSETS/UX/TFT/Champions/Ahri_Mobile.tex'
+		: '/lol-game-data/assets/ASSETS/UX/TFT/Champions/Ahri.PNG';
+	const augmentIcon = modernPaths
+		? 'ASSETS/Maps/TFT/Icons/Augments/Hexcore/Lotus.tex'
+		: '/lol-game-data/assets/ASSETS/Maps/TFT/Icons/Augments/Lotus.PNG';
 	return {
-		sets: {
-			13: {
+		setData: [
+			{
 				name: 'Into the Arcane',
+				number: 13,
+				mutator: 'TFTSet13',
 				champions: [
 					{
 						apiName: 'TFT13_Ahri',
 						name: 'Ahri localized',
-						squareIcon: icon ? '/lol-game-data/assets/ASSETS/UX/TFT/Champions/Ahri.PNG' : null,
-						cost: 4
+						squareIcon: icon ? championIcon : null,
+						cost: 4,
+						traits: ['Arcana']
 					}
-				]
+				],
+				augments: augment ? ['TFT_Augment_JeweledLotus'] : []
 			}
-		},
+		],
 		items: augment
 			? [
 					{
 						apiName: 'TFT_Augment_JeweledLotus',
 						name: 'Jeweled Lotus',
-						icon: '/lol-game-data/assets/ASSETS/Maps/TFT/Icons/Augments/Lotus.PNG'
+						icon: augmentIcon
 					}
 				]
 			: []
@@ -98,6 +114,22 @@ async function ddragonArchive({ locale = 'en_US', includeAugment = true } = {}) 
 		entries[`${version}/img/tft-augment/TFT_Augment_JeweledLotus.png`] = PNG;
 	}
 	return tarGz(entries);
+}
+
+function ddragonZip({ locale = 'en_US' } = {}) {
+	const version = '10.10.5';
+	return Buffer.from(
+		zipSync({
+			[`${version}/data/${locale}/tft-champion.json`]: Buffer.from(
+				JSON.stringify(ddragonChampionFixture())
+			),
+			[`${version}/data/${locale}/tft-augments.json`]: Buffer.from(
+				JSON.stringify(ddragonAugmentFixture())
+			),
+			[`${version}/img/tft-champion/TFT13_Ahri.png`]: PNG,
+			[`${version}/img/tft-augment/TFT_Augment_JeweledLotus.png`]: PNG
+		})
+	);
 }
 
 /** @param {Record<string, unknown | Error>} routes @param {string[]} calls */
@@ -197,6 +229,69 @@ describe('catalog synchronization', () => {
 		expect(await database.select().from(catalogAugments)).toHaveLength(1);
 	});
 
+	test('normalizes the standard CommunityDragon set and modern game asset paths', async () => {
+		const fixture = cdragonFixture({ modernPaths: true });
+		fixture.setData[0].number = 17;
+		fixture.setData[0].mutator = 'TFTSet17';
+		fixture.setData[0].name = 'Set 17';
+		fixture.setData[0].champions.push(
+			{
+				apiName: 'TFT17_PVE_Minion',
+				name: 'Cosmic Squid',
+				squareIcon: 'ASSETS/UX/TFT/ChampionSplashes/PVE.tex',
+				cost: 1,
+				traits: []
+			},
+			{
+				apiName: 'TFT17_Summon',
+				name: 'Summon',
+				squareIcon: 'ASSETS/UX/TFT/ChampionSplashes/Summon.tex',
+				cost: 11,
+				traits: ['Special']
+			}
+		);
+		fixture.setData.push({
+			name: 'Set 17 Event',
+			number: 17,
+			mutator: 'TFTSetEvent5YR',
+			champions: [
+				{
+					apiName: 'TFTEvent_Fake',
+					name: 'Event unit',
+					squareIcon: 'ASSETS/UX/TFT/ChampionSplashes/Event.tex',
+					cost: 3,
+					traits: ['Event']
+				}
+			],
+			augments: []
+		});
+		fixture.items.push({
+			apiName: 'TFT_Augment_Historical',
+			name: 'Historical augment',
+			icon: 'ASSETS/Maps/TFT/Icons/Augments/Historical.tex'
+		});
+		const catalogUrl = `${CDRAGON_ROOT}/16.15/cdragon/tft/en_us.json`;
+		const result = await syncAndActivateCatalog({
+			db: database,
+			tournamentId: 'tournament-1',
+			patch: '16.15',
+			locale: 'en_us',
+			mediaRoot,
+			fetchJson: fixtureJson({ [catalogUrl]: fixture }, []),
+			fetchResponse: fixtureResponse({
+				[`${CDRAGON_ROOT}/16.15/game/assets/ux/tft/champions/ahri_mobile.png`]: new Response(PNG),
+				[`${CDRAGON_ROOT}/16.15/game/assets/maps/tft/icons/augments/hexcore/lotus.png`]:
+					new Response(PNG)
+			})
+		});
+
+		expect(result).toMatchObject({ source: 'communitydragon' });
+		expect(result.champions.map((champion) => champion.externalId)).toEqual(['TFT13_Ahri']);
+		expect(result.augments.map((augment) => augment.externalId)).toEqual([
+			'TFT_Augment_JeweledLotus'
+		]);
+	});
+
 	test('preserves nullable images instead of inventing remote paths', async () => {
 		const catalogUrl = `${CDRAGON_ROOT}/14.10/cdragon/tft/en_us.json`;
 		const result = await syncAndActivateCatalog({
@@ -237,9 +332,96 @@ describe('catalog synchronization', () => {
 			source: 'datadragon',
 			locale: 'en_US'
 		});
+		expect(result.warning).toContain('CommunityDragon failed during downloading');
+		expect(result.warning).toContain('Data Dragon was used instead');
 		expect(responseCalls.at(-1)).toBe(archiveUrl);
 		expect(result.champions[0].iconPath).toContain('/media/catalog-assets/');
 		expect(await readdir(path.join(mediaRoot, 'catalog-staging'))).toEqual([]);
+	});
+
+	test('uses the documented legacy Data Dragon ZIP only when the tgz is unavailable', async () => {
+		const catalogUrl = `${CDRAGON_ROOT}/10.10/cdragon/tft/en_us.json`;
+		const tgzUrl = `${DDRAGON_ROOT}/cdn/dragontail-10.10.5.tgz`;
+		const zipUrl = `${DDRAGON_ROOT}/cdn/dragontail-10.10.5.zip`;
+		/** @type {string[]} */
+		const responseCalls = [];
+		const result = await syncAndActivateCatalog({
+			db: database,
+			tournamentId: 'tournament-1',
+			patch: '10.10',
+			locale: 'en_us',
+			mediaRoot,
+			fetchJson: fixtureJson({ [catalogUrl]: cdragonFixture() }, []),
+			fetchResponse: fixtureResponse(
+				{
+					[tgzUrl]: new Response('missing', { status: 404 }),
+					[zipUrl]: new Response(Uint8Array.from(ddragonZip()))
+				},
+				responseCalls
+			),
+			getVersions: async () => ['10.10.5']
+		});
+
+		expect(result.source).toBe('datadragon');
+		expect(responseCalls.slice(-2)).toEqual([tgzUrl, zipUrl]);
+	});
+
+	test('reports configured Data Dragon package limits and removes staging files', async () => {
+		const catalogUrl = `${CDRAGON_ROOT}/16.15/cdragon/tft/en_us.json`;
+		const archiveUrl = `${DDRAGON_ROOT}/cdn/dragontail-16.15.1.tgz`;
+		const logger = { warn: vi.fn(), error: vi.fn() };
+		await expect(
+			syncAndActivateCatalog({
+				db: database,
+				tournamentId: 'tournament-1',
+				patch: '16.15',
+				locale: 'en_us',
+				mediaRoot,
+				fetchJson: fixtureJson({ [catalogUrl]: cdragonFixture() }, []),
+				fetchResponse: fixtureResponse({
+					[archiveUrl]: new Response('0123456789', {
+						headers: { 'Content-Length': '10' }
+					})
+				}),
+				getVersions: async () => ['16.15.1'],
+				archiveLimits: { maxArchiveBytes: 9, maxExtractedBytes: 100 },
+				logger
+			})
+		).rejects.toThrow('package exceeded the configured size limit');
+		expect(logger.warn).toHaveBeenCalledWith(
+			'catalog_sync_attempt_failed',
+			expect.objectContaining({ source: 'datadragon', category: 'size_limit' })
+		);
+		expect(await readdir(path.join(mediaRoot, 'catalog-staging'))).toEqual([]);
+	});
+
+	test('rejects unresolved augment references instead of activating an incomplete candidate', async () => {
+		const fixture = cdragonFixture();
+		fixture.setData[0].augments = ['TFT_Augment_Missing'];
+		const catalogUrl = `${CDRAGON_ROOT}/16.15/cdragon/tft/en_us.json`;
+		const logger = { warn: vi.fn(), error: vi.fn() };
+		await expect(
+			syncAndActivateCatalog({
+				db: database,
+				tournamentId: 'tournament-1',
+				patch: '16.15',
+				locale: 'en_us',
+				mediaRoot,
+				fetchJson: fixtureJson({ [catalogUrl]: fixture }, []),
+				fetchResponse: fixtureResponse({}),
+				getVersions: async () => ['16.15.1'],
+				logger
+			})
+		).rejects.toThrow('prior snapshot remains active');
+		expect(logger.warn).toHaveBeenCalledWith(
+			'catalog_sync_attempt_failed',
+			expect.objectContaining({
+				source: 'communitydragon',
+				category: 'invalid_catalog',
+				cause: 'CommunityDragon augment TFT_Augment_Missing was unresolved'
+			})
+		);
+		expect(await database.select().from(catalogSnapshots)).toEqual([]);
 	});
 
 	test('preserves the prior snapshot and leaves no staging files when both sources fail', async () => {
@@ -256,19 +438,38 @@ describe('catalog synchronization', () => {
 			metadataJson: '{}'
 		});
 		await database.update(tournaments).set({ activeCatalogSnapshotId: 'prior-snapshot' });
-		const result = await syncAndActivateCatalog({
-			db: database,
-			tournamentId: 'tournament-1',
-			patch: '14.10',
-			locale: 'en_us',
-			mediaRoot,
-			fetchJson: async () => {
-				throw new Error('offline');
-			},
-			fetchResponse: fixtureResponse({}),
-			getVersions: async () => ['14.10.1']
-		});
-		expect(result).toMatchObject({ activated: false, snapshotId: 'prior-snapshot' });
+		const logger = { warn: vi.fn(), error: vi.fn() };
+		await expect(
+			syncAndActivateCatalog({
+				db: database,
+				tournamentId: 'tournament-1',
+				patch: '14.10',
+				locale: 'en_us',
+				mediaRoot,
+				fetchJson: async () => {
+					throw new Error('offline');
+				},
+				fetchResponse: fixtureResponse({}),
+				getVersions: async () => ['14.10.1'],
+				logger
+			})
+		).rejects.toThrow(/CommunityDragon.*Data Dragon.*prior snapshot remains active/);
+		expect(logger.warn).toHaveBeenCalledWith(
+			'catalog_sync_attempt_failed',
+			expect.objectContaining({
+				tournamentId: 'tournament-1',
+				source: 'communitydragon',
+				phase: 'resolving',
+				cause: 'offline'
+			})
+		);
+		expect(logger.error).toHaveBeenCalledWith(
+			'catalog_sync_failed',
+			expect.objectContaining({
+				activeSnapshotId: 'prior-snapshot',
+				attempts: expect.any(Array)
+			})
+		);
 		expect((await database.select().from(catalogSnapshots)).map((row) => row.id)).toEqual([
 			'prior-snapshot'
 		]);
@@ -318,4 +519,13 @@ test('Data Dragon version resolution selects latest exact patch-prefix match', (
 	expect(resolveDdragonVersion(['16.14.1', '16.15.1', '16.15.3'], '16.15')).toBe('16.15.3');
 	expect(resolveDdragonVersion(['16.15.3', '16.15.1'], 'latest')).toBe('16.15.3');
 	expect(() => resolveDdragonVersion(['16.15.1'], '16.16')).toThrow('was not found');
+});
+
+test('operator messages preserve catalog diagnostics but sanitize unexpected failures', () => {
+	expect(catalogOperatorMessage(new CatalogSyncError('Safe source summary.', []))).toBe(
+		'Safe source summary.'
+	);
+	expect(catalogOperatorMessage(new Error('C:\\private\\database.db failed'))).toBe(
+		'Catalog synchronization failed; the prior snapshot remains active.'
+	);
 });

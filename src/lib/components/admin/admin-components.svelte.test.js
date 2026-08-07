@@ -132,4 +132,76 @@ describe('catalog manager progress', () => {
 			fetchMock.mockRestore();
 		}
 	});
+
+	test('shows indeterminate progress then an actionable error without hiding the active snapshot', async () => {
+		const encoder = new TextEncoder();
+		let fail = () => {};
+		const body = new ReadableStream({
+			start(controller) {
+				controller.enqueue(
+					encoder.encode(
+						`${JSON.stringify({
+							type: 'progress',
+							phase: 'extracting',
+							message: 'Extracting the Data Dragon package',
+							percent: null
+						})}\n`
+					)
+				);
+				fail = () => {
+					controller.enqueue(
+						encoder.encode(
+							`${JSON.stringify({
+								type: 'error',
+								message:
+									'Data Dragon failed during extracting: the package exceeded the configured size limit. The prior snapshot remains active.'
+							})}\n`
+						)
+					);
+					controller.close();
+				};
+			}
+		});
+		const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(body));
+		try {
+			render(CatalogManager, {
+				tournament: { id: 'tournament-1', name: 'Unitour' },
+				activeCatalog: {
+					snapshot: {
+						source: 'communitydragon',
+						patchLabel: '16.14',
+						setLabel: 'Set 16',
+						locale: 'en_us',
+						syncedAt: new Date(),
+						metadataJson: '{}'
+					},
+					champions: [
+						{
+							id: 'champion-1',
+							externalId: 'TFT16_Ahri',
+							displayName: 'Ahri',
+							iconPath: null,
+							tier: 4
+						}
+					],
+					augments: []
+				}
+			});
+			await page.getByRole('button', { name: 'Sync catalog' }).click();
+			await expect
+				.element(page.getByText('Extracting the Data Dragon package'))
+				.toBeInTheDocument();
+			await expect.element(page.getByRole('button', { name: 'Downloading…' })).toBeDisabled();
+			fail();
+			await expect
+				.element(
+					page.getByRole('alert').filter({ hasText: 'package exceeded the configured size limit' })
+				)
+				.toBeInTheDocument();
+			await expect.element(page.getByRole('button', { name: 'Sync catalog' })).toBeEnabled();
+			await expect.element(page.getByText('Ahri', { exact: true })).toBeInTheDocument();
+		} finally {
+			fetchMock.mockRestore();
+		}
+	});
 });

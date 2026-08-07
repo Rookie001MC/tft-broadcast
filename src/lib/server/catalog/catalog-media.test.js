@@ -71,6 +71,28 @@ describe('catalog package extraction', () => {
 		expect(samples.at(-1)).toBe(2);
 	});
 
+	test('enforces the configured total extraction limit for tar and ZIP packages', async () => {
+		const tarPath = path.join(root, 'limited.tgz');
+		await writeFile(tarPath, await archive([{ name: 'data.json', body: '{}' }]));
+		await expect(
+			extractTarGz({
+				archivePath: tarPath,
+				destination: path.join(root, 'limited-tar'),
+				maxExtractedBytes: 1
+			})
+		).rejects.toThrow('configured size limit');
+
+		const zipPath = path.join(root, 'limited.zip');
+		await writeFile(zipPath, zipSync({ 'data.json': new TextEncoder().encode('{}') }));
+		await expect(
+			extractZip({
+				archivePath: zipPath,
+				destination: path.join(root, 'limited-zip'),
+				maxExtractedBytes: 1
+			})
+		).rejects.toThrow('configured size limit');
+	});
+
 	test('rejects traversing paths and symbolic links', async () => {
 		/** @type {{ name: string, type?: 'file' | 'symlink', body?: string }[][]} */
 		const unsafeArchives = [

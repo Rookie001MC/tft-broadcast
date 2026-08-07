@@ -85,8 +85,10 @@
 						progressMessage = update.message;
 						progressPercent = typeof update.percent === 'number' ? update.percent : null;
 					} else if (update.type === 'complete') {
+						if (update.activated !== true)
+							throw new Error('Catalog synchronization did not activate a new snapshot.');
 						completed = true;
-						liveWarning = update.warning;
+						liveWarning = typeof update.warning === 'string' ? update.warning : null;
 					} else if (update.type === 'error') {
 						throw new Error(update.message);
 					}

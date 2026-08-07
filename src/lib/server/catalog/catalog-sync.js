@@ -6,8 +6,8 @@ import { LolApi } from 'twisted';
 import { catalogAugments, catalogChampions, catalogSnapshots } from '../db/schema/catalog.js';
 import { tournaments } from '../db/schema/tournaments.js';
 import { resolveContainedPath } from '../media/player-images.js';
+import { catalogArchiveLimits } from './catalog-config.js';
 import {
-	MAX_ARCHIVE_BYTES,
 	cleanupStaleCatalogStaging,
 	copyExtractedCatalogImages,
 	downloadCatalogImages,
@@ -28,6 +28,18 @@ const DDRAGON_ROOT = 'https://ddragon.leagueoflegends.com';
 /** @typedef {{ type: 'progress', phase: CatalogSyncPhase, message: string, completed?: number, total?: number, percent: number | null }} CatalogProgress */
 /** @typedef {{ externalId: string, displayName: string, iconPath: string | null, tier: number | null, metadataJson: string }} CatalogAsset */
 /** @typedef {{ source: 'communitydragon' | 'datadragon', sourceUrl: string, locale: string, patchLabel: string, setLabel: string | null, champions: CatalogAsset[], augments: CatalogAsset[], warning: string | null }} CatalogCandidate */
+/** @typedef {'communitydragon' | 'datadragon'} CatalogSource */
+/** @typedef {'unavailable' | 'size_limit' | 'invalid_asset' | 'invalid_catalog' | 'internal'} CatalogFailureCategory */
+/** @typedef {{ source: CatalogSource, locale: string, phase: CatalogSyncPhase, category: CatalogFailureCategory, cause: string }} CatalogAttemptFailure */
+
+export class CatalogSyncError extends Error {
+	/** @param {string} message @param {CatalogAttemptFailure[]} attempts */
+	constructor(message, attempts) {
+		super(message);
+		this.name = 'CatalogSyncError';
+		this.attempts = attempts;
+	}
+}
 
 /** @param {unknown} value @returns {Record<string, unknown> | null} */
 function asRecord(value) {
@@ -105,12 +117,19 @@ function cdragonIconUrl(rawPath, patch) {
 	const iconPath = nonEmptyString(rawPath);
 	if (!iconPath) return null;
 	if (iconPath.startsWith('https://')) return requireHttps(iconPath);
-	if (!iconPath.startsWith('/lol-game-data/assets/'))
-		throw new Error('Unsupported CommunityDragon asset path');
-	const relativePath = iconPath.slice('/lol-game-data/assets/'.length).toLocaleLowerCase('en-US');
-	return requireHttps(
-		`${CDRAGON_ROOT}/${patch}/plugins/rcp-be-lol-game-data/global/default/${relativePath}`
-	);
+	if (iconPath.startsWith('/lol-game-data/assets/')) {
+		const relativePath = iconPath.slice('/lol-game-data/assets/'.length).toLocaleLowerCase('en-US');
+		return requireHttps(
+			`${CDRAGON_ROOT}/${patch}/plugins/rcp-be-lol-game-data/global/default/${relativePath}`
+		);
+	}
+	if (/^assets\//i.test(iconPath)) {
+		const relativePath = iconPath.toLocaleLowerCase('en-US').replace(/\.tex$/i, '.png');
+		if (!/\.(?:png|jpe?g|webp)$/i.test(relativePath))
+			throw new Error('Unsupported CommunityDragon asset path');
+		return requireHttps(`${CDRAGON_ROOT}/${patch}/game/${relativePath}`);
+	}
+	throw new Error('Unsupported CommunityDragon asset path');
 }
 
 /** @param {unknown} filename */
@@ -131,49 +150,76 @@ function isPlaceholder(externalId, displayName) {
 /** @param {unknown} payload @param {string} patch */
 function normalizeCdragon(payload, patch) {
 	const root = asRecord(payload);
-	const sets = asRecord(root?.sets);
-	if (!root || !sets) throw new Error('CommunityDragon catalog payload was invalid');
-	const selectedEntry = Object.entries(sets)
-		.filter(([key]) => /^\d+$/.test(key))
-		.sort(([left], [right]) => Number(right) - Number(left))[0];
-	if (!selectedEntry) throw new Error('CommunityDragon catalog had no numeric set');
-	const [setKey, selectedValue] = selectedEntry;
-	const selectedSet = asRecord(selectedValue);
+	if (!root || !Array.isArray(root.setData) || !Array.isArray(root.items))
+		throw new Error('CommunityDragon catalog payload was invalid');
+	const selectedSet = root.setData
+		.map(asRecord)
+		.filter((entry) => {
+			const number = entry?.number;
+			return Number.isInteger(number) && entry?.mutator === `TFTSet${number}`;
+		})
+		.sort((left, right) => Number(right?.number) - Number(left?.number))[0];
+	if (!selectedSet) throw new Error('CommunityDragon catalog had no standard numeric set');
 	const rawChampions = selectedSet?.champions;
 	if (!Array.isArray(rawChampions)) throw new Error('CommunityDragon set had no champions');
 	const champions = rawChampions.flatMap((raw) => {
 		const record = asRecord(raw);
 		const externalId = nonEmptyString(record?.apiName);
 		const displayName = nonEmptyString(record?.name);
-		if (!record || !externalId || !displayName || isPlaceholder(externalId, displayName)) return [];
+		const traits = record?.traits;
+		const cost = record?.cost;
+		if (
+			!record ||
+			!externalId ||
+			!displayName ||
+			isPlaceholder(externalId, displayName) ||
+			!Array.isArray(traits) ||
+			traits.length === 0 ||
+			!Number.isInteger(cost) ||
+			Number(cost) < 1 ||
+			Number(cost) > 5
+		)
+			return [];
 		return [
 			{
 				externalId,
 				displayName,
 				iconPath: cdragonIconUrl(record.squareIcon, patch),
-				tier: typeof record.cost === 'number' && Number.isInteger(record.cost) ? record.cost : null,
+				tier: Number(cost),
 				metadataJson: JSON.stringify(record)
 			}
 		];
 	});
 	if (champions.length === 0) throw new Error('CommunityDragon catalog had no usable champions');
-	const rawItems = Array.isArray(root.items) ? root.items : [];
-	const augments = rawItems.flatMap((raw) => {
-		const record = asRecord(raw);
+	if (!Array.isArray(selectedSet.augments))
+		throw new Error('CommunityDragon standard set had no augment references');
+	const itemsById = new Map(
+		root.items.flatMap((raw) => {
+			const record = asRecord(raw);
+			const externalId = nonEmptyString(record?.apiName);
+			return record && externalId ? [[externalId, record]] : [];
+		})
+	);
+	const augments = selectedSet.augments.map((rawId) => {
+		const augmentId = nonEmptyString(rawId);
+		const record = augmentId ? itemsById.get(augmentId) : null;
 		const externalId = nonEmptyString(record?.apiName);
 		const displayName = nonEmptyString(record?.name);
-		if (!record || !externalId || !displayName || !/augment/i.test(externalId)) return [];
-		return [
-			{
-				externalId,
-				displayName,
-				iconPath: cdragonIconUrl(record.icon, patch),
-				tier: null,
-				metadataJson: JSON.stringify(record)
-			}
-		];
+		if (!record || !externalId || !displayName)
+			throw new Error(`CommunityDragon augment ${augmentId ?? 'reference'} was unresolved`);
+		return {
+			externalId,
+			displayName,
+			iconPath: cdragonIconUrl(record.icon, patch),
+			tier: null,
+			metadataJson: JSON.stringify(record)
+		};
 	});
-	return { setLabel: nonEmptyString(selectedSet?.name) ?? setKey, champions, augments };
+	return {
+		setLabel: nonEmptyString(selectedSet.name) ?? `Set ${selectedSet.number}`,
+		champions,
+		augments
+	};
 }
 
 /** @param {unknown} payload */
@@ -204,6 +250,66 @@ function combineWarnings(warnings) {
 	return value || null;
 }
 
+/** @param {unknown} error */
+function failureCause(error) {
+	return error instanceof Error ? error.message : String(error);
+}
+
+/** @param {unknown} error @returns {CatalogFailureCategory} */
+function failureCategory(error) {
+	const message = failureCause(error);
+	if (/size limit|exceeds? the configured/i.test(message)) return 'size_limit';
+	if (/HTTP \d+|unavailable|failed for https:/i.test(message)) return 'unavailable';
+	if (/unsupported .*path|unsafe path|not allowed|unsupported file type/i.test(message))
+		return 'invalid_asset';
+	if (/invalid|had no|missing|not found|unresolved/i.test(message)) return 'invalid_catalog';
+	return 'internal';
+}
+
+/** @param {CatalogAttemptFailure} attempt */
+function publicAttemptSummary(attempt) {
+	const source = attempt.source === 'communitydragon' ? 'CommunityDragon' : 'Data Dragon';
+	const reason = {
+		unavailable: 'the source was unavailable',
+		size_limit: 'the package exceeded the configured size limit',
+		invalid_asset: 'the source referenced an unsupported asset',
+		invalid_catalog: 'the source returned unusable catalog data',
+		internal: 'the source failed unexpectedly'
+	}[attempt.category];
+	return `${source} failed during ${attempt.phase}: ${reason}.`;
+}
+
+/** @param {CatalogAttemptFailure[]} attempts */
+function latestSourceAttempts(attempts) {
+	/** @type {Map<CatalogSource, CatalogAttemptFailure>} */
+	const latest = new Map();
+	for (const attempt of attempts) latest.set(attempt.source, attempt);
+	return [...latest.values()];
+}
+
+/** @param {CatalogAttemptFailure[]} attempts */
+function totalFailureMessage(attempts) {
+	const details = latestSourceAttempts(attempts).map(publicAttemptSummary).join(' ');
+	return `${details || 'Catalog sources failed.'} The prior snapshot remains active.`;
+}
+
+/** @param {unknown} caught */
+export function catalogOperatorMessage(caught) {
+	if (caught instanceof CatalogSyncError) return caught.message;
+	if (!(caught instanceof Error)) return 'Catalog synchronization failed.';
+	if (caught.name === 'AbortError') return 'Catalog synchronization was cancelled.';
+	const allowed = [
+		'Tournament not found',
+		'Catalog patch must be',
+		'Catalog locale must',
+		'CATALOG_MAX_ARCHIVE_GIB',
+		'CATALOG_MAX_EXTRACTED_GIB'
+	];
+	return allowed.some((value) => caught.message.includes(value))
+		? caught.message
+		: 'Catalog synchronization failed; the prior snapshot remains active.';
+}
+
 /** @param {(progress: CatalogProgress) => void} onProgress @param {CatalogSyncPhase} phase @param {string} message @param {number} [completed] @param {number} [total] */
 function emit(onProgress, phase, message, completed, total) {
 	const percent =
@@ -221,7 +327,7 @@ function emit(onProgress, phase, message, completed, total) {
 }
 
 /**
- * @param {{ patch: string, locale: string, fetchJson: (url: string, init?: RequestInit) => Promise<unknown>, fetchResponse: (url: string, init?: RequestInit) => Promise<Response>, candidateRoot: string, signal?: AbortSignal, onProgress: (progress: CatalogProgress) => void }} input
+ * @param {{ patch: string, locale: string, fetchJson: (url: string, init?: RequestInit) => Promise<unknown>, fetchResponse: (url: string, init?: RequestInit) => Promise<Response>, candidateRoot: string, signal?: AbortSignal, onProgress: (progress: CatalogProgress) => void, recordAttempt: (failure: Omit<CatalogAttemptFailure, 'category' | 'cause'> & { error: unknown }) => void }} input
  * @returns {Promise<CatalogCandidate | null>}
  */
 async function tryCdragon({
@@ -231,7 +337,8 @@ async function tryCdragon({
 	fetchResponse,
 	candidateRoot,
 	signal,
-	onProgress
+	onProgress,
+	recordAttempt
 }) {
 	let resolvedPatch = patch;
 	if (patch === 'latest') {
@@ -242,12 +349,20 @@ async function tryCdragon({
 			);
 		} catch (error) {
 			if (signal?.aborted) throw error;
+			recordAttempt({
+				source: 'communitydragon',
+				locale: cdragonLocale(locale),
+				phase: 'resolving',
+				error
+			});
 			return null;
 		}
 	}
 	const requestedLocale = cdragonLocale(locale);
 	for (const candidateLocale of localeCandidates(requestedLocale, 'en_us')) {
 		const sourceUrl = `${CDRAGON_ROOT}/${resolvedPatch}/cdragon/tft/${candidateLocale}.json`;
+		/** @type {CatalogSyncPhase} */
+		let phase = 'resolving';
 		try {
 			emit(onProgress, 'resolving', `Loading CommunityDragon catalog ${candidateLocale}`);
 			const normalized = normalizeCdragon(await fetchJson(sourceUrl, { signal }), resolvedPatch);
@@ -255,6 +370,7 @@ async function tryCdragon({
 				(asset) => asset.iconPath
 			).length;
 			let championsDone = 0;
+			phase = 'downloading';
 			emit(onProgress, 'downloading', 'Downloading CommunityDragon images', 0, total);
 			const champions = await downloadCatalogImages({
 				assets: normalized.champions,
@@ -301,6 +417,12 @@ async function tryCdragon({
 			};
 		} catch (error) {
 			if (signal?.aborted) throw error;
+			recordAttempt({
+				source: 'communitydragon',
+				locale: candidateLocale,
+				phase,
+				error
+			});
 			await rm(candidateRoot, { recursive: true, force: true });
 		}
 	}
@@ -313,17 +435,21 @@ async function readJson(filename) {
 }
 
 /**
- * @param {{ version: string, candidateRoot: string, fetchResponse: (url: string, init?: RequestInit) => Promise<Response>, signal?: AbortSignal, onProgress: (progress: CatalogProgress) => void }} input
+ * @param {{ version: string, candidateRoot: string, fetchResponse: (url: string, init?: RequestInit) => Promise<Response>, maxArchiveBytes: number, maxExtractedBytes: number, signal?: AbortSignal, onProgress: (progress: CatalogProgress) => void, onPhase: (phase: CatalogSyncPhase) => void }} input
  */
 async function downloadAndExtractDdragon({
 	version,
 	candidateRoot,
 	fetchResponse,
+	maxArchiveBytes,
+	maxExtractedBytes,
 	signal,
-	onProgress
+	onProgress,
+	onPhase
 }) {
 	for (const format of ['tgz', 'zip']) {
 		const sourceUrl = `${DDRAGON_ROOT}/cdn/dragontail-${version}.${format}`;
+		onPhase('downloading');
 		emit(onProgress, 'downloading', `Downloading Data Dragon ${version}`);
 		const response = await fetchResponse(sourceUrl, { signal });
 		if (!response.ok) continue;
@@ -331,7 +457,7 @@ async function downloadAndExtractDdragon({
 		await downloadResponseToFile({
 			response,
 			destination: archivePath,
-			maxBytes: MAX_ARCHIVE_BYTES,
+			maxBytes: maxArchiveBytes,
 			signal,
 			onBytes: (completed, total) =>
 				emit(
@@ -343,9 +469,22 @@ async function downloadAndExtractDdragon({
 				)
 		});
 		const extractedRoot = path.join(candidateRoot, 'extracted');
+		onPhase('extracting');
 		emit(onProgress, 'extracting', 'Extracting the Data Dragon package');
-		if (format === 'tgz') await extractTarGz({ archivePath, destination: extractedRoot, signal });
-		else await extractZip({ archivePath, destination: extractedRoot, signal });
+		if (format === 'tgz')
+			await extractTarGz({
+				archivePath,
+				destination: extractedRoot,
+				maxExtractedBytes,
+				signal
+			});
+		else
+			await extractZip({
+				archivePath,
+				destination: extractedRoot,
+				maxExtractedBytes,
+				signal
+			});
 		await rm(archivePath, { force: true });
 		return { sourceUrl, extractedRoot };
 	}
@@ -353,7 +492,7 @@ async function downloadAndExtractDdragon({
 }
 
 /**
- * @param {{ patch: string, locale: string, getVersions: () => Promise<string[]>, fetchResponse: (url: string, init?: RequestInit) => Promise<Response>, candidateRoot: string, signal?: AbortSignal, onProgress: (progress: CatalogProgress) => void }} input
+ * @param {{ patch: string, locale: string, getVersions: () => Promise<string[]>, fetchResponse: (url: string, init?: RequestInit) => Promise<Response>, candidateRoot: string, archiveLimits: { maxArchiveBytes: number, maxExtractedBytes: number }, signal?: AbortSignal, onProgress: (progress: CatalogProgress) => void, recordAttempt: (failure: Omit<CatalogAttemptFailure, 'category' | 'cause'> & { error: unknown }) => void }} input
  * @returns {Promise<CatalogCandidate | null>}
  */
 async function tryDdragon({
@@ -362,9 +501,14 @@ async function tryDdragon({
 	getVersions,
 	fetchResponse,
 	candidateRoot,
+	archiveLimits,
 	signal,
-	onProgress
+	onProgress,
+	recordAttempt
 }) {
+	/** @type {CatalogSyncPhase} */
+	let phase = 'resolving';
+	let attemptedLocale = ddragonLocale(locale);
 	try {
 		emit(onProgress, 'resolving', 'Resolving the Data Dragon package version');
 		const version = resolveDdragonVersion(await getVersions(), patch);
@@ -373,19 +517,43 @@ async function tryDdragon({
 			version,
 			candidateRoot,
 			fetchResponse,
+			...archiveLimits,
 			signal,
-			onProgress
+			onProgress,
+			onPhase: (nextPhase) => {
+				phase = nextPhase;
+			}
 		});
 		const requestedLocale = ddragonLocale(locale);
 		for (const candidateLocale of localeCandidates(requestedLocale, 'en_US')) {
+			attemptedLocale = candidateLocale;
+			phase = 'resolving';
 			const championJson = await findExtractedFile(
 				extractedRoot,
 				`/data/${candidateLocale}/tft-champion.json`
 			);
-			if (!championJson) continue;
+			if (!championJson) {
+				recordAttempt({
+					source: 'datadragon',
+					locale: candidateLocale,
+					phase,
+					error: new Error(`Data Dragon champion catalog ${candidateLocale} was missing`)
+				});
+				continue;
+			}
 			try {
 				const champions = normalizeDdragonEntries(await readJson(championJson));
-				if (champions.length === 0) continue;
+				if (champions.length === 0) {
+					recordAttempt({
+						source: 'datadragon',
+						locale: candidateLocale,
+						phase,
+						error: new Error(
+							`Data Dragon champion catalog ${candidateLocale} had no usable champions`
+						)
+					});
+					continue;
+				}
 				const augmentJson = await findExtractedFile(
 					extractedRoot,
 					`/data/${candidateLocale}/tft-augments.json`
@@ -399,6 +567,7 @@ async function tryDdragon({
 						augments = [];
 					}
 				}
+				phase = 'installing';
 				emit(onProgress, 'installing', 'Installing TFT images from Data Dragon');
 				const installedChampions = await copyExtractedCatalogImages({
 					assets: champions,
@@ -432,11 +601,18 @@ async function tryDdragon({
 				};
 			} catch (error) {
 				if (signal?.aborted) throw error;
+				recordAttempt({
+					source: 'datadragon',
+					locale: candidateLocale,
+					phase,
+					error
+				});
 				await rm(path.join(candidateRoot, 'assets'), { recursive: true, force: true });
 			}
 		}
 	} catch (error) {
 		if (signal?.aborted) throw error;
+		recordAttempt({ source: 'datadragon', locale: attemptedLocale, phase, error });
 	}
 	await rm(candidateRoot, { recursive: true, force: true });
 	return null;
@@ -454,8 +630,10 @@ async function tryDdragon({
  *   fetchJson?: (url: string, init?: RequestInit) => Promise<unknown>,
  *   fetchResponse?: (url: string, init?: RequestInit) => Promise<Response>,
  *   getVersions?: () => Promise<string[]>,
+ *   archiveLimits?: { maxArchiveBytes: number, maxExtractedBytes: number },
  *   signal?: AbortSignal,
- *   onProgress?: (progress: CatalogProgress) => void
+ *   onProgress?: (progress: CatalogProgress) => void,
+ *   logger?: Pick<Console, 'warn' | 'error'>
  * }} input
  */
 export async function syncAndActivateCatalog({
@@ -471,8 +649,10 @@ export async function syncAndActivateCatalog({
 	},
 	fetchResponse = fetch,
 	getVersions = () => new LolApi().DataDragon.getVersions(),
+	archiveLimits = catalogArchiveLimits(),
 	signal,
-	onProgress = () => {}
+	onProgress = () => {},
+	logger = console
 }) {
 	const [tournament] = await db
 		.select({ activeCatalogSnapshotId: tournaments.activeCatalogSnapshotId })
@@ -483,8 +663,33 @@ export async function syncAndActivateCatalog({
 	const normalizedPatch = patch.trim();
 	if (normalizedPatch !== 'latest' && !/^\d+\.\d+(?:\.\d+)?$/.test(normalizedPatch))
 		throw new Error('Catalog patch must be latest or a numeric patch');
+	if (
+		!Number.isSafeInteger(archiveLimits.maxArchiveBytes) ||
+		archiveLimits.maxArchiveBytes <= 0 ||
+		!Number.isSafeInteger(archiveLimits.maxExtractedBytes) ||
+		archiveLimits.maxExtractedBytes <= 0
+	)
+		throw new Error('Catalog archive limits must be positive safe integers');
 	await cleanupStaleCatalogStaging(mediaRoot);
 	const snapshotId = randomUUID();
+	/** @type {CatalogAttemptFailure[]} */
+	const attempts = [];
+	/** @param {Omit<CatalogAttemptFailure, 'category' | 'cause'> & { error: unknown }} failure */
+	const recordAttempt = (failure) => {
+		const attempt = {
+			source: failure.source,
+			locale: failure.locale,
+			phase: failure.phase,
+			category: failureCategory(failure.error),
+			cause: failureCause(failure.error)
+		};
+		attempts.push(attempt);
+		logger.warn('catalog_sync_attempt_failed', {
+			syncId: snapshotId,
+			tournamentId,
+			...attempt
+		});
+	};
 	const syncRoot = resolveContainedPath(mediaRoot, `catalog-staging/${snapshotId}`);
 	await mkdir(syncRoot, { recursive: true });
 	let promoted = false;
@@ -498,7 +703,8 @@ export async function syncAndActivateCatalog({
 			fetchResponse,
 			candidateRoot: cdragonRoot,
 			signal,
-			onProgress
+			onProgress,
+			recordAttempt
 		});
 		let candidateRoot = cdragonRoot;
 		if (!candidate) {
@@ -509,22 +715,31 @@ export async function syncAndActivateCatalog({
 				getVersions,
 				fetchResponse,
 				candidateRoot: ddragonRoot,
+				archiveLimits,
 				signal,
-				onProgress
+				onProgress,
+				recordAttempt
 			});
 			candidateRoot = ddragonRoot;
 		}
 		if (!candidate) {
-			return {
-				activated: false,
-				snapshotId: tournament.activeCatalogSnapshotId,
-				source: null,
-				locale: cdragonLocale(locale),
-				champions: [],
-				augments: [],
-				warning: 'Catalog could not be synchronized; the prior snapshot remains active.'
-			};
+			const message = totalFailureMessage(attempts);
+			logger.error('catalog_sync_failed', {
+				syncId: snapshotId,
+				tournamentId,
+				activeSnapshotId: tournament.activeCatalogSnapshotId,
+				attempts
+			});
+			throw new CatalogSyncError(message, attempts);
 		}
+		const communityFailure = attempts
+			.filter((attempt) => attempt.source === 'communitydragon')
+			.at(-1);
+		if (candidate.source === 'datadragon' && communityFailure)
+			candidate.warning = combineWarnings([
+				`CommunityDragon failed during ${communityFailure.phase}; Data Dragon was used instead.`,
+				candidate.warning
+			]);
 		await rename(path.join(candidateRoot, 'assets'), path.join(syncRoot, 'assets'));
 		candidate.champions = candidate.champions.map((asset) => ({
 			...asset,
