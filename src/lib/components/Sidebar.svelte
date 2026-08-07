@@ -4,7 +4,6 @@
 	import LayoutDashboardIcon from '@lucide/svelte/icons/layout-dashboard';
 	import UsersIcon from '@lucide/svelte/icons/users';
 	import TrophyIcon from '@lucide/svelte/icons/trophy';
-	import SwordsIcon from '@lucide/svelte/icons/swords';
 	import MonitorPlayIcon from '@lucide/svelte/icons/monitor-play';
 	import SettingsIcon from '@lucide/svelte/icons/settings';
 	import { Image } from '@lucide/svelte';
