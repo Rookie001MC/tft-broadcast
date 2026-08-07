@@ -111,6 +111,7 @@ test('operator workflow publishes and hides an already-open broadcast source', a
 	await admin.getByRole('button', { name: 'Create operator account' }).click();
 	await expect(admin).toHaveURL(/\/admin$/);
 
+	await admin.getByRole('button', { name: 'User profile' }).click();
 	await admin.getByRole('button', { name: 'Sign out' }).click();
 	await expect(admin).toHaveURL(/\/login$/);
 	await admin.getByLabel('Email').fill('operator@example.com');
