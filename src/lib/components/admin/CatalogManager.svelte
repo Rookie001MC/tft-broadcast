@@ -250,7 +250,7 @@
 					>{champions.length} of {activeCatalog.champions.length}</span
 				>
 			</div>
-			<div class="max-h-[36rem] table-wrap rounded-container border border-surface-200-800">
+			<div class="max-h-144 table-wrap rounded-container border border-surface-200-800">
 				<table class="table table-zebra">
 					<thead class="sticky top-0 bg-surface-100-900"
 						><tr><th>Icon</th><th>Name</th><th>External ID</th><th>Tier</th></tr></thead
@@ -282,7 +282,7 @@
 					>{augments.length} of {activeCatalog.augments.length}</span
 				>
 			</div>
-			<div class="max-h-[36rem] table-wrap rounded-container border border-surface-200-800">
+			<div class="max-h-144 table-wrap rounded-container border border-surface-200-800">
 				<table class="table table-zebra">
 					<thead class="sticky top-0 bg-surface-100-900"
 						><tr><th>Icon</th><th>Name</th><th>External ID</th><th>Tier</th></tr></thead
