@@ -1,0 +1,26 @@
+{
+	"version": "0.2.0",
+	"configurations": [
+		{
+			"name": "SvelteKit: Dev Server",
+			"type": "node-terminal",
+			"request": "launch",
+			"command": "npm run dev",
+			"cwd": "${workspaceFolder}"
+		},
+		{
+			"name": "SvelteKit: Browser",
+			"type": "chrome",
+			"request": "launch",
+			"url": "http://localhost:5173",
+			"webRoot": "${workspaceFolder}/src",
+			"preLaunchTask": "dev"
+		}
+	],
+	"compounds": [
+		{
+			"name": "SvelteKit: Full Debug",
+			"configurations": ["SvelteKit: Dev Server", "SvelteKit: Browser"]
+		}
+	]
+}
