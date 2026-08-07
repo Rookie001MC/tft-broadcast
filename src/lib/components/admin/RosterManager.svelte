@@ -44,7 +44,7 @@
 				<div class="space-y-1">
 					<label class="label label-text" for="roster-player-search">Search reusable players</label>
 					<div class="field-group grid-cols-[auto_1fr]">
-						<span class="label label-text preset-tonal-surface" aria-hidden="true">
+						<span class="label label-text preset-tonal-primary" aria-hidden="true">
 							<SearchIcon class="size-4" />
 						</span>
 						<input

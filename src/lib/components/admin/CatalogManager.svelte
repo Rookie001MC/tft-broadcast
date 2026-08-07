@@ -228,7 +228,7 @@
 		<div class="w-full space-y-1 sm:w-80">
 			<label class="label label-text" for="catalog-resource-search">Filter resources</label>
 			<div class="field-group grid-cols-[auto_1fr]">
-				<span class="label label-text preset-tonal-surface" aria-hidden="true">
+				<span class="label label-text preset-tonal-primary" aria-hidden="true">
 					<SearchIcon class="size-4" />
 				</span>
 				<input
