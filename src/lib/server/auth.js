@@ -20,7 +20,7 @@ export const auth = betterAuth({
 	baseURL: env.ORIGIN,
 	secret: env.BETTER_AUTH_SECRET,
 	database: drizzleAdapter(db, { provider: 'sqlite' }),
-	emailAndPassword: { enabled: true },
+	emailAndPassword: { enabled: true, minPasswordLength: 12 },
 	hooks: {
 		before: createAuthMiddleware(async (context) => {
 			if (context.path !== '/sign-up/email') return;
