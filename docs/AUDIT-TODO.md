@@ -26,11 +26,17 @@ Created from the 2026-08-08 merge-readiness audit of `feat/manual-winner-graphic
 
 ## Before production rehearsal
 
-- [x] Resolve incomplete admin navigation.
-  - Remove or disable links to `/admin/players`, `/admin/tournaments`, `/admin/game-resources`, `/admin/graphics`, and `/admin/settings` until those routes exist, or implement the routes.
+- [x] Resolve incomplete admin navigation and separate admin concerns.
+  - Implement dedicated dashboard, player, tournament, game-resource, graphics, and settings routes.
+  - Present player, tournament, champion, and augment listings as table views instead of dashboard sections.
   - Add a navigation smoke test so every visible sidebar destination returns a real page.
 
-- [ ] Apply the 12-character password rule inside Better Auth.
+- [x] Make game-resource synchronization self-contained and observable.
+  - Use the selected CommunityDragon set as the champion and augment membership source, resolve augment metadata through the root item table, and install all declared square images locally.
+  - Retain the bounded Data Dragon package fallback, safe extraction, immutable snapshot directories, staging cleanup, and prior-snapshot preservation.
+  - Stream determinate and indeterminate progress to the admin page and emit safe operator errors plus structured server diagnostics.
+
+- [x] Apply the 12-character password rule inside Better Auth.
   - Set `emailAndPassword.minPasswordLength` to `12` so direct `/sign-up/email` requests cannot bypass the `/setup` validation.
   - Add coverage for direct first-user sign-up with an 8–11 character password.
   - Reference: <https://better-auth.com/docs/reference/options>
@@ -47,6 +53,11 @@ Created from the 2026-08-08 merge-readiness audit of `feat/manual-winner-graphic
   - Add boundary tests and visually verify the maximum-size board.
 
 ## Deployment hardening and cleanup
+
+- [ ] Better logging, both in Development and Production.
+  - Catalog synchronization now emits structured attempt, total-failure, and unexpected-failure diagnostics keyed by sync and tournament IDs.
+  - Define the development and production logging policy, including levels, redaction, retention, and the production output/sink.
+  - Add correlated diagnostics for requests, authentication, imports, and graphics state changes without logging credentials or uploaded contents.
 
 - [ ] Configure Better Auth client-IP handling for the final network topology.
   - For direct deployment, verify how client addresses reach Better Auth.
@@ -65,9 +76,9 @@ Created from the 2026-08-08 merge-readiness audit of `feat/manual-winner-graphic
 
 ## Completion gate
 
-- [ ] `pnpm check` passes with zero diagnostics.
-- [ ] `pnpm lint` passes.
-- [ ] `pnpm exec vitest run` passes.
-- [ ] `pnpm test:e2e` passes.
+- [x] `pnpm check` passes with zero diagnostics.
+- [x] `pnpm lint` passes.
+- [x] `pnpm exec vitest run` passes.
+- [x] `pnpm test:e2e` passes.
 - [ ] The standalone Node deployment smoke test passes with the production environment contract.
 - [ ] The final VLAN/firewall rehearsal in `docs/TODO.md` is completed.
