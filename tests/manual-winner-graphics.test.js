@@ -4,7 +4,6 @@ import { strToU8, zipSync } from 'fflate';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
-const database = createClient({ url: 'file:test-e2e.db' });
 const PNG = Buffer.from(
 	'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
 	'base64'
@@ -12,7 +11,16 @@ const PNG = Buffer.from(
 
 test.setTimeout(90_000);
 
-async function resetDatabase() {
+async function withFixtureDatabase(operation) {
+	const fixture = createClient({ url: 'file:test-e2e.db' });
+	try {
+		return await operation(fixture);
+	} finally {
+		fixture.close();
+	}
+}
+
+async function resetDatabase(database) {
 	const tables = [
 		'winner_board_augments',
 		'winner_board_champions',
@@ -35,8 +43,8 @@ async function resetDatabase() {
 	await rm(path.resolve('media/e2e/catalog-assets'), { recursive: true, force: true });
 }
 
-/** @param {string} tournamentId */
-async function seedCatalog(tournamentId) {
+/** @param {import('@libsql/client').Client} database @param {string} tournamentId */
+async function seedCatalog(database, tournamentId) {
 	const now = Date.now();
 	const championPath = '/media/catalog-assets/e2e-snapshot/champions/e2e-champion.png';
 	const augmentPath = '/media/catalog-assets/e2e-snapshot/augments/e2e-augment.png';
@@ -100,13 +108,7 @@ async function seedCatalog(tournamentId) {
 	);
 }
 
-test.beforeAll(async () => {
-	await resetDatabase();
-});
-
-test.afterAll(async () => {
-	database.close();
-});
+test.beforeAll(() => withFixtureDatabase((database) => resetDatabase(database)));
 
 test('operator workflow publishes and hides an already-open broadcast source', async ({
 	page,
@@ -178,7 +180,9 @@ test('operator workflow publishes and hides an already-open broadcast source', a
 	const rosterRows = admin.locator('#roster tbody tr');
 	await expect(rosterRows.nth(0)).toContainText('Player Two');
 
-	await seedCatalog(/** @type {string} */ (tournamentId));
+	await withFixtureDatabase((database) =>
+		seedCatalog(database, /** @type {string} */ (tournamentId))
+	);
 	await admin.goto(`/admin/game-resources?tournament=${tournamentId}`);
 	await expect(admin.getByText('Catalog ready')).toBeVisible();
 	await expect(admin.getByRole('cell', { name: 'Test Champion', exact: true })).toBeVisible();
