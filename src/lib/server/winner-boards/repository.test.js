@@ -1,9 +1,26 @@
 import { createClient } from '@libsql/client';
-import { readFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { drizzle } from 'drizzle-orm/libsql';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+const mediaEnvironment = vi.hoisted(() => ({
+	root: `${process.env.TEMP ?? process.env.TMP ?? process.cwd()}/tft-winner-board-repository-${process.pid}`
+}));
+
+vi.mock('$env/dynamic/private', () => ({ env: { MEDIA_ROOT: mediaEnvironment.root } }));
+
 import * as repository from './repository.js';
+
+const PNG_A = Buffer.from(
+	'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+	'base64'
+);
+const PNG_B = Buffer.from([
+	137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0,
+	0, 31, 21, 196, 137, 0, 0, 0, 13, 73, 68, 65, 84, 8, 215, 99, 248, 207, 192, 240, 31, 0, 5, 0, 1,
+	255, 137, 153, 61, 29, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130
+]);
 
 const schemaStatements = [
 	`CREATE TABLE catalog_snapshots (
@@ -226,6 +243,22 @@ function validInput() {
 	};
 }
 
+/**
+ * @param {{ readPublicationMedia: (input: { mediaRoot: string, publicationId: string, filename: string }) => Promise<{ bytes: Buffer, mime: string }> }} mediaApi
+ * @param {string} url
+ */
+async function readPublishedAsset(mediaApi, url) {
+	const parts = new URL(url, 'https://broadcast.example').pathname.split('/');
+	const publicationId = parts.at(-2);
+	const filename = parts.at(-1);
+	if (!publicationId || !filename) throw new Error('Publication URL is incomplete');
+	return mediaApi.readPublicationMedia({
+		mediaRoot: mediaEnvironment.root,
+		publicationId,
+		filename
+	});
+}
+
 /** @param {ReturnType<typeof createClient>} client */
 async function graphicRow(client) {
 	return (await client.execute("SELECT * FROM graphic_state WHERE id = 'live'")).rows[0] ?? null;
@@ -256,13 +289,17 @@ describe('winner board singleton repository', () => {
 	let database;
 
 	beforeEach(async () => {
+		await rm(mediaEnvironment.root, { recursive: true, force: true });
 		client = createClient({ url: ':memory:' });
 		await createSchema(client);
 		await seed(client);
 		database = createMemoryDatabase(client);
 	});
 
-	afterEach(() => client.close());
+	afterEach(async () => {
+		client.close();
+		await rm(mediaEnvironment.root, { recursive: true, force: true });
+	});
 
 	it('saves and replaces the installation-wide current state while hidden', async () => {
 		const state = await repository.saveWinnerBoardState(database, validInput());
@@ -319,6 +356,15 @@ describe('winner board singleton repository', () => {
 		expect(state.augments).toHaveLength(3);
 	});
 
+	it('rejects duplicate augment IDs with the stable repository error', async () => {
+		await expect(
+			repository.saveWinnerBoardState(database, {
+				...validInput(),
+				augmentIds: ['augment-1', 'augment-1']
+			})
+		).rejects.toThrow('Augment IDs must be unique');
+	});
+
 	it('enables Live from persisted state and increments the graphic version once', async () => {
 		await repository.saveWinnerBoardState(database, validInput());
 		await repository.setWinnerBoardLive(database, true);
@@ -329,10 +375,61 @@ describe('winner board singleton repository', () => {
 		expect(await repository.getGraphicVersion(database)).toBe(1);
 	});
 
-	it('saves while live as a distinct immutable publication and version', async () => {
+	it('keeps published payload and media immutable when current sources change', async () => {
+		const playerPath = 'player-images/player-one.png';
+		const championPath = 'snapshot-active/champions/champion-2.png';
+		const augmentPath = 'snapshot-active/augments/augment-2.png';
+		await mkdir(path.join(mediaEnvironment.root, path.dirname(playerPath)), { recursive: true });
+		await mkdir(path.join(mediaEnvironment.root, 'catalog-assets', path.dirname(championPath)), {
+			recursive: true
+		});
+		await mkdir(path.join(mediaEnvironment.root, 'catalog-assets', path.dirname(augmentPath)), {
+			recursive: true
+		});
+		await writeFile(path.join(mediaEnvironment.root, playerPath), PNG_A);
+		await writeFile(path.join(mediaEnvironment.root, 'catalog-assets', championPath), PNG_A);
+		await writeFile(path.join(mediaEnvironment.root, 'catalog-assets', augmentPath), PNG_A);
+		await execute(client, 'UPDATE players SET image_path = ? WHERE id = ?', [
+			playerPath,
+			'player-one'
+		]);
+		await execute(client, 'UPDATE catalog_champions SET icon_path = ? WHERE id = ?', [
+			`/media/catalog-assets/${championPath}`,
+			'champion-2'
+		]);
+		await execute(client, 'UPDATE catalog_augments SET icon_path = ? WHERE id = ?', [
+			`/media/catalog-assets/${augmentPath}`,
+			'augment-2'
+		]);
+
 		await repository.saveWinnerBoardState(database, validInput());
 		await repository.setWinnerBoardLive(database, true);
 		const first = await repository.getPublishedWinnerBoard(database);
+		expect(first).toMatchObject({
+			winner: { imagePath: expect.stringContaining(`/publications/${first.id}/`) },
+			champions: [
+				expect.objectContaining({
+					id: 'champion-2',
+					iconPath: expect.stringContaining(`/publications/${first.id}/`)
+				})
+			],
+			augments: [
+				expect.objectContaining({
+					id: 'augment-2',
+					iconPath: expect.stringContaining(`/publications/${first.id}/`)
+				})
+			]
+		});
+		const firstUrls = [
+			first.winner.imagePath,
+			first.champions[0].iconPath,
+			first.augments[0].iconPath
+		];
+		const mediaApi = await import('./publication-media.js');
+		for (const url of firstUrls) {
+			const asset = await readPublishedAsset(mediaApi, url);
+			expect(asset).toEqual({ bytes: PNG_A, mime: 'image/png' });
+		}
 		const firstStoredJson = (
 			await execute(
 				client,
@@ -349,12 +446,51 @@ describe('winner board singleton repository', () => {
 			'Edited source champion',
 			'champion-2'
 		]);
+		await execute(client, 'UPDATE catalog_augments SET display_name = ? WHERE id = ?', [
+			'Edited source augment',
+			'augment-2'
+		]);
+		await writeFile(path.join(mediaEnvironment.root, playerPath), PNG_B);
+		await writeFile(path.join(mediaEnvironment.root, 'catalog-assets', championPath), PNG_B);
+		await writeFile(path.join(mediaEnvironment.root, 'catalog-assets', augmentPath), PNG_B);
 		expect(await repository.getPublishedWinnerBoard(database)).toEqual(first);
+		for (const url of firstUrls) {
+			const asset = await readPublishedAsset(mediaApi, url);
+			expect(asset.bytes).toEqual(PNG_A);
+		}
 
 		await repository.saveWinnerBoardState(database, { ...validInput(), title: 'Next champion' });
 		const second = await repository.getPublishedWinnerBoard(database);
 		expect(second.id).not.toBe(first.id);
-		expect(second.title).toBe('Next champion');
+		expect(second).toMatchObject({
+			title: 'Next champion',
+			winner: {
+				displayName: 'Edited source player',
+				imagePath: expect.stringContaining(`/publications/${second.id}/`)
+			},
+			champions: [
+				expect.objectContaining({
+					displayName: 'Edited source champion',
+					iconPath: expect.stringContaining(`/publications/${second.id}/`)
+				})
+			],
+			augments: [
+				expect.objectContaining({
+					displayName: 'Edited source augment',
+					iconPath: expect.stringContaining(`/publications/${second.id}/`)
+				})
+			]
+		});
+		const secondUrls = [
+			second.winner.imagePath,
+			second.champions[0].iconPath,
+			second.augments[0].iconPath
+		];
+		expect(secondUrls).not.toEqual(firstUrls);
+		for (const url of secondUrls) {
+			const asset = await readPublishedAsset(mediaApi, url);
+			expect(asset).toEqual({ bytes: PNG_B, mime: 'image/png' });
+		}
 		expect(await repository.getGraphicVersion(database)).toBe(2);
 		expect(
 			(
