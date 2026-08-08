@@ -14,7 +14,9 @@ import {
 	resolveContainedPath,
 	writeManagedPlayerImage
 } from '../media/player-images.js';
-import { commitStagedPlayerImport, stagePlayerImport } from './staging.js';
+import * as stagingRepository from './staging.js';
+
+const { commitStagedPlayerImport, stagePlayerImport } = stagingRepository;
 
 const ONE_BY_ONE_PNG = Uint8Array.from([
 	137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0,
@@ -49,6 +51,12 @@ async function exists(filePath) {
 	} catch {
 		return false;
 	}
+}
+
+/** @param {unknown} value @param {string} name */
+function requiredFunction(value, name) {
+	expect(value, `${name} must be a public staging function`).toBeTypeOf('function');
+	return /** @type {(...args: any[]) => Promise<any>} */ (value);
 }
 
 afterEach(async () => {
@@ -91,6 +99,8 @@ describe('staged player imports', () => {
 				preview_json TEXT NOT NULL,
 				status TEXT DEFAULT 'previewed' NOT NULL,
 				expires_at INTEGER NOT NULL,
+				committed_at INTEGER,
+				result_summary_json TEXT,
 				created_at INTEGER NOT NULL
 			)`
 		]);
@@ -120,7 +130,12 @@ describe('staged player imports', () => {
 		const [player] = await database.select().from(players);
 		const [committedPreview] = await database.select().from(playerImportPreviews);
 
-		expect(result).toEqual({ imported: 1 });
+		expect(result).toMatchObject({
+			token: staged.token,
+			status: 'committed',
+			committedAt: expect.any(Date),
+			summary: { created: 1, updated: 0, skipped: 0 }
+		});
 		expect(player).toMatchObject({
 			riotId: 'PlayerOne#tag',
 			riotIdKey: 'playerone#tag',
@@ -134,6 +149,144 @@ describe('staged player imports', () => {
 		);
 		expect(committedPreview.status).toBe('committed');
 		expect(await exists(resolveContainedPath(mediaRoot, previewRow.stagedPath))).toBe(false);
+	});
+
+	test('persists a committed summary that distinguishes created, updated, and unchanged rows', async () => {
+		const now = new Date('2026-08-08T00:00:00.000Z');
+		await database.insert(players).values([
+			{
+				id: 'existing-update',
+				riotId: 'ExistingUpdate#TAG',
+				riotIdKey: 'existingupdate#tag',
+				riotGameName: 'ExistingUpdate',
+				riotTagline: 'TAG',
+				fullName: 'Old Name',
+				displayName: 'Old Display',
+				createdAt: now,
+				updatedAt: now
+			},
+			{
+				id: 'existing-skip',
+				riotId: 'ExistingSkip#TAG',
+				riotIdKey: 'existingskip#tag',
+				riotGameName: 'ExistingSkip',
+				riotTagline: 'TAG',
+				fullName: 'Same Name',
+				displayName: 'Same Display',
+				createdAt: now,
+				updatedAt: now
+			}
+		]);
+		const existingPlayers = await database.select().from(players);
+		const staged = await stagePlayerImport({
+			db: database,
+			zipBytes: playerBundle([
+				'Updated Name,Updated Display,ExistingUpdate#TAG',
+				'Same Name,Same Display,ExistingSkip#TAG',
+				'Created Name,Created Display,Created#TAG'
+			]),
+			mediaRoot,
+			existingPlayers
+		});
+
+		const result = await commitStagedPlayerImport({
+			db: database,
+			token: staged.token,
+			mediaRoot
+		});
+
+		expect(result).toMatchObject({
+			status: 'committed',
+			summary: { created: 1, updated: 1, skipped: 1 }
+		});
+		const [stored] = /** @type {any[]} */ (
+			(
+				await client.execute({
+					sql: 'SELECT result_summary_json FROM player_import_previews WHERE token = ?',
+					args: [staged.token]
+				})
+			).rows
+		);
+		expect(JSON.parse(stored.result_summary_json)).toEqual({
+			created: 1,
+			updated: 1,
+			skipped: 1
+		});
+	});
+
+	test('reloads a terminal committed preview with its persisted timestamp and summary', async () => {
+		const staged = await stagePlayerImport({
+			db: database,
+			zipBytes: playerBundle(),
+			mediaRoot,
+			existingPlayers: []
+		});
+		await commitStagedPlayerImport({ db: database, token: staged.token, mediaRoot });
+		const loadLatestPlayerImportPreview = requiredFunction(
+			stagingRepository.loadLatestPlayerImportPreview,
+			'loadLatestPlayerImportPreview'
+		);
+
+		const reloaded = await loadLatestPlayerImportPreview({ db: database, mediaRoot });
+
+		expect(reloaded).toMatchObject({
+			token: staged.token,
+			status: 'committed',
+			committedAt: expect.any(Date),
+			summary: { created: 1, updated: 0, skipped: 0 }
+		});
+		const rows = /** @type {any[]} */ (
+			(
+				await client.execute({
+					sql: 'SELECT committed_at, result_summary_json FROM player_import_previews WHERE token = ?',
+					args: [staged.token]
+				})
+			).rows
+		);
+		expect(rows[0].committed_at).toEqual(expect.any(Number));
+		expect(JSON.parse(rows[0].result_summary_json)).toEqual({
+			created: 1,
+			updated: 0,
+			skipped: 0
+		});
+	});
+
+	test('loads expired and missing-file previews as unavailable terminal states', async () => {
+		const loadLatestPlayerImportPreview = requiredFunction(
+			stagingRepository.loadLatestPlayerImportPreview,
+			'loadLatestPlayerImportPreview'
+		);
+		const expired = await stagePlayerImport({
+			db: database,
+			zipBytes: playerBundle(),
+			mediaRoot,
+			existingPlayers: []
+		});
+		await client.execute({
+			sql: 'UPDATE player_import_previews SET expires_at = ? WHERE token = ?',
+			args: [Date.now() - 1, expired.token]
+		});
+
+		await expect(loadLatestPlayerImportPreview({ db: database, mediaRoot })).resolves.toMatchObject(
+			{ token: expired.token, status: 'expired' }
+		);
+
+		await client.execute({
+			sql: 'DELETE FROM player_import_previews WHERE token = ?',
+			args: [expired.token]
+		});
+		const missingFile = await stagePlayerImport({
+			db: database,
+			zipBytes: playerBundle(),
+			mediaRoot,
+			existingPlayers: []
+		});
+		const [missingRow] = await database.select().from(playerImportPreviews);
+		await deleteManagedFile(mediaRoot, missingRow.stagedPath);
+
+		await expect(loadLatestPlayerImportPreview({ db: database, mediaRoot })).resolves.toMatchObject(
+			{ token: missingFile.token, status: 'unavailable' }
+		);
 	});
 
 	test('returns validation errors without writing players or managed images and refuses commit', async () => {
