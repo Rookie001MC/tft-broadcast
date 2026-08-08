@@ -11,6 +11,11 @@ const PNG = Buffer.from(
 
 test.setTimeout(90_000);
 
+/**
+ * @template T
+ * @param {(database: import('@libsql/client').Client) => Promise<T>} operation
+ * @returns {Promise<T>}
+ */
 async function withFixtureDatabase(operation) {
 	const fixture = createClient({ url: 'file:test-e2e.db' });
 	try {
@@ -20,12 +25,14 @@ async function withFixtureDatabase(operation) {
 	}
 }
 
+/** @param {import('@libsql/client').Client} database */
 async function resetDatabase(database) {
 	const tables = [
-		'winner_board_augments',
-		'winner_board_champions',
+		'winner_board_state_augments',
+		'winner_board_state_champions',
 		'graphic_state',
-		'winner_boards',
+		'winner_board_publications',
+		'winner_board_state',
 		'tournament_players',
 		'tournaments',
 		'catalog_augments',
@@ -194,6 +201,11 @@ test('operator workflow publishes and hides an already-open broadcast source', a
 	await expect(broadcast.getByLabel('No published winner')).toBeVisible();
 	const initialVersion = await request.get('/gfx/version');
 	expect(await initialVersion.json()).toEqual({ version: 0 });
+	expect(initialVersion.headers().etag).toBe('"gfx-0"');
+	const unchangedInitialVersion = await request.get('/gfx/version', {
+		headers: { 'If-None-Match': '"gfx-0"' }
+	});
+	expect(unchangedInitialVersion.status()).toBe(304);
 
 	await admin.getByLabel('Graphic title').fill('Grand Final Winner');
 	await admin.getByLabel('Select Test Champion').check();
@@ -201,19 +213,57 @@ test('operator workflow publishes and hides an already-open broadcast source', a
 	await admin.getByRole('checkbox', { name: 'Test Augment' }).check();
 	await expect(admin.getByText('Grand Final Winner', { exact: true })).toBeVisible();
 	await expect(admin.getByText('★★★', { exact: true })).toBeVisible();
-	await admin.getByRole('button', { name: 'Save new draft' }).click();
-	await expect(admin.getByRole('button', { name: 'Update draft' })).toBeVisible();
+	await admin.getByRole('button', { name: 'Save board' }).click();
+	await expect(admin.getByText('Saved board', { exact: true })).toBeVisible();
 
-	await admin.getByRole('button', { name: 'Publish selected draft' }).click();
-	await expect(admin.getByText('Live: Player Two')).toBeVisible();
+	await admin.getByRole('button', { name: 'Take saved board live' }).click();
+	await expect(admin.getByText('Live publication', { exact: true })).toBeVisible();
 	await expect(broadcast.getByText('Player Two', { exact: true })).toBeVisible({ timeout: 4000 });
 	await expect(broadcast.getByText('Grand Final Winner', { exact: true })).toBeVisible();
-	await expect(broadcast.locator('img[src^="/media/catalog-assets/"]')).toHaveCount(2);
+	await expect(broadcast.locator('img[src^="/media/publications/"]')).toHaveCount(2);
 	const publishedVersion = await request.get('/gfx/version');
 	expect(await publishedVersion.json()).toEqual({ version: 1 });
+	expect(publishedVersion.headers().etag).toBe('"gfx-1"');
+
+	await withFixtureDatabase(async (database) => {
+		await database.batch(
+			[
+				{
+					sql: 'UPDATE players SET display_name = ? WHERE display_name = ?',
+					args: ['Mutable Player Two', 'Player Two']
+				},
+				{
+					sql: 'UPDATE catalog_champions SET display_name = ?, icon_path = NULL WHERE id = ?',
+					args: ['Mutable Champion', 'e2e-champion']
+				},
+				{
+					sql: 'UPDATE catalog_augments SET display_name = ?, icon_path = NULL WHERE id = ?',
+					args: ['Mutable Augment', 'e2e-augment']
+				}
+			],
+			'write'
+		);
+	});
+	await expect(broadcast.getByText('Player Two', { exact: true })).toBeVisible();
+	await expect(broadcast.getByText('Mutable Player Two', { exact: true })).not.toBeVisible();
+
+	const freshBroadcast = await context.newPage();
+	await freshBroadcast.goto('/gfx');
+	await expect(freshBroadcast.getByText('Player Two', { exact: true })).toBeVisible();
+	await expect(freshBroadcast.getByText('Test Champion', { exact: true })).toBeVisible();
+	await expect(freshBroadcast.getByText('Test Augment', { exact: true })).toBeVisible();
+	await expect(freshBroadcast.getByText('Mutable Player Two', { exact: true })).not.toBeVisible();
+	await expect(freshBroadcast.locator('img[src^="/media/publications/"]')).toHaveCount(2);
 
 	await admin.getByRole('button', { name: 'Hide live graphic' }).click();
 	await expect(admin.getByText('Transparent', { exact: true })).toBeVisible();
 	await expect(broadcast.getByLabel('No published winner')).toBeVisible({ timeout: 4000 });
+	await expect(freshBroadcast.getByLabel('No published winner')).toBeVisible({ timeout: 4000 });
 	await expect(broadcast.getByText('Player Two', { exact: true })).not.toBeVisible();
+
+	await admin.getByRole('button', { name: 'Reset saved board' }).click();
+	await expect(admin.getByText('Not saved', { exact: true })).toBeVisible();
+	await expect(admin.getByRole('button', { name: 'Take saved board live' })).toBeDisabled();
+	const resetWhileHiddenVersion = await request.get('/gfx/version');
+	expect(await resetWhileHiddenVersion.json()).toEqual({ version: 2 });
 });

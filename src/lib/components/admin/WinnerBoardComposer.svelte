@@ -1,49 +1,44 @@
 <script>
 	import SaveIcon from '@lucide/svelte/icons/save';
+	import { untrack } from 'svelte';
 	import WinnerBoardGraphic from '$lib/components/WinnerBoardGraphic.svelte';
 	/** @import { WinnerBoardView } from '$lib/winner-board.js' */
 	/** @typedef {{ id: string, displayName: string, fullName: string, riotId: string | null, imagePath: string | null }} Player */
 	/** @typedef {{ id: string, displayName: string, iconPath: string | null }} CatalogAsset */
 
-	/** @type {{ tournament: { id: string } | null, roster: Player[], activeCatalog: { snapshot: any, champions: CatalogAsset[], augments: CatalogAsset[] }, drafts: WinnerBoardView[], form?: any, selectedBoardId?: string, onBoardSelect?: (id: string) => void }} */
-	let {
-		tournament,
-		roster,
-		activeCatalog,
-		drafts,
-		form = null,
-		selectedBoardId = '',
-		onBoardSelect = () => {}
-	} = $props();
+	/** @type {{ tournament: { id: string } | null, roster: Player[], activeCatalog: { snapshot: any, champions: CatalogAsset[], augments: CatalogAsset[] }, savedBoard: import('$lib/winner-board.js').WinnerBoardStateView | null, form?: any }} */
+	let { tournament, roster, activeCatalog, savedBoard, form = null } = $props();
 
-	/** @param {string} boardId */
-	function formState(boardId) {
-		const draft = drafts.find((item) => item.id === boardId);
+	/** @param {import('$lib/winner-board.js').WinnerBoardStateView | null} board */
+	function formState(board) {
 		return {
-			title: draft?.title ?? 'Match winner',
-			winnerPlayerId: draft?.winner.id ?? roster[0]?.id ?? '',
-			championIds: draft?.champions.map((champion) => champion.id) ?? [],
-			augmentIds: draft?.augments.map((augment) => augment.id) ?? [],
+			title: board?.title ?? 'Match winner',
+			winnerPlayerId: board?.winner.id ?? roster[0]?.id ?? '',
+			championIds: board?.champions.map((champion) => champion.id) ?? [],
+			augmentIds: board?.augments.map((augment) => augment.id) ?? [],
 			/** @type {Record<string, string | number>} */
 			starLevels: Object.fromEntries(
-				(draft?.champions ?? []).map((champion) => [champion.id, champion.starLevel ?? ''])
+				(board?.champions ?? []).map((champion) => [champion.id, champion.starLevel ?? ''])
 			)
 		};
 	}
 
-	let composer = $state(formState(''));
+	/** @param {string} name */
+	function actionUrl(name) {
+		return `?tournament=${encodeURIComponent(tournament?.id ?? '')}&/${name}`;
+	}
+
+	let composer = $state(untrack(() => formState(savedBoard)));
 
 	/** @type {WinnerBoardView | null} */
 	const previewBoard = $derived.by(() => {
 		const winner = roster.find((player) => player.id === composer.winnerPlayerId);
 		if (!winner || composer.championIds.length === 0) return null;
 		return {
-			id: selectedBoardId || 'preview',
+			id: savedBoard?.id ?? 'preview',
 			title: composer.title,
 			tournamentId: tournament?.id ?? '',
-			status: 'draft',
-			updatedAt: new Date(),
-			publishedAt: null,
+			updatedAt: savedBoard?.updatedAt ?? new Date(),
 			winner: {
 				id: winner.id,
 				displayName: winner.displayName,
@@ -80,13 +75,6 @@
 		};
 	});
 
-	/** @param {Event} event */
-	function chooseDraft(event) {
-		const boardId = /** @type {HTMLSelectElement} */ (event.currentTarget).value;
-		composer = formState(boardId);
-		onBoardSelect(boardId);
-	}
-
 	/** @param {string} id @param {boolean} checked */
 	function toggleChampion(id, checked) {
 		composer.championIds = checked
@@ -111,30 +99,19 @@
 	<header class="mb-5 flex flex-wrap items-start justify-between gap-3">
 		<div>
 			<p class="text-xs font-bold tracking-wider text-primary-600-400 uppercase">
-				Draft-only workspace
+				Saved board workspace
 			</p>
 			<h2 class="h3">Winner board composer</h2>
 			<p class="mt-1 text-sm text-surface-600-400">
-				Saving a draft never changes the live broadcast. Publish it separately after review.
+				Saving replaces the one editable board. Take it live separately after review.
 			</p>
 		</div>
-		<span class="badge preset-tonal-surface">{drafts.length} drafts</span>
+		<span class="badge preset-tonal-surface">{savedBoard ? 'Saved board' : 'Not saved'}</span>
 	</header>
 
 	<div class="grid gap-6 2xl:grid-cols-[minmax(380px,0.75fr)_minmax(0,1.25fr)]">
-		<form method="POST" action="?/saveBoard" class="space-y-5">
+		<form method="POST" action={actionUrl('saveBoard')} class="space-y-5">
 			<input type="hidden" name="tournamentId" value={tournament?.id ?? ''} />
-			<input type="hidden" name="boardId" value={selectedBoardId} />
-
-			<label class="label">
-				<span class="label-text">Edit saved draft</span>
-				<select class="select" value={selectedBoardId} onchange={chooseDraft}>
-					<option value="">Create a new draft</option>
-					{#each drafts as draft (draft.id)}
-						<option value={draft.id}>{draft.title} — {draft.winner.displayName}</option>
-					{/each}
-				</select>
-			</label>
 
 			<div class="grid gap-3 sm:grid-cols-2">
 				<label class="label"
@@ -236,7 +213,7 @@
 					!composer.championIds.length}
 			>
 				<SaveIcon class="size-4" />
-				{selectedBoardId ? 'Update draft' : 'Save new draft'}
+				Save board
 			</button>
 		</form>
 

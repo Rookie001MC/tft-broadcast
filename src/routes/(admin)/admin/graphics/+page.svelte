@@ -6,18 +6,10 @@
 	import WinnerBoardComposer from '$lib/components/admin/WinnerBoardComposer.svelte';
 
 	let { data, form = null } = $props();
-	let selectedBoardOverride = $state('');
-	let selectedBoardId = $derived(
-		form?.action === 'saveBoard'
-			? (form.board?.id ?? '')
-			: data.drafts.some((draft) => draft.id === selectedBoardOverride)
-				? selectedBoardOverride
-				: ''
-	);
 
 	const pageMeta = getPageMetaContext();
 	pageMeta.title = 'Graphics';
-	pageMeta.description = 'Compose, preview, publish, and hide tournament winner graphics.';
+	pageMeta.description = 'Compose, preview, and control the saved tournament winner graphic.';
 </script>
 
 <div class="mx-auto max-w-[1700px] space-y-6 pb-16">
@@ -42,16 +34,21 @@
 		/>
 	</section>
 	{#if data.selectedTournament}
-		<WinnerBoardComposer
-			tournament={data.selectedTournament}
-			roster={data.roster}
-			activeCatalog={data.activeCatalog}
-			drafts={data.drafts}
+		{#key `${data.selectedTournament.id}:${data.savedBoard?.updatedAt ?? 'empty'}`}
+			<WinnerBoardComposer
+				tournament={data.selectedTournament}
+				roster={data.roster}
+				activeCatalog={data.activeCatalog}
+				savedBoard={data.savedBoard}
+				{form}
+			/>
+		{/key}
+		<LiveControls
+			tournamentId={data.selectedTournament.id}
+			savedBoard={data.savedBoard}
+			livePublicationId={data.livePublicationId}
 			{form}
-			{selectedBoardId}
-			onBoardSelect={(id) => (selectedBoardOverride = id)}
 		/>
-		<LiveControls {selectedBoardId} liveBoard={data.liveBoard} {form} />
 	{:else}<div class="rounded-container preset-tonal-warning p-5">
 			Create or select a tournament before composing graphics.
 		</div>{/if}

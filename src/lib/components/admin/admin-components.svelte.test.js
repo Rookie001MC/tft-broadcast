@@ -4,15 +4,14 @@ import { render } from 'vitest-browser-svelte';
 import WinnerBoardGraphic from '../WinnerBoardGraphic.svelte';
 import CatalogManager from './CatalogManager.svelte';
 import LiveControls from './LiveControls.svelte';
+import WinnerBoardComposer from './WinnerBoardComposer.svelte';
 
-/** @type {import('$lib/winner-board.js').WinnerBoardView} */
+/** @type {import('$lib/winner-board.js').WinnerBoardStateView} */
 const board = {
 	id: 'board-1',
 	title: 'Grand Final Winner',
 	tournamentId: 'tournament-1',
-	status: 'draft',
 	updatedAt: new Date(),
-	publishedAt: null,
 	winner: {
 		id: 'player-1',
 		displayName: 'EarlGreyTeemo',
@@ -62,16 +61,108 @@ describe('winner graphic components', () => {
 		await expect.element(page.getByText('Tournament result')).not.toBeInTheDocument();
 	});
 
-	test('publishes the selected draft through an opaque hidden field', async () => {
-		render(LiveControls, { selectedBoardId: 'board-1', liveBoard: null });
+	test('saves one board without draft selection or a client board ID', async () => {
+		render(WinnerBoardComposer, {
+			tournament: { id: 'tournament-1' },
+			roster: [
+				{
+					id: 'player-1',
+					displayName: 'EarlGreyTeemo',
+					fullName: 'Earl Grey Teemo',
+					riotId: 'EarlGreyTeemo#sip',
+					imagePath: 'player-images/managed.png'
+				}
+			],
+			activeCatalog: {
+				snapshot: { id: 'snapshot-1' },
+				champions: [
+					{
+						id: 'champion-1',
+						displayName: 'Irelia',
+						iconPath: '/media/catalog-assets/snapshot-1/champions/irelia.png'
+					}
+				],
+				augments: []
+			},
+			savedBoard: board
+		});
 
-		await expect
-			.element(page.getByRole('button', { name: 'Publish selected draft' }))
-			.toBeEnabled();
-		await expect.element(page.getByRole('button', { name: 'Hide live graphic' })).toBeDisabled();
-		expect(document.querySelector('input[name="boardId"]')?.getAttribute('value')).toBe('board-1');
-		expect(document.querySelector('input[name="boardId"]')?.getAttribute('type')).toBe('hidden');
+		await expect.element(page.getByLabelText('Graphic title')).toHaveValue('Grand Final Winner');
+		await expect.element(page.getByRole('button', { name: 'Save board' })).toBeEnabled();
+		await expect.element(page.getByText('Edit saved draft')).not.toBeInTheDocument();
+		expect(document.querySelector('input[name="boardId"]')).toBeNull();
 	});
+
+	test('takes the saved singleton live without a client-selected target', async () => {
+		render(LiveControls, {
+			tournamentId: 'tournament-1',
+			savedBoard: board,
+			livePublicationId: null
+		});
+
+		await expect.element(page.getByRole('button', { name: 'Take saved board live' })).toBeEnabled();
+		await expect.element(page.getByRole('button', { name: 'Hide live graphic' })).toBeDisabled();
+		expect(document.querySelector('input[name="boardId"]')).toBeNull();
+		expect(
+			document
+				.querySelector('form[action="?tournament=tournament-1&/setLive"] input[name="enabled"]')
+				?.getAttribute('value')
+		).toBe('true');
+		expect(
+			document.querySelector('form[action="?tournament=tournament-1&/resetBoard"] input')
+		).toBeNull();
+	});
+
+	test.each(['tournament-1', 'tournament-2'])(
+		'preserves selected %s through every native winner-board action',
+		async (tournamentId) => {
+			const selectedBoard = { ...board, tournamentId };
+			render(WinnerBoardComposer, {
+				tournament: { id: tournamentId },
+				roster: [
+					{
+						id: 'player-1',
+						displayName: 'EarlGreyTeemo',
+						fullName: 'Earl Grey Teemo',
+						riotId: 'EarlGreyTeemo#sip',
+						imagePath: 'player-images/managed.png'
+					}
+				],
+				activeCatalog: {
+					snapshot: { id: 'snapshot-1' },
+					champions: [
+						{
+							id: 'champion-1',
+							displayName: 'Irelia',
+							iconPath: '/media/catalog-assets/snapshot-1/champions/irelia.png'
+						}
+					],
+					augments: []
+				},
+				savedBoard: selectedBoard
+			});
+			render(LiveControls, {
+				tournamentId,
+				savedBoard: selectedBoard,
+				livePublicationId: 'publication-1'
+			});
+
+			for (const [buttonName, actionName] of [
+				['Save board', 'saveBoard'],
+				['Take saved board live', 'setLive'],
+				['Hide live graphic', 'setLive'],
+				['Reset saved board', 'resetBoard']
+			]) {
+				const button = [...document.querySelectorAll('button')].find((candidate) =>
+					candidate.textContent?.includes(buttonName)
+				);
+				expect(button, `${buttonName} button`).toBeTruthy();
+				const target = new URL(/** @type {HTMLButtonElement} */ (button).form?.action ?? '');
+				expect(target.searchParams.get('tournament')).toBe(tournamentId);
+				expect(target.searchParams.has(`/${actionName}`)).toBe(true);
+			}
+		}
+	);
 });
 
 describe('catalog manager progress', () => {
