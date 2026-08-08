@@ -24,6 +24,17 @@ Created from the 2026-08-08 merge-readiness audit of `feat/manual-winner-graphic
   - Keep the existing compressed-size, entry-count, path, symlink, encryption, and nested-archive checks.
   - Add a test whose declared size is smaller than its actual decompressed content.
 
+- [ ] CRUD pages aren't fully updatable (i.e. Cannot view and fix any data mistakes).
+- [ ] Game Resources table is too packed. Both the champions and the augments is getting packed into the same section of the page.
+  - Use [Tabs](https://www.skeleton.dev/docs/react/framework-components/tabs.md) to split both of those asset types, and force the search to only search resources in the active tab.
+- [ ] Allow fuzzy search the asset name, which would allow searching the full/abbreviated internal LoL Engine ID, Vietnamese text/abbreviations, etc...
+
+- [ ] The Graphics composer should allow searching at the assets and the augments tab (also use Tab for this, it's also too dense).
+- [ ] Completely remove the Saved Draft mechanic, place the live controls directly on the composer.
+  - Place the [Switch](https://www.skeleton.dev/docs/react/framework-components/switch) besides the title, or anywhere that can be quickly accessed.
+  - The Save button only saves a single record of the board state, taking care that, if any assets or player missing, or a new tournament is selected, prompt the user to RESET ALL CURRENT BOARD DATA [Modal](https://www.skeleton.dev/docs/react/tailwind-components/dialogs).
+  - A new Reset button allows the user to Reset all data of the board state, allowing the operator to reset to a new game quickly.
+
 ## Before production rehearsal
 
 - [x] Resolve incomplete admin navigation and separate admin concerns.
