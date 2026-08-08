@@ -13,6 +13,9 @@ const mocks = vi.hoisted(() => ({
 	saveDraftWinnerBoard: vi.fn(),
 	publishWinnerBoard: vi.fn(),
 	hidePublishedBoard: vi.fn(),
+	saveWinnerBoardState: vi.fn(),
+	setWinnerBoardLive: vi.fn(),
+	resetWinnerBoardState: vi.fn(),
 	signOut: vi.fn()
 }));
 
@@ -42,7 +45,10 @@ vi.mock('$lib/server/tournaments/repository.js', () => ({
 vi.mock('$lib/server/winner-boards/repository.js', () => ({
 	hidePublishedBoard: mocks.hidePublishedBoard,
 	publishWinnerBoard: mocks.publishWinnerBoard,
-	saveDraftWinnerBoard: mocks.saveDraftWinnerBoard
+	saveDraftWinnerBoard: mocks.saveDraftWinnerBoard,
+	resetWinnerBoardState: mocks.resetWinnerBoardState,
+	saveWinnerBoardState: mocks.saveWinnerBoardState,
+	setWinnerBoardLive: mocks.setWinnerBoardLive
 }));
 
 import { load } from './+page.server.js';
@@ -150,6 +156,99 @@ describe('admin action results', () => {
 		expect(result).toMatchObject({
 			status: 422,
 			data: { action: 'syncCatalog', message }
+		});
+	});
+
+	test('saves the singleton board without accepting a client board ID', async () => {
+		mocks.saveWinnerBoardState.mockResolvedValue({ id: 'current', title: 'TFT Champion' });
+		const form = new FormData();
+		form.set('boardId', 'legacy-draft-id');
+		form.set('tournamentId', 'tournament-1');
+		form.set('winnerPlayerId', 'player-1');
+		form.set('title', 'TFT Champion');
+		form.append('championIds', 'champion-2');
+		form.append('championIds', 'champion-1');
+		form.set('starLevel:champion-2', '3');
+		form.append('augmentIds', 'augment-2');
+		const request = new Request('https://broadcast.example/admin/graphics', {
+			method: 'POST',
+			body: form
+		});
+
+		const result = await graphicActions.saveBoard(
+			asEvent({
+				locals: { user: { id: 'operator-1' } },
+				request,
+				url: new URL(request.url)
+			})
+		);
+
+		expect(mocks.saveWinnerBoardState).toHaveBeenCalledWith(
+			{},
+			{
+				tournamentId: 'tournament-1',
+				winnerPlayerId: 'player-1',
+				title: 'TFT Champion',
+				champions: [
+					{ catalogChampionId: 'champion-2', starLevel: 3 },
+					{ catalogChampionId: 'champion-1', starLevel: null }
+				],
+				augmentIds: ['augment-2']
+			}
+		);
+		expect(mocks.saveDraftWinnerBoard).not.toHaveBeenCalled();
+		expect(result).toEqual({
+			action: 'saveBoard',
+			board: { id: 'current', title: 'TFT Champion' }
+		});
+	});
+
+	test.each([
+		['true', true],
+		['false', false]
+	])('sets Live to %s from the persisted singleton', async (enabled, parsed) => {
+		mocks.setWinnerBoardLive.mockResolvedValue(parsed);
+		const form = new FormData();
+		form.set('enabled', enabled);
+		form.set('boardId', 'legacy-client-target');
+		const request = new Request('https://broadcast.example/admin/graphics', {
+			method: 'POST',
+			body: form
+		});
+
+		const result = await graphicActions.setLive(
+			asEvent({
+				locals: { user: { id: 'operator-1' } },
+				request,
+				url: new URL(request.url)
+			})
+		);
+
+		expect(mocks.setWinnerBoardLive).toHaveBeenCalledWith({}, parsed);
+		expect(result).toEqual({ action: 'setLive', live: parsed });
+	});
+
+	test('resets the singleton without a client-selected target', async () => {
+		mocks.resetWinnerBoardState.mockResolvedValue({ reset: true, wasLive: true });
+		const form = new FormData();
+		form.set('boardId', 'legacy-client-target');
+		const request = new Request('https://broadcast.example/admin/graphics', {
+			method: 'POST',
+			body: form
+		});
+
+		const result = await graphicActions.resetBoard(
+			asEvent({
+				locals: { user: { id: 'operator-1' } },
+				request,
+				url: new URL(request.url)
+			})
+		);
+
+		expect(mocks.resetWinnerBoardState).toHaveBeenCalledWith({});
+		expect(result).toEqual({
+			action: 'resetBoard',
+			result: { reset: true, wasLive: true }
 		});
 	});
 });

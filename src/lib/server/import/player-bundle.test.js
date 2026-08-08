@@ -1,7 +1,10 @@
 import { zipSync } from 'fflate';
-import { describe, expect, test } from 'vitest';
+import yauzl from 'yauzl';
+import { afterEach, describe, expect, test, vi } from 'vitest';
 import { normalizeRiotId } from './riot-id.js';
 import { inspectPlayerBundle } from './player-bundle.js';
+
+const MAX_EXPANDED_BYTES = 100 * 1024 * 1024;
 
 const ONE_BY_ONE_PNG = Uint8Array.from([
 	137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0,
@@ -52,12 +55,61 @@ function setUnixSymlink(bytes) {
 	return bytes;
 }
 
-/** @param {Uint8Array} bytes @param {number} size */
-function setDeclaredExpandedSize(bytes, size) {
-	const offset = centralDirectoryOffset(bytes);
+/** @param {Uint8Array} bytes @param {number} size @param {number} [index] */
+function setDeclaredExpandedSize(bytes, size, index = 0) {
+	const offset = centralDirectoryOffset(bytes, index);
 	writeUint32LE(bytes, offset + 24, size);
 	return bytes;
 }
+
+/** @param {Record<string, Uint8Array>} entries @param {number | number[]} declaredSizes */
+function zipWithDeclaredSize(entries, declaredSizes) {
+	const bytes = bundle(entries);
+	const sizes = Array.isArray(declaredSizes)
+		? declaredSizes
+		: Array.from({ length: Object.keys(entries).length }, () => declaredSizes);
+	for (const [index, size] of sizes.entries()) setDeclaredExpandedSize(bytes, size, index);
+	return bytes;
+}
+
+/** @param {number} size */
+function paddedPng(size) {
+	const bytes = new Uint8Array(size);
+	bytes.set(ONE_BY_ONE_PNG.subarray(0, Math.min(size, ONE_BY_ONE_PNG.length)));
+	return bytes;
+}
+
+function trackZipLifecycle() {
+	/** @type {Array<{ close: import('vitest').Mock, streams: Array<{ destroy: import('vitest').Mock }> }>} */
+	const opened = [];
+	const fromBuffer = yauzl.fromBuffer.bind(yauzl);
+	vi.spyOn(yauzl, 'fromBuffer').mockImplementation((bytes, options, callback) => {
+		fromBuffer(bytes, options, (error, zip) => {
+			if (!zip) {
+				callback(error, zip);
+				return;
+			}
+			const close = vi.fn(zip.close.bind(zip));
+			const streams = [];
+			zip.close = close;
+			const openReadStream = zip.openReadStream.bind(zip);
+			zip.openReadStream = (entry, streamCallback) => {
+				openReadStream(entry, (streamError, stream) => {
+					if (stream) {
+						const destroy = vi.spyOn(stream, 'destroy');
+						streams.push({ destroy });
+					}
+					streamCallback(streamError, stream);
+				});
+			};
+			opened.push({ close, streams });
+			callback(error, zip);
+		});
+	});
+	return opened;
+}
+
+afterEach(() => vi.restoreAllMocks());
 
 describe('normalizeRiotId', () => {
 	test('normalizes whitespace while preserving display casing', () => {
@@ -189,6 +241,71 @@ describe('inspectPlayerBundle', () => {
 			101 * 1024 * 1024
 		);
 		await expect(inspectPlayerBundle(bytes, [])).rejects.toThrow('ZIP expanded size is too large');
+	});
+
+	test('rejects without a buffered result and destroys the entry stream over 100 MiB', async () => {
+		const opened = trackZipLifecycle();
+
+		await expect(
+			inspectPlayerBundle(
+				zipWithDeclaredSize(
+					{
+						'players.csv': csv(['A,Name,PlayerOne#tag']),
+						'player_images/playerone_tag.png': paddedPng(MAX_EXPANDED_BYTES + 1)
+					},
+					1
+				),
+				[]
+			)
+		).rejects.toThrow('ZIP expanded size is too large');
+
+		const streamedZip = opened.find(({ streams }) => streams.length > 0);
+		expect(streamedZip?.close).toHaveBeenCalledTimes(1);
+		expect(streamedZip?.streams).toHaveLength(2);
+		expect(streamedZip?.streams.at(-1)?.destroy).toHaveBeenCalledWith(
+			expect.objectContaining({ message: 'ZIP expanded size is too large' })
+		);
+	});
+
+	test('rejects aggregate emitted bytes over 100 MiB and closes the active ZIP once', async () => {
+		const opened = trackZipLifecycle();
+		const csvBytes = csv(['A,Name,PlayerOne#tag']);
+		const firstImageSize = 50 * 1024 * 1024;
+		const secondImageSize = MAX_EXPANDED_BYTES - csvBytes.length - firstImageSize + 1;
+
+		await expect(
+			inspectPlayerBundle(
+				zipWithDeclaredSize(
+					{
+						'players.csv': csvBytes,
+						'player_images/first_tag.png': paddedPng(firstImageSize),
+						'player_images/second_tag.png': paddedPng(secondImageSize)
+					},
+					1
+				),
+				[]
+			)
+		).rejects.toThrow('ZIP expanded size is too large');
+
+		const streamedZip = opened.find(({ streams }) => streams.length > 0);
+		expect(streamedZip?.close).toHaveBeenCalledTimes(1);
+		expect(streamedZip?.streams.at(-1)?.destroy).toHaveBeenCalledWith(
+			expect.objectContaining({ message: 'ZIP expanded size is too large' })
+		);
+	});
+
+	test('accepts content whose actual emitted total is exactly 100 MiB', async () => {
+		const csvBytes = csv(['A,Name,PlayerOne#tag']);
+		const preview = await inspectPlayerBundle(
+			bundle({
+				'players.csv': csvBytes,
+				'player_images/playerone_tag.png': paddedPng(MAX_EXPANDED_BYTES - csvBytes.length)
+			}),
+			[]
+		);
+
+		expect(preview.rows).toHaveLength(1);
+		expect(preview.rows[0]).toMatchObject({ riotId: 'PlayerOne#tag' });
 	});
 
 	test('reports unmatched, duplicate, and invalid image files without blocking valid CSV rows', async () => {
