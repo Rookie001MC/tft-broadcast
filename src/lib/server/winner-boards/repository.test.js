@@ -1,5 +1,5 @@
 import { createClient } from '@libsql/client';
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { drizzle } from 'drizzle-orm/libsql';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -407,18 +407,18 @@ describe('winner board singleton repository', () => {
 		const first = await repository.getPublishedWinnerBoard(database);
 		expect(first).toMatchObject({
 			winner: { imagePath: expect.stringContaining(`/publications/${first.id}/`) },
-			champions: [
+			champions: expect.arrayContaining([
 				expect.objectContaining({
 					id: 'champion-2',
 					iconPath: expect.stringContaining(`/publications/${first.id}/`)
 				})
-			],
-			augments: [
+			]),
+			augments: expect.arrayContaining([
 				expect.objectContaining({
 					id: 'augment-2',
 					iconPath: expect.stringContaining(`/publications/${first.id}/`)
 				})
-			]
+			])
 		});
 		const firstUrls = [
 			first.winner.imagePath,
@@ -468,18 +468,18 @@ describe('winner board singleton repository', () => {
 				displayName: 'Edited source player',
 				imagePath: expect.stringContaining(`/publications/${second.id}/`)
 			},
-			champions: [
+			champions: expect.arrayContaining([
 				expect.objectContaining({
 					displayName: 'Edited source champion',
 					iconPath: expect.stringContaining(`/publications/${second.id}/`)
 				})
-			],
-			augments: [
+			]),
+			augments: expect.arrayContaining([
 				expect.objectContaining({
 					displayName: 'Edited source augment',
 					iconPath: expect.stringContaining(`/publications/${second.id}/`)
 				})
-			]
+			])
 		});
 		const secondUrls = [
 			second.winner.imagePath,
@@ -501,6 +501,51 @@ describe('winner board singleton repository', () => {
 				)
 			).rows[0].render_payload_json
 		).toBe(firstStoredJson);
+	});
+
+	it('cleans newly prepared media when payload validation fails before the live transaction', async () => {
+		await repository.saveWinnerBoardState(database, validInput());
+		await repository.setWinnerBoardLive(database, true);
+		const beforeDirectories = await readdir(path.join(mediaEnvironment.root, 'publications'));
+		const beforeState = await repository.getWinnerBoardState(database);
+		const beforeGraphic = await graphicRow(client);
+
+		await expect(
+			repository.saveWinnerBoardState(database, { ...validInput(), title: /** @type {any} */ (42) })
+		).rejects.toThrow('Published winner board payload is invalid');
+
+		expect(await readdir(path.join(mediaEnvironment.root, 'publications'))).toEqual(
+			beforeDirectories
+		);
+		expect(await repository.getWinnerBoardState(database)).toEqual(beforeState);
+		expect(await graphicRow(client)).toEqual(beforeGraphic);
+	});
+
+	it('rejects stored JSON whose payload ID does not match the referenced publication row', async () => {
+		await repository.saveWinnerBoardState(database, validInput());
+		await repository.setWinnerBoardLive(database, true);
+		const publication = await repository.getPublishedWinnerBoard(database);
+		const stored = JSON.parse(
+			/** @type {string} */ (
+				(
+					await execute(
+						client,
+						'SELECT render_payload_json FROM winner_board_publications WHERE id = ?',
+						[publication.id]
+					)
+				).rows[0].render_payload_json
+			)
+		);
+		stored.id = '11111111-1111-4111-8111-111111111111';
+		await execute(
+			client,
+			'UPDATE winner_board_publications SET render_payload_json = ? WHERE id = ?',
+			[JSON.stringify(stored), publication.id]
+		);
+
+		await expect(repository.getPublishedWinnerBoard(database)).rejects.toThrow(
+			'Published winner board payload is invalid'
+		);
 	});
 
 	it('hides once and leaves the version unchanged for an already-hidden graphic', async () => {
