@@ -83,17 +83,27 @@ function trackZipLifecycle() {
 	/** @type {Array<{ close: import('vitest').Mock, streams: Array<{ destroy: import('vitest').Mock }> }>} */
 	const opened = [];
 	const fromBuffer = yauzl.fromBuffer.bind(yauzl);
-	vi.spyOn(yauzl, 'fromBuffer').mockImplementation((bytes, options, callback) => {
+	/**
+	 * @param {Buffer} bytes
+	 * @param {import('yauzl').Options} options
+	 * @param {(error: Error | null, zip: import('yauzl').ZipFile) => void} callback
+	 */
+	const trackedFromBuffer = (bytes, options, callback) => {
 		fromBuffer(bytes, options, (error, zip) => {
 			if (!zip) {
 				callback(error, zip);
 				return;
 			}
 			const close = vi.fn(zip.close.bind(zip));
+			/** @type {Array<{ destroy: import('vitest').Mock }>} */
 			const streams = [];
 			zip.close = close;
 			const openReadStream = zip.openReadStream.bind(zip);
-			zip.openReadStream = (entry, streamCallback) => {
+			/**
+			 * @param {import('yauzl').Entry} entry
+			 * @param {(error: Error | null, stream: import('node:stream').Readable) => void} streamCallback
+			 */
+			const trackedOpenReadStream = (entry, streamCallback) => {
 				openReadStream(entry, (streamError, stream) => {
 					if (stream) {
 						const destroy = vi.spyOn(stream, 'destroy');
@@ -102,10 +112,16 @@ function trackZipLifecycle() {
 					streamCallback(streamError, stream);
 				});
 			};
+			zip.openReadStream = /** @type {typeof zip.openReadStream} */ (
+				/** @type {unknown} */ (trackedOpenReadStream)
+			);
 			opened.push({ close, streams });
 			callback(error, zip);
 		});
-	});
+	};
+	vi.spyOn(yauzl, 'fromBuffer').mockImplementation(
+		/** @type {typeof yauzl.fromBuffer} */ (/** @type {unknown} */ (trackedFromBuffer))
+	);
 	return opened;
 }
 
