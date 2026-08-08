@@ -26,6 +26,16 @@ export function resolveContainedPath(root, relativePath) {
 }
 
 /**
+ * Read an app-owned relative media path after containing it to the configured
+ * media root. Callers remain responsible for validating their path namespace.
+ *
+ * @param {{ mediaRoot: string, relativePath: string }} input
+ */
+export async function readContainedManagedFile({ mediaRoot, relativePath }) {
+	return readFile(resolveContainedPath(mediaRoot, relativePath));
+}
+
+/**
  * @param {{ mediaRoot: string, playerId: string, bytes: Uint8Array, mime: string }} input
  */
 export async function writeManagedPlayerImage({ mediaRoot, playerId, bytes, mime }) {
@@ -60,7 +70,10 @@ export async function readManagedPlayerImage({ mediaRoot, relativePath }) {
 	if (!normalized.startsWith('player-images/'))
 		throw new Error('Invalid managed player image path');
 	const imageRoot = resolveContainedPath(mediaRoot, 'player-images');
-	return readFile(resolveContainedPath(imageRoot, normalized.slice('player-images/'.length)));
+	return readContainedManagedFile({
+		mediaRoot: imageRoot,
+		relativePath: normalized.slice('player-images/'.length)
+	});
 }
 
 /** @param {string} mediaRoot @param {string} relativePath */

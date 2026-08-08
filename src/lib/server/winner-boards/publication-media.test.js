@@ -88,6 +88,7 @@ describe('publication media', () => {
 			filenameFromUrl(prepared.augmentImageUrls[0])
 		];
 		expect(new Set(generatedNames).size).toBe(3);
+		expect(generatedNames.every((filename) => filename.includes(FIRST_PUBLICATION_ID))).toBe(true);
 
 		const winner = await readPublicationMedia({
 			mediaRoot,
@@ -155,6 +156,35 @@ describe('publication media', () => {
 		).toBeNull();
 	});
 
+	test.each([
+		{
+			label: 'player',
+			winnerImagePath: 'player-images/../outside.png',
+			championIconPaths: []
+		},
+		{
+			label: 'catalog',
+			winnerImagePath: null,
+			championIconPaths: ['/media/catalog-assets/../outside.png']
+		}
+	])('rejects $label source traversal even when escaped bytes are a valid image', async (input) => {
+		await writeFile(path.join(mediaRoot, 'outside.png'), PNG_A);
+		const { preparePublicationMedia } = await publicationMediaApi();
+
+		await expect(
+			preparePublicationMedia({
+				mediaRoot,
+				publicationId: FIRST_PUBLICATION_ID,
+				winnerImagePath: input.winnerImagePath,
+				championIconPaths: input.championIconPaths,
+				augmentIconPaths: []
+			})
+		).rejects.toThrow(/invalid|unsupported/i);
+		expect(
+			await stat(path.join(mediaRoot, 'publications', FIRST_PUBLICATION_ID)).catch(() => null)
+		).toBeNull();
+	});
+
 	test('discards unreferenced media after a publication transaction failure', async () => {
 		const playerPath = 'player-images/player-one.png';
 		await mkdir(path.join(mediaRoot, path.dirname(playerPath)), { recursive: true });
@@ -176,6 +206,17 @@ describe('publication media', () => {
 		expect(
 			await stat(path.join(mediaRoot, prepared.relativeDirectory)).catch(() => null)
 		).toBeNull();
+	});
+
+	test('refuses to discard paths outside an exact publication UUID directory', async () => {
+		const sentinel = path.join(mediaRoot, 'keep.txt');
+		await writeFile(sentinel, 'keep');
+		const { discardPublicationMedia } = await publicationMediaApi();
+
+		await expect(
+			discardPublicationMedia({ mediaRoot, relativeDirectory: 'publications/../keep.txt' })
+		).rejects.toThrow('Invalid publication media directory');
+		expect(await stat(sentinel)).toBeTruthy();
 	});
 
 	test('returns a generic missing-media error without exposing the managed root', async () => {
