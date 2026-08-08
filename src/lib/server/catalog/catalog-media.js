@@ -47,6 +47,20 @@ function safeStem(value) {
 	return stem.slice(0, 100) || 'asset';
 }
 
+/**
+ * Validate a correction-owned image path before resolving it under MEDIA_ROOT.
+ *
+ * @param {string} value
+ */
+export function assertCatalogCorrectionImagePath(value) {
+	if (typeof value !== 'string' || !value.trim())
+		throw new Error('Catalog correction image path must be a non-empty string');
+	const normalized = safeRelativePath(value);
+	if (normalized !== value || !normalized.startsWith('catalog-corrections/'))
+		throw new Error('Catalog correction image path must be controlled media');
+	return normalized;
+}
+
 /** @param {string} mediaRoot */
 export async function cleanupStaleCatalogStaging(mediaRoot) {
 	const stagingRoot = resolveContainedPath(mediaRoot, 'catalog-staging');
@@ -357,6 +371,40 @@ export async function copyExtractedCatalogImages({
 		});
 	}
 	return installed;
+}
+
+/**
+ * Copy correction-owned images into the candidate snapshot. Upstream images
+ * are already staged and use the __SNAPSHOT__ placeholder, so only the
+ * controlled catalog-corrections namespace is accepted here.
+ *
+ * @param {{ assets: CatalogAsset[], kind: 'champions' | 'augments', mediaRoot: string, destination: string }} input
+ */
+export async function stageCatalogCorrectionImages({ assets, kind, mediaRoot, destination }) {
+	await mkdir(destination, { recursive: true });
+	const staged = [];
+	for (let index = 0; index < assets.length; index += 1) {
+		const asset = assets[index];
+		if (!asset.iconPath || !asset.iconPath.startsWith('catalog-corrections/')) {
+			staged.push(asset);
+			continue;
+		}
+		const relativePath = assertCatalogCorrectionImagePath(asset.iconPath);
+		const source = resolveContainedPath(mediaRoot, relativePath);
+		const details = await stat(source);
+		if (!details.isFile() || details.size > MAX_CATALOG_IMAGE_BYTES)
+			throw new Error('Catalog correction image exceeds the size limit');
+		const detected = await fileTypeFromFile(source);
+		const extension = detected ? SUPPORTED_IMAGES.get(detected.mime) : null;
+		if (!extension) throw new Error('Catalog correction image has an unsupported file type');
+		const filename = `manual-${index}-${safeStem(asset.externalId)}${extension}`;
+		await copyFile(source, path.join(destination, filename), fsConstants.COPYFILE_EXCL);
+		staged.push({
+			...asset,
+			iconPath: `/media/catalog-assets/__SNAPSHOT__/${kind}/${filename}`
+		});
+	}
+	return staged;
 }
 
 /** @param {string} root */

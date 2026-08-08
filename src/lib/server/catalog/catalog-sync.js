@@ -7,6 +7,7 @@ import { catalogAugments, catalogChampions, catalogSnapshots } from '../db/schem
 import { tournaments } from '../db/schema/tournaments.js';
 import { resolveContainedPath } from '../media/player-images.js';
 import { catalogArchiveLimits } from './catalog-config.js';
+import { applyCatalogCorrections, loadMatchingCatalogCorrections } from './catalog-corrections.js';
 import {
 	cleanupStaleCatalogStaging,
 	copyExtractedCatalogImages,
@@ -18,7 +19,8 @@ import {
 	pinSnapshotPath,
 	promoteCatalogAssets,
 	removeCatalogAssets,
-	removeCatalogStaging
+	removeCatalogStaging,
+	stageCatalogCorrectionImages
 } from './catalog-media.js';
 
 const CDRAGON_ROOT = 'https://raw.communitydragon.org';
@@ -26,8 +28,8 @@ const DDRAGON_ROOT = 'https://ddragon.leagueoflegends.com';
 
 /** @typedef {'resolving' | 'downloading' | 'extracting' | 'installing' | 'activating'} CatalogSyncPhase */
 /** @typedef {{ type: 'progress', phase: CatalogSyncPhase, message: string, completed?: number, total?: number, percent: number | null }} CatalogProgress */
-/** @typedef {{ externalId: string, displayName: string, iconPath: string | null, tier: number | null, metadataJson: string }} CatalogAsset */
-/** @typedef {{ source: 'communitydragon' | 'datadragon', sourceUrl: string, locale: string, patchLabel: string, setLabel: string | null, champions: CatalogAsset[], augments: CatalogAsset[], warning: string | null }} CatalogCandidate */
+/** @typedef {{ externalId: string, displayName: string, iconPath: string | null, tier: number | null, metadataJson: string, correctionId?: string | null, isExcluded?: boolean, provenanceJson?: string }} CatalogAsset */
+/** @typedef {{ source: 'communitydragon' | 'datadragon', sourceUrl: string, locale: string, patchLabel: string, setLabel: string | null, canonicalSetKey: string | null, champions: CatalogAsset[], augments: CatalogAsset[], warning: string | null }} CatalogCandidate */
 /** @typedef {'communitydragon' | 'datadragon'} CatalogSource */
 /** @typedef {'unavailable' | 'size_limit' | 'invalid_asset' | 'invalid_catalog' | 'internal'} CatalogFailureCategory */
 /** @typedef {{ source: CatalogSource, locale: string, phase: CatalogSyncPhase, category: CatalogFailureCategory, cause: string }} CatalogAttemptFailure */
@@ -217,6 +219,7 @@ function normalizeCdragon(payload, patch) {
 	});
 	return {
 		setLabel: nonEmptyString(selectedSet.name) ?? `Set ${selectedSet.number}`,
+		canonicalSetKey: /** @type {string} */ (selectedSet.mutator),
 		champions,
 		augments
 	};
@@ -429,6 +432,7 @@ async function tryCdragon({
 				locale: candidateLocale,
 				patchLabel: resolvedPatch,
 				setLabel: normalized.setLabel,
+				canonicalSetKey: normalized.canonicalSetKey,
 				champions,
 				augments,
 				warning: combineWarnings([
@@ -615,6 +619,7 @@ async function tryDdragon({
 					locale: candidateLocale,
 					patchLabel: version,
 					setLabel: null,
+					canonicalSetKey: null,
 					champions: installedChampions,
 					augments,
 					warning: combineWarnings([
@@ -770,6 +775,44 @@ export async function syncAndActivateCatalog({
 				`CommunityDragon failed during ${communityFailure.phase}; Data Dragon was used instead.`,
 				candidate.warning
 			]);
+		const corrections = await loadMatchingCatalogCorrections(db, {
+			canonicalSetKey: candidate.canonicalSetKey,
+			patchLabel: candidate.patchLabel
+		});
+		try {
+			candidate.champions = applyCatalogCorrections({
+				resources: candidate.champions,
+				corrections,
+				resourceKind: 'champion',
+				canonicalSetKey: candidate.canonicalSetKey,
+				patchLabel: candidate.patchLabel
+			});
+			candidate.augments = applyCatalogCorrections({
+				resources: candidate.augments,
+				corrections,
+				resourceKind: 'augment',
+				canonicalSetKey: candidate.canonicalSetKey,
+				patchLabel: candidate.patchLabel
+			});
+		} catch {
+			throw new CatalogSyncError(
+				'Catalog correction materialization failed because a matching correction is invalid. The prior snapshot remains active.',
+				attempts
+			);
+		}
+		const candidateAssets = path.join(syncRoot, candidate.source, 'assets');
+		candidate.champions = await stageCatalogCorrectionImages({
+			assets: candidate.champions,
+			kind: 'champions',
+			mediaRoot,
+			destination: path.join(candidateAssets, 'champions')
+		});
+		candidate.augments = await stageCatalogCorrectionImages({
+			assets: candidate.augments,
+			kind: 'augments',
+			mediaRoot,
+			destination: path.join(candidateAssets, 'augments')
+		});
 		candidate.champions = candidate.champions.map((asset) => ({
 			...asset,
 			iconPath: asset.iconPath ? pinSnapshotPath(asset.iconPath, snapshotId) : null
@@ -791,6 +834,7 @@ export async function syncAndActivateCatalog({
 				locale: candidate.locale,
 				patchLabel: candidate.patchLabel,
 				setLabel: candidate.setLabel,
+				canonicalSetKey: candidate.canonicalSetKey,
 				syncedAt,
 				isAvailable: true,
 				metadataJson: JSON.stringify({ warning: candidate.warning })

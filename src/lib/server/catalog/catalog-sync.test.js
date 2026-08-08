@@ -202,8 +202,8 @@ describe('catalog synchronization', () => {
 			'DROP TABLE IF EXISTS catalog_corrections',
 			`CREATE TABLE catalog_snapshots (id TEXT PRIMARY KEY NOT NULL, source TEXT NOT NULL, source_url TEXT NOT NULL, locale TEXT NOT NULL, patch_label TEXT NOT NULL, set_label TEXT, canonical_set_key TEXT, synced_at INTEGER NOT NULL, is_available INTEGER DEFAULT 0 NOT NULL, metadata_json TEXT NOT NULL)`,
 			`CREATE TABLE catalog_corrections (id TEXT PRIMARY KEY NOT NULL, canonical_set_key TEXT, patch_label TEXT NOT NULL, resource_kind TEXT NOT NULL, operation TEXT NOT NULL, target_external_id TEXT, manual_external_id TEXT, display_name_override TEXT, tier_override INTEGER, image_path_override TEXT, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)`,
-			`CREATE TABLE catalog_champions (id TEXT PRIMARY KEY NOT NULL, catalog_snapshot_id TEXT NOT NULL REFERENCES catalog_snapshots(id) ON DELETE CASCADE, external_id TEXT NOT NULL, display_name TEXT NOT NULL, icon_path TEXT, tier INTEGER, metadata_json TEXT NOT NULL, correction_id TEXT REFERENCES catalog_corrections(id), is_excluded INTEGER DEFAULT 0 NOT NULL, provenance_json TEXT DEFAULT '{"source":"upstream"}' NOT NULL, UNIQUE(catalog_snapshot_id, external_id))`,
-			`CREATE TABLE catalog_augments (id TEXT PRIMARY KEY NOT NULL, catalog_snapshot_id TEXT NOT NULL REFERENCES catalog_snapshots(id) ON DELETE CASCADE, external_id TEXT NOT NULL, display_name TEXT NOT NULL, icon_path TEXT, tier INTEGER, metadata_json TEXT NOT NULL, correction_id TEXT REFERENCES catalog_corrections(id), is_excluded INTEGER DEFAULT 0 NOT NULL, provenance_json TEXT DEFAULT '{"source":"upstream"}' NOT NULL, UNIQUE(catalog_snapshot_id, external_id))`,
+			`CREATE TABLE catalog_champions (id TEXT PRIMARY KEY NOT NULL, catalog_snapshot_id TEXT NOT NULL REFERENCES catalog_snapshots(id) ON DELETE CASCADE, external_id TEXT NOT NULL, display_name TEXT NOT NULL, icon_path TEXT, tier INTEGER, metadata_json TEXT NOT NULL, correction_id TEXT REFERENCES catalog_corrections(id) ON DELETE SET NULL, is_excluded INTEGER DEFAULT 0 NOT NULL, provenance_json TEXT DEFAULT '{"source":"upstream"}' NOT NULL, UNIQUE(catalog_snapshot_id, external_id))`,
+			`CREATE TABLE catalog_augments (id TEXT PRIMARY KEY NOT NULL, catalog_snapshot_id TEXT NOT NULL REFERENCES catalog_snapshots(id) ON DELETE CASCADE, external_id TEXT NOT NULL, display_name TEXT NOT NULL, icon_path TEXT, tier INTEGER, metadata_json TEXT NOT NULL, correction_id TEXT REFERENCES catalog_corrections(id) ON DELETE SET NULL, is_excluded INTEGER DEFAULT 0 NOT NULL, provenance_json TEXT DEFAULT '{"source":"upstream"}' NOT NULL, UNIQUE(catalog_snapshot_id, external_id))`,
 			`CREATE TABLE tournaments (id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, slug TEXT NOT NULL UNIQUE, active_catalog_snapshot_id TEXT REFERENCES catalog_snapshots(id) ON DELETE SET NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)`,
 			`CREATE TABLE players (id TEXT PRIMARY KEY NOT NULL, riot_id TEXT, riot_id_key TEXT UNIQUE, riot_game_name TEXT, riot_tagline TEXT, full_name TEXT NOT NULL, display_name TEXT NOT NULL, image_path TEXT, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)`,
 			`CREATE TABLE winner_board_publications (id TEXT PRIMARY KEY NOT NULL, source_state_updated_at INTEGER NOT NULL, graphic_version INTEGER NOT NULL UNIQUE, render_payload_json TEXT NOT NULL, media_directory TEXT NOT NULL UNIQUE, created_at INTEGER NOT NULL)`,
@@ -867,6 +867,74 @@ describe('catalog synchronization', () => {
 			{ canonical_set_key: 'TFTSet13' },
 			{ canonical_set_key: 'TFTSet14' }
 		]);
+	});
+
+	test('preserves the active snapshot and removes staging when a manual image is missing', async () => {
+		const now = Date.parse('2026-08-08T00:00:00.000Z');
+		await client.batch([
+			{
+				sql: `INSERT INTO catalog_snapshots (id, source, source_url, locale, patch_label, set_label, canonical_set_key, synced_at, is_available, metadata_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				args: [
+					'prior-snapshot',
+					'communitydragon',
+					'https://example.test/prior.json',
+					'en_us',
+					'14.9',
+					'Set 13',
+					'TFTSet13',
+					now,
+					1,
+					'{}'
+				]
+			},
+			{
+				sql: `INSERT INTO catalog_corrections (id, canonical_set_key, patch_label, resource_kind, operation, manual_external_id, display_name_override, image_path_override, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				args: [
+					'missing-manual-image',
+					'TFTSet13',
+					'14.10',
+					'champion',
+					'add',
+					'TFT13_ManualMissing',
+					'Manual Missing',
+					'catalog-corrections/missing.png',
+					now,
+					now
+				]
+			}
+		]);
+		await client.execute(
+			"UPDATE tournaments SET active_catalog_snapshot_id = 'prior-snapshot' WHERE id = 'tournament-1'"
+		);
+		const catalogUrl = `${CDRAGON_ROOT}/14.10/cdragon/tft/en_us.json`;
+
+		await expect(
+			syncAndActivateCatalog({
+				db: database,
+				tournamentId: 'tournament-1',
+				patch: '14.10',
+				locale: 'en_us',
+				mediaRoot,
+				fetchJson: fixtureJson(
+					{ [catalogUrl]: cdragonFixture({ icon: false, augment: false }) },
+					[]
+				),
+				fetchResponse: fixtureResponse({})
+			})
+		).rejects.toThrow(/prior snapshot remains active/i);
+		expect(
+			(await client.execute('SELECT active_catalog_snapshot_id FROM tournaments')).rows
+		).toEqual([{ active_catalog_snapshot_id: 'prior-snapshot' }]);
+		expect((await client.execute('SELECT id FROM catalog_snapshots')).rows).toEqual([
+			{ id: 'prior-snapshot' }
+		]);
+		expect(await readdir(path.join(mediaRoot, 'catalog-staging'))).toEqual([]);
+		expect(
+			await readdir(path.join(mediaRoot, 'catalog-assets')).catch((error) => {
+				if (error instanceof Error && 'code' in error && error.code === 'ENOENT') return [];
+				throw error;
+			})
+		).toEqual([]);
 	});
 
 	test('preserves the active snapshot when applying a malformed correction fails', async () => {
