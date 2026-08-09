@@ -108,6 +108,16 @@ async function seedCatalog(database, tournamentId) {
 					'{}'
 				]
 			},
+			...[
+				['e2e-augment-two', 'TFT16_TestAugmentTwo', 'Test Augment Two'],
+				['e2e-augment-three', 'TFT16_TestAugmentThree', 'Test Augment Three'],
+				['e2e-augment-four', 'TFT16_TestAugmentFour', 'Test Augment Four']
+			].map(([id, externalId, displayName]) => ({
+				sql: `INSERT INTO catalog_augments
+					(id, catalog_snapshot_id, external_id, display_name, icon_path, tier, metadata_json)
+					VALUES (?, ?, ?, ?, ?, ?, ?)`,
+				args: [id, 'e2e-snapshot', externalId, displayName, null, 2, '{}']
+			})),
 			{
 				sql: 'UPDATE tournaments SET active_catalog_snapshot_id = ?, updated_at = ? WHERE id = ?',
 				args: ['e2e-snapshot', now, tournamentId]
@@ -299,6 +309,11 @@ test('operator workflow publishes and hides an already-open broadcast source', a
 			exact: true
 		})
 	).toBeVisible();
+	await admin.getByRole('tab', { name: /Augments/ }).click();
+	await admin.getByLabel('Search augments').fill('TFT16_TestAugment');
+	const augmentCatalog = admin.getByRole('table', { name: 'Augment catalog resources' });
+	await expect(augmentCatalog.getByText('Test Augment', { exact: true })).toBeVisible();
+	await expect(augmentCatalog.getByText('Test Champion', { exact: true })).toHaveCount(0);
 
 	await admin.goto(`/admin/graphics?tournament=${tournamentId}`);
 
@@ -315,8 +330,26 @@ test('operator workflow publishes and hides an already-open broadcast source', a
 
 	await admin.getByLabel('Graphic title').fill('Grand Final Winner');
 	await admin.getByLabel('Select Test Champion').check();
+	await admin.getByLabel('Search champions').fill('does-not-match');
+	await expect(admin.getByLabel('Select Test Champion')).toHaveCount(0);
+	await expect(admin.getByLabel('Selected champions')).toContainText('Test Champion');
+	await expect(
+		admin.getByTestId('winner-graphic-frame').getByText('Test Champion', { exact: true })
+	).toBeVisible();
+	await admin.getByLabel('Search champions').fill('');
 	await admin.getByLabel('Test Champion star level').selectOption('3');
-	await admin.getByRole('checkbox', { name: 'Test Augment' }).check();
+	await admin.getByRole('tab', { name: /Augments/ }).click();
+	await admin.getByRole('checkbox', { name: 'Test Augment', exact: true }).check();
+	await admin.getByRole('checkbox', { name: 'Test Augment Two', exact: true }).check();
+	await admin.getByRole('checkbox', { name: 'Test Augment Three', exact: true }).check();
+	await expect(
+		admin.getByRole('checkbox', { name: 'Test Augment Four', exact: true })
+	).toBeDisabled();
+	await admin.getByRole('checkbox', { name: 'Test Augment Two', exact: true }).uncheck();
+	await expect(
+		admin.getByRole('checkbox', { name: 'Test Augment Four', exact: true })
+	).toBeEnabled();
+	await admin.getByRole('checkbox', { name: 'Test Augment Three', exact: true }).uncheck();
 	await expect(admin.getByText('Grand Final Winner', { exact: true })).toBeVisible();
 	await expect(admin.getByText('★★★', { exact: true })).toBeVisible();
 	const liveSwitch = admin.getByRole('switch', { name: 'Live graphic' });

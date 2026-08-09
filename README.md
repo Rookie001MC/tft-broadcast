@@ -65,7 +65,7 @@ Catalog synchronization streams newline-delimited progress from `/admin/game-res
 1. Select or create a tournament. Tournament names/slugs and reusable player identities remain maintainable.
 2. Sync/pin its static TFT catalog. Operators can add image-optional manual resources, override upstream details, and hide or restore resources; corrections retain their catalog scope and provenance.
 3. Create or ZIP-import players, then add and order the tournament roster. Import confirmation commits the exact preview once; the committed terminal summary remains visible after reload and cannot be confirmed again. Player images can be safely replaced or removed later.
-4. Pick the winner, champions/star levels, and optional augments, then inspect the exact preview.
+4. Pick the winner, champions/star levels, and optional augments, then inspect the exact preview. Catalog and graphics-candidate searches accept display names, accent-insensitive Vietnamese, abbreviations/initials, and engine-ID forms. They do not persist aliases or search across resource-type tabs.
 5. **Save is the deliberate gate.** Local changes can update the preview, but Live-on remains unavailable until they are saved. Saving while hidden replaces the single saved board without publishing it.
 6. Switch Live on to publish the saved data. Already-open broadcast clients update within roughly two seconds. Saving again while live creates and activates a new immutable publication; older publications are not rewritten by later player or catalog maintenance.
 7. Switch Live off to return `/gfx` to a transparent canvas without discarding the saved board.
