@@ -403,15 +403,21 @@
 											>
 											<select
 												class="select-sm select"
-												value={composer.starLevels[champion.id] ?? ''}
 												onchange={(event) =>
 													(composer.starLevels[champion.id] = event.currentTarget.value)}
 												disabled={!selected}
 												aria-label={`${champion.displayName} star level`}
 											>
-												<option value="">Stars</option><option value="1">1 ★</option><option
-													value="2">2 ★</option
-												><option value="3">3 ★</option>
+												<option value="" selected={composer.starLevels[champion.id] === ''}>Stars</option>
+												<option value="1" selected={composer.starLevels[champion.id] === '1' || composer.starLevels[champion.id] === 1}>
+													1 ★
+												</option>
+												<option value="2" selected={composer.starLevels[champion.id] === '2' || composer.starLevels[champion.id] === 2}>
+													2 ★
+												</option>
+												<option value="3" selected={composer.starLevels[champion.id] === '3' || composer.starLevels[champion.id] === 3}>
+													3 ★
+												</option>
 											</select>
 										</div>
 									{:else}<p class="text-sm text-surface-500">
