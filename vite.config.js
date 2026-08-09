@@ -3,6 +3,7 @@ import { playwright } from '@vitest/browser-playwright';
 import tailwindcss from '@tailwindcss/vite';
 import adapter from '@sveltejs/adapter-node';
 import { sveltekit } from '@sveltejs/kit/vite';
+import devToolsJson from 'vite-plugin-devtools-json';
 
 function browserTestMediaStub() {
 	return {
@@ -37,6 +38,7 @@ export default defineConfig({
 		]
 	},
 	plugins: [
+		devToolsJson(),
 		browserTestMediaStub(),
 		tailwindcss(),
 		sveltekit({
