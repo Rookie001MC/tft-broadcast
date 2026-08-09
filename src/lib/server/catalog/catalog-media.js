@@ -16,6 +16,7 @@ export const MAX_EXTRACTED_BYTES = DEFAULT_MAX_EXTRACTED_BYTES;
 export const MAX_ARCHIVE_ENTRY_BYTES = 512 * 1024 * 1024;
 export const MAX_CATALOG_IMAGE_BYTES = 10 * 1024 * 1024;
 const STALE_STAGING_MS = 24 * 60 * 60 * 1000;
+const CORRECTION_ORPHAN_GRACE_MS = 60 * 60 * 1000;
 const TRANSIENT_RENAME_ERRORS = new Set(['EACCES', 'EBUSY', 'EPERM']);
 const SUPPORTED_IMAGES = new Map([
 	['image/png', '.png'],
@@ -59,6 +60,36 @@ export function assertCatalogCorrectionImagePath(value) {
 	if (normalized !== value || !normalized.startsWith('catalog-corrections/'))
 		throw new Error('Catalog correction image path must be controlled media');
 	return normalized;
+}
+
+/**
+ * Remove old, unreferenced correction images without traversing outside the
+ * managed correction-image namespace. The grace period protects files staged
+ * immediately before a concurrent database update makes them visible.
+ *
+ * @param {{ mediaRoot: string, referencedPaths: Iterable<string> }} input
+ */
+export async function cleanupUnreferencedCatalogCorrectionImages({ mediaRoot, referencedPaths }) {
+	const correctionRoot = resolveContainedPath(mediaRoot, 'catalog-corrections');
+	await mkdir(correctionRoot, { recursive: true });
+	const referenced = new Set();
+	for (const candidate of referencedPaths) {
+		try {
+			referenced.add(assertCatalogCorrectionImagePath(candidate));
+		} catch {
+			// Legacy unmanaged paths are not part of this controlled namespace.
+		}
+	}
+	const now = Date.now();
+	for (const entry of await readdir(correctionRoot, { withFileTypes: true })) {
+		if (!entry.isFile()) continue;
+		const relativePath = assertCatalogCorrectionImagePath(`catalog-corrections/${entry.name}`);
+		if (referenced.has(relativePath)) continue;
+		const target = resolveContainedPath(mediaRoot, relativePath);
+		const details = await stat(target).catch(() => null);
+		if (details?.isFile() && now - details.mtimeMs >= CORRECTION_ORPHAN_GRACE_MS)
+			await rm(target, { force: true });
+	}
 }
 
 /** @param {string} mediaRoot */

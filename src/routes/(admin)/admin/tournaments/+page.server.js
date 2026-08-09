@@ -1,19 +1,39 @@
 import { fail, redirect } from '@sveltejs/kit';
-import {
-	actionFailure,
-	requireTournamentId,
-	text,
-	toStringValues
-} from '$lib/server/admin/form-helpers.js';
+import { requireTournamentId, text, toStringValues } from '$lib/server/admin/form-helpers.js';
 import { loadAdminData } from '$lib/server/admin/load.js';
 import { requireAdmin } from '$lib/server/auth/guards.js';
 import { db } from '$lib/server/db';
 import {
 	addRosterPlayers,
 	createTournament,
+	deleteTournament,
 	moveRosterPlayer,
-	removeRosterPlayer
+	removeRosterPlayer,
+	updateTournament
 } from '$lib/server/tournaments/repository.js';
+
+/** @param {unknown} error */
+function isConflict(error) {
+	return (
+		error instanceof Error && /unique|constraint|already exists|duplicate/i.test(error.message)
+	);
+}
+
+/** @param {string} action @param {unknown} error @param {string} message */
+function tournamentFailure(action, error, message) {
+	return fail(isConflict(error) ? 409 : 422, {
+		action,
+		message: isConflict(error) ? 'A tournament with that slug already exists.' : message
+	});
+}
+
+/** @param {FormData} form @param {string} action @param {boolean} confirmReset */
+async function deleteFromForm(form, action, confirmReset) {
+	const tournamentId = text(form.get('tournamentId'));
+	if (!tournamentId) return fail(400, { action, message: 'A tournament is required.' });
+	const result = await deleteTournament(db, { tournamentId, confirmReset });
+	return { action, result };
+}
 
 /** @type {import('./$types').PageServerLoad} */
 export const load = loadAdminData;
@@ -30,9 +50,46 @@ export const actions = {
 				return fail(400, { action: 'createTournament', message: 'Tournament was not created.' });
 			}
 		} catch (error) {
-			return actionFailure('createTournament', error);
+			return tournamentFailure('createTournament', error, 'Tournament details are invalid.');
 		}
 		redirect(303, `/admin/tournaments?tournament=${tournament.id}`);
+	},
+	updateTournament: async (event) => {
+		requireAdmin(event);
+		const form = await event.request.formData();
+		const tournamentId = text(form.get('tournamentId'));
+		if (!tournamentId)
+			return fail(400, { action: 'updateTournament', message: 'A tournament is required.' });
+		try {
+			const tournament = await updateTournament(db, {
+				tournamentId,
+				name: text(form.get('name')),
+				slug: text(form.get('slug'))
+			});
+			return { action: 'updateTournament', tournament };
+		} catch (error) {
+			return tournamentFailure('updateTournament', error, 'Tournament details are invalid.');
+		}
+	},
+	deleteTournament: async (event) => {
+		requireAdmin(event);
+		try {
+			return await deleteFromForm(await event.request.formData(), 'deleteTournament', false);
+		} catch (error) {
+			return tournamentFailure('deleteTournament', error, 'Tournament could not be deleted.');
+		}
+	},
+	confirmDeleteTournament: async (event) => {
+		requireAdmin(event);
+		try {
+			return await deleteFromForm(await event.request.formData(), 'confirmDeleteTournament', true);
+		} catch (error) {
+			return tournamentFailure(
+				'confirmDeleteTournament',
+				error,
+				'Tournament could not be deleted.'
+			);
+		}
 	},
 	addRosterPlayers: async (event) => {
 		requireAdmin(event);
@@ -48,7 +105,7 @@ export const actions = {
 			await addRosterPlayers(db, { tournamentId, playerIds });
 			return { action: 'addRosterPlayers', tournamentId };
 		} catch (error) {
-			return actionFailure('addRosterPlayers', error);
+			return tournamentFailure('addRosterPlayers', error, 'Roster players could not be added.');
 		}
 	},
 	removeRosterPlayer: async (event) => {
@@ -62,7 +119,7 @@ export const actions = {
 			await removeRosterPlayer(db, { tournamentId, playerId });
 			return { action: 'removeRosterPlayer', tournamentId, playerId };
 		} catch (error) {
-			return actionFailure('removeRosterPlayer', error);
+			return tournamentFailure('removeRosterPlayer', error, 'Roster player could not be removed.');
 		}
 	},
 	moveRosterPlayer: async (event) => {
@@ -80,7 +137,7 @@ export const actions = {
 			await moveRosterPlayer(db, { tournamentId, playerId, displayOrder });
 			return { action: 'moveRosterPlayer', tournamentId, playerId, displayOrder };
 		} catch (error) {
-			return actionFailure('moveRosterPlayer', error);
+			return tournamentFailure('moveRosterPlayer', error, 'Roster order could not be changed.');
 		}
 	}
 };

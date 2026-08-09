@@ -8,7 +8,10 @@ import {
 } from '../db/schema/catalog.js';
 import { tournaments } from '../db/schema/tournaments.js';
 import { runDestructiveMaintenance } from '../winner-boards/maintenance.js';
-import { assertCatalogCorrectionImagePath } from './catalog-media.js';
+import {
+	assertCatalogCorrectionImagePath,
+	cleanupUnreferencedCatalogCorrectionImages
+} from './catalog-media.js';
 
 const RESOURCE_KINDS = new Set(['champion', 'augment']);
 const OPERATIONS = new Set(['add', 'override', 'exclude']);
@@ -271,24 +274,40 @@ const MUTABLE_FIELDS = [
  */
 export async function updateCatalogCorrection(database, input) {
 	const correctionId = requiredText(input.correctionId, 'Catalog correction ID');
-	const [existing] = await database
-		.select()
-		.from(catalogCorrections)
-		.where(eq(catalogCorrections.id, correctionId))
-		.limit(1);
-	if (!existing) throw new Error('Catalog correction not found');
-	const merged = { ...existing };
-	for (const field of MUTABLE_FIELDS) {
-		if (Object.hasOwn(input, field)) merged[field] = input[field];
-	}
-	const correction = normalizedCorrection(merged);
-	const [updated] = await database
-		.update(catalogCorrections)
-		.set({ ...correction, updatedAt: new Date() })
-		.where(eq(catalogCorrections.id, correctionId))
-		.returning();
-	if (!updated) throw new Error('Catalog correction not found');
-	return updated;
+	return database.transaction(async (/** @type {any} */ transaction) => {
+		const [existing] = await transaction
+			.select()
+			.from(catalogCorrections)
+			.where(eq(catalogCorrections.id, correctionId))
+			.limit(1);
+		if (!existing) throw new Error('Catalog correction not found');
+		const merged = { ...existing };
+		for (const field of MUTABLE_FIELDS) {
+			if (Object.hasOwn(input, field)) merged[field] = input[field];
+		}
+		const correction = normalizedCorrection(merged);
+		const [updated] = await transaction
+			.update(catalogCorrections)
+			.set({ ...correction, updatedAt: new Date() })
+			.where(eq(catalogCorrections.id, correctionId))
+			.returning();
+		if (!updated) throw new Error('Catalog correction not found');
+		return { ...updated, previousImagePath: existing.imagePathOverride };
+	});
+}
+
+/** @param {any} database @param {string} mediaRoot */
+export async function reconcileCatalogCorrectionImages(database, mediaRoot) {
+	const rows = await database
+		.select({ imagePathOverride: catalogCorrections.imagePathOverride })
+		.from(catalogCorrections);
+	await cleanupUnreferencedCatalogCorrectionImages({
+		mediaRoot,
+		referencedPaths: rows.flatMap(
+			(/** @type {{ imagePathOverride: string | null }} */ { imagePathOverride }) =>
+				typeof imagePathOverride === 'string' ? [imagePathOverride] : []
+		)
+	});
 }
 
 /** @param {'champion' | 'augment'} resourceKind */

@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
 	deletePlayer: vi.fn(),
 	stagePlayerImport: vi.fn(),
 	commitStagedPlayerImport: vi.fn(),
+	loadLatestPlayerImportPreview: vi.fn(),
 	addRosterPlayers: vi.fn(),
 	removeRosterPlayer: vi.fn(),
 	moveRosterPlayer: vi.fn(),
@@ -20,16 +21,26 @@ const mocks = vi.hoisted(() => ({
 	updateCatalogCorrection: vi.fn(),
 	excludeCatalogResource: vi.fn(),
 	restoreCatalogResource: vi.fn(),
+	reconcileCatalogCorrectionImages: vi.fn(async () => undefined),
 	saveDraftWinnerBoard: vi.fn(),
 	publishWinnerBoard: vi.fn(),
 	hidePublishedBoard: vi.fn(),
 	saveWinnerBoardState: vi.fn(),
 	setWinnerBoardLive: vi.fn(),
 	resetWinnerBoardState: vi.fn(),
-	signOut: vi.fn()
+	signOut: vi.fn(),
+	mkdir: vi.fn(),
+	writeFile: vi.fn(),
+	rm: vi.fn()
 }));
 
 vi.mock('$env/dynamic/private', () => ({ env: { MEDIA_ROOT: 'media' } }));
+vi.mock('node:fs/promises', async (importOriginal) => ({
+	...(await importOriginal()),
+	mkdir: mocks.mkdir,
+	writeFile: mocks.writeFile,
+	rm: mocks.rm
+}));
 vi.mock('$lib/server/auth', () => ({ auth: { api: { signOut: mocks.signOut } } }));
 vi.mock('$lib/server/db', () => ({ db: {} }));
 vi.mock('$lib/server/catalog/catalog-sync.js', () => ({
@@ -44,11 +55,13 @@ vi.mock('$lib/server/catalog/catalog-corrections.js', () => ({
 	createCatalogCorrection: mocks.createCatalogCorrection,
 	updateCatalogCorrection: mocks.updateCatalogCorrection,
 	excludeCatalogResource: mocks.excludeCatalogResource,
-	restoreCatalogResource: mocks.restoreCatalogResource
+	restoreCatalogResource: mocks.restoreCatalogResource,
+	reconcileCatalogCorrectionImages: mocks.reconcileCatalogCorrectionImages
 }));
 vi.mock('$lib/server/import/staging.js', () => ({
 	stagePlayerImport: mocks.stagePlayerImport,
-	commitStagedPlayerImport: mocks.commitStagedPlayerImport
+	commitStagedPlayerImport: mocks.commitStagedPlayerImport,
+	loadLatestPlayerImportPreview: mocks.loadLatestPlayerImportPreview
 }));
 vi.mock('$lib/server/players/repository.js', () => ({
 	createPlayer: mocks.createPlayer,
@@ -175,6 +188,167 @@ describe('admin route authorization', () => {
 
 describe('admin action results', () => {
 	beforeEach(() => vi.clearAllMocks());
+
+	test('loads persisted terminal import state instead of an older tournament aggregate', async () => {
+		const stalePreview = { token: 'preview-one', status: 'previewed' };
+		const committedPreview = {
+			token: 'preview-one',
+			status: 'committed',
+			committedAt: new Date('2026-08-09T01:00:00.000Z'),
+			summary: { created: 1, updated: 0, skipped: 0 }
+		};
+		mocks.loadTournamentAdminData.mockResolvedValue({ importPreview: stalePreview });
+		mocks.loadLatestPlayerImportPreview.mockResolvedValue(committedPreview);
+
+		const result = /** @type {any} */ (
+			await load(
+				asEvent({
+					locals: { user: { id: 'operator-1' } },
+					url: new URL('https://broadcast.example/admin')
+				})
+			)
+		);
+
+		expect(result.importPreview).toEqual(committedPreview);
+		expect(mocks.reconcileCatalogCorrectionImages).toHaveBeenCalledWith({}, 'media');
+	});
+
+	test('maps a player uniqueness conflict to a safe 409 response', async () => {
+		mocks.createPlayer.mockRejectedValue(
+			new Error('SQLITE_CONSTRAINT_UNIQUE: players.riot_id_key leaked-internal-value')
+		);
+		const form = new FormData();
+		form.set('fullName', 'Player One');
+		form.set('displayName', 'Winner One');
+		form.set('riotId', 'Winner#TAG');
+		const request = new Request('https://broadcast.example/admin/players', {
+			method: 'POST',
+			body: form
+		});
+
+		const result = await playerActions.createPlayer(
+			asEvent({
+				locals: { user: { id: 'operator-1' } },
+				request,
+				url: new URL(request.url)
+			})
+		);
+
+		expect(result).toMatchObject({
+			status: 409,
+			data: {
+				action: 'createPlayer',
+				message: 'A player with that Riot ID already exists.'
+			}
+		});
+		expect(/** @type {any} */ (result).data.message).not.toContain('SQLITE');
+	});
+
+	test('maps repository validation to an action-specific safe 422 response', async () => {
+		mocks.updatePlayer.mockRejectedValue(new Error('Full name and display name are required'));
+		const form = new FormData();
+		form.set('playerId', 'player-one');
+		form.set('fullName', '');
+		form.set('displayName', 'Winner One');
+		const request = new Request('https://broadcast.example/admin/players', {
+			method: 'POST',
+			body: form
+		});
+
+		const result = await playerActions.updatePlayer(
+			asEvent({
+				locals: { user: { id: 'operator-1' } },
+				request,
+				url: new URL(request.url)
+			})
+		);
+
+		expect(result).toMatchObject({
+			status: 422,
+			data: { action: 'updatePlayer', message: 'Player details are invalid.' }
+		});
+	});
+
+	test('rejects a missing replacement upload before calling the player repository', async () => {
+		const form = new FormData();
+		form.set('playerId', 'player-one');
+		const request = new Request('https://broadcast.example/admin/players', {
+			method: 'POST',
+			body: form
+		});
+
+		const result = await playerActions.replacePlayerImage(
+			asEvent({
+				locals: { user: { id: 'operator-1' } },
+				request,
+				url: new URL(request.url)
+			})
+		);
+
+		expect(result).toMatchObject({
+			status: 400,
+			data: { action: 'replacePlayerImage', message: 'A player image is required.' }
+		});
+		expect(mocks.replacePlayerImage).not.toHaveBeenCalled();
+	});
+
+	test('treats an empty catalog image upload as absent', async () => {
+		mocks.createCatalogCorrection.mockResolvedValue({ id: 'correction-one' });
+		const form = new FormData();
+		form.set('patchLabel', '14.15');
+		form.set('resourceKind', 'champion');
+		form.set('operation', 'add');
+		form.set('manualExternalId', 'manual-one');
+		form.set('displayNameOverride', 'Manual One');
+		form.set('image', new File([], 'empty.png', { type: 'image/png' }));
+		const request = new Request('https://broadcast.example/admin/game-resources', {
+			method: 'POST',
+			body: form
+		});
+
+		const result = await catalogActions.createCorrection(
+			asEvent({
+				locals: { user: { id: 'operator-1' } },
+				request,
+				url: new URL(request.url)
+			})
+		);
+
+		expect(mocks.createCatalogCorrection).toHaveBeenCalledWith(
+			{},
+			expect.objectContaining({ imagePathOverride: null })
+		);
+		expect(result).toMatchObject({ action: 'createCorrection' });
+	});
+
+	test('returns a safe import-unavailable conflict without exposing staging internals', async () => {
+		mocks.commitStagedPlayerImport.mockRejectedValue(
+			new Error('ENOENT: D:\\private\\media\\import-staging\\token.zip')
+		);
+		const form = new FormData();
+		form.set('token', 'token-one');
+		const request = new Request('https://broadcast.example/admin/players', {
+			method: 'POST',
+			body: form
+		});
+
+		const result = await playerActions.commitBundle(
+			asEvent({
+				locals: { user: { id: 'operator-1' } },
+				request,
+				url: new URL(request.url)
+			})
+		);
+
+		expect(result).toMatchObject({
+			status: 409,
+			data: {
+				action: 'commitBundle',
+				message: 'This import preview is no longer available. Create a new preview.'
+			}
+		});
+		expect(/** @type {any} */ (result).data.message).not.toContain('ENOENT');
+	});
 
 	test('redirects to the newly created tournament route without catching the redirect', async () => {
 		mocks.createTournament.mockResolvedValue({ id: 'tournament-1' });
@@ -331,6 +505,84 @@ describe('admin action results', () => {
 		expect(result).toMatchObject({ action: 'updateCorrection' });
 	});
 
+	test('deletes the prior controlled correction image only after a successful replacement', async () => {
+		mocks.updateCatalogCorrection.mockImplementation(async (_database, input) => ({
+			id: 'correction-one',
+			imagePathOverride: input.imagePathOverride,
+			previousImagePath: 'catalog-corrections/old.png'
+		}));
+		const form = new FormData();
+		form.set('correctionId', 'correction-one');
+		form.set('image', new File([VALID_PNG], 'replacement.png', { type: 'image/png' }));
+		const request = new Request('https://broadcast.example/admin/game-resources', {
+			method: 'POST',
+			body: form
+		});
+
+		const result = await catalogActions.updateCorrection(
+			asEvent({
+				locals: { user: { id: 'operator-1' } },
+				request,
+				url: new URL(request.url)
+			})
+		);
+
+		expect(result).toMatchObject({ action: 'updateCorrection' });
+		expect(mocks.writeFile).toHaveBeenCalledOnce();
+		expect(mocks.rm).toHaveBeenCalledWith(
+			expect.stringMatching(/catalog-corrections[\\/]old\.png$/),
+			{ force: true }
+		);
+	});
+
+	test('preserves the prior correction image and removes only the staged replacement on failure', async () => {
+		mocks.updateCatalogCorrection.mockRejectedValue(new Error('Catalog correction not found'));
+		const form = new FormData();
+		form.set('correctionId', 'correction-one');
+		form.set('image', new File([VALID_PNG], 'replacement.png', { type: 'image/png' }));
+		const request = new Request('https://broadcast.example/admin/game-resources', {
+			method: 'POST',
+			body: form
+		});
+
+		const result = await catalogActions.updateCorrection(
+			asEvent({
+				locals: { user: { id: 'operator-1' } },
+				request,
+				url: new URL(request.url)
+			})
+		);
+
+		expect(result).toMatchObject({ status: 422, data: { action: 'updateCorrection' } });
+		expect(mocks.rm).toHaveBeenCalledOnce();
+		expect(mocks.rm.mock.calls[0][0]).toMatch(/catalog-corrections[\\/][0-9a-f-]+\.png$/);
+	});
+
+	test('never deletes a prior correction image outside controlled correction media', async () => {
+		mocks.updateCatalogCorrection.mockImplementation(async (_database, input) => ({
+			id: 'correction-one',
+			imagePathOverride: input.imagePathOverride,
+			previousImagePath: '/media/catalog-assets/snapshot/champion.png'
+		}));
+		const form = new FormData();
+		form.set('correctionId', 'correction-one');
+		form.set('image', new File([VALID_PNG], 'replacement.png', { type: 'image/png' }));
+		const request = new Request('https://broadcast.example/admin/game-resources', {
+			method: 'POST',
+			body: form
+		});
+
+		await catalogActions.updateCorrection(
+			asEvent({
+				locals: { user: { id: 'operator-1' } },
+				request,
+				url: new URL(request.url)
+			})
+		);
+
+		expect(mocks.rm).not.toHaveBeenCalled();
+	});
+
 	test('saves the singleton board without accepting a client board ID', async () => {
 		mocks.saveWinnerBoardState.mockResolvedValue({ id: 'current', title: 'TFT Champion' });
 		const form = new FormData();
@@ -435,7 +687,7 @@ describe('admin action results', () => {
 				? { deleted: true, reset: true }
 				: { kind: 'reset_required', label: 'Winner One' }
 		);
-		const action = playerActions[actionName];
+		const action = /** @type {Record<string, any>} */ (playerActions)[actionName];
 		expect(action, `players actions must expose ${actionName}`).toBeTypeOf('function');
 		const form = new FormData();
 		form.set('playerId', 'player-one');
@@ -470,7 +722,7 @@ describe('admin action results', () => {
 					? { deleted: true, reset: true }
 					: { kind: 'reset_required', label: 'Tournament One' }
 			);
-			const action = tournamentActions[actionName];
+			const action = /** @type {Record<string, any>} */ (tournamentActions)[actionName];
 			expect(action, `tournament actions must expose ${actionName}`).toBeTypeOf('function');
 			const form = new FormData();
 			form.set('tournamentId', 'tournament-one');

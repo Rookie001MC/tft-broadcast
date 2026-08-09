@@ -6,14 +6,16 @@ import { zipSync } from 'fflate';
 import tar from 'tar-stream';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
-const fsMocks = vi.hoisted(() => ({ rename: vi.fn() }));
+const fsMocks = vi.hoisted(() => ({ rename: vi.fn(), rm: vi.fn() }));
 
 vi.mock('node:fs/promises', async (importOriginal) => {
 	const actual = /** @type {typeof import('node:fs/promises')} */ (await importOriginal());
 	fsMocks.rename.mockImplementation(actual.rename);
-	return { ...actual, rename: fsMocks.rename };
+	fsMocks.rm.mockImplementation(actual.rm);
+	return { ...actual, rename: fsMocks.rename, rm: fsMocks.rm };
 });
 import {
+	cleanupUnreferencedCatalogCorrectionImages,
 	cleanupStaleCatalogStaging,
 	downloadCatalogImages,
 	extractTarGz,
@@ -57,6 +59,7 @@ describe('catalog package extraction', () => {
 
 	beforeEach(async () => {
 		fsMocks.rename.mockClear();
+		fsMocks.rm.mockClear();
 		root = await mkdtemp(path.join(tmpdir(), 'tft-catalog-media-'));
 	});
 
@@ -217,5 +220,32 @@ describe('catalog package extraction', () => {
 		await cleanupStaleCatalogStaging(root);
 		expect(await stat(path.join(staging, 'current'))).toBeTruthy();
 		expect(await stat(stale).catch(() => null)).toBeNull();
+	});
+
+	test('reconciles a failed correction-image deletion without touching references or outside media', async () => {
+		const corrections = path.join(root, 'catalog-corrections');
+		const oldImage = path.join(corrections, 'old.png');
+		const currentImage = path.join(corrections, 'current.png');
+		const outsideImage = path.join(root, 'catalog-assets', 'outside.png');
+		await mkdir(corrections, { recursive: true });
+		await mkdir(path.dirname(outsideImage), { recursive: true });
+		await Promise.all([
+			writeFile(oldImage, PNG),
+			writeFile(currentImage, PNG),
+			writeFile(outsideImage, PNG)
+		]);
+		const orphanedAt = new Date(Date.now() - 2 * 60 * 60 * 1000);
+		await utimes(oldImage, orphanedAt, orphanedAt);
+		fsMocks.rm.mockRejectedValueOnce(Object.assign(new Error('busy'), { code: 'EBUSY' }));
+
+		await expect(rm(oldImage, { force: true })).rejects.toThrow('busy');
+		await cleanupUnreferencedCatalogCorrectionImages({
+			mediaRoot: root,
+			referencedPaths: ['catalog-corrections/current.png']
+		});
+
+		expect(await stat(oldImage).catch(() => null)).toBeNull();
+		expect(await stat(currentImage)).toBeTruthy();
+		expect(await stat(outsideImage)).toBeTruthy();
 	});
 });

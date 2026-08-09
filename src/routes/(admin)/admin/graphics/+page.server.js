@@ -53,8 +53,8 @@ export const actions = {
 				augmentIds: toStringValues(form.getAll('augmentIds'))
 			});
 			return { action: 'saveBoard', board };
-		} catch (error) {
-			return actionFailure('saveBoard', error);
+		} catch {
+			return actionFailure('saveBoard', new Error('Winner board details are invalid.'), 422);
 		}
 	},
 	setLive: async (event) => {
@@ -63,17 +63,23 @@ export const actions = {
 			const form = await event.request.formData();
 			const live = await setWinnerBoardLive(db, text(form.get('enabled')) === 'true');
 			return { action: 'setLive', live };
-		} catch (error) {
-			return actionFailure('setLive', error);
+		} catch {
+			return actionFailure('setLive', new Error('Live status could not be changed.'), 409);
 		}
 	},
 	resetBoard: async (event) => {
 		requireAdmin(event);
 		try {
+			const form = await event.request.formData();
+			const nextTournamentId = text(form.get('nextTournamentId')) || null;
 			const result = await resetWinnerBoardState(db);
-			return { action: 'resetBoard', result };
-		} catch (error) {
-			return actionFailure('resetBoard', error);
+			return {
+				action: 'resetBoard',
+				...(nextTournamentId ? { nextTournamentId } : {}),
+				result
+			};
+		} catch {
+			return actionFailure('resetBoard', new Error('Winner board could not be reset.'), 409);
 		}
 	}
 };
