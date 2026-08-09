@@ -2,7 +2,8 @@
 	import { enhance } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import { Progress } from '@skeletonlabs/skeleton-svelte';
+	import { searchCatalogResources } from '$lib/search/catalog-search.js';
+	import { Progress, Tabs } from '@skeletonlabs/skeleton-svelte';
 	import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
 	import SearchIcon from '@lucide/svelte/icons/search';
 	import ResetRequiredDialog from './ResetRequiredDialog.svelte';
@@ -11,7 +12,12 @@
 	/** @type {{ tournament: { id: string, name: string }, activeCatalog: { snapshot: any, champions: CatalogAsset[], augments: CatalogAsset[] }, form?: any }} */
 	let { tournament, activeCatalog, form = null } = $props();
 	let syncing = $state(false);
-	let search = $state('');
+	/** @type {'champions' | 'augments'} */
+	let activeTab = $state('champions');
+	let championQuery = $state('');
+	let augmentQuery = $state('');
+	let championShowHidden = $state(false);
+	let augmentShowHidden = $state(false);
 	let progressMessage = $state('Preparing catalog synchronization…');
 	/** @type {number | null} */
 	let progressPercent = $state(null);
@@ -36,27 +42,31 @@
 			return null;
 		}
 	});
-	const normalizedSearch = $derived(search.trim().toLocaleLowerCase());
 	const champions = $derived(
-		activeCatalog.champions.filter(
-			(asset) =>
-				!normalizedSearch ||
-				asset.displayName.toLocaleLowerCase().includes(normalizedSearch) ||
-				asset.externalId.toLocaleLowerCase().includes(normalizedSearch)
+		/** @type {CatalogAsset[]} */ (
+			searchCatalogResources(
+				activeCatalog.champions.filter((asset) => championShowHidden || !asset.isExcluded),
+				championQuery
+			)
 		)
 	);
 	const augments = $derived(
-		activeCatalog.augments.filter(
-			(asset) =>
-				!normalizedSearch ||
-				asset.displayName.toLocaleLowerCase().includes(normalizedSearch) ||
-				asset.externalId.toLocaleLowerCase().includes(normalizedSearch)
+		/** @type {CatalogAsset[]} */ (
+			searchCatalogResources(
+				activeCatalog.augments.filter((asset) => augmentShowHidden || !asset.isExcluded),
+				augmentQuery
+			)
 		)
 	);
 
 	const resetResultKey = $derived(
 		`${form?.action ?? ''}:${form?.result?.kind ?? ''}:${form?.resourceKind ?? ''}:${form?.resourceId ?? ''}`
 	);
+
+	/** @param {{ value: string }} details */
+	function selectResourceType(details) {
+		if (details.value === 'champions' || details.value === 'augments') activeTab = details.value;
+	}
 
 	/** @param {string} resultKey @returns {import('svelte/attachments').Attachment<HTMLElement>} */
 	function showResetResult(resultKey) {
@@ -404,346 +414,379 @@
 </section>
 
 <section class="card preset-outlined-surface-200-800 bg-surface-50-950 p-5">
-	<header class="mb-5 flex flex-wrap items-end justify-between gap-3">
-		<div>
-			<p class="text-xs font-bold tracking-wider text-primary-600-400 uppercase">
-				Snapshot contents
-			</p>
-			<h2 class="h3">Game resources</h2>
-		</div>
-		<div class="w-full space-y-1 sm:w-80">
-			<label class="label label-text" for="catalog-resource-search">Filter resources</label>
-			<div class="field-group grid-cols-[auto_1fr]">
-				<span class="label label-text preset-tonal-primary" aria-hidden="true">
-					<SearchIcon class="size-4" />
-				</span>
-				<input
-					class="input"
-					id="catalog-resource-search"
-					type="search"
-					bind:value={search}
-					placeholder="Name or external ID"
-				/>
-			</div>
-		</div>
+	<header class="mb-5">
+		<p class="text-xs font-bold tracking-wider text-primary-600-400 uppercase">Snapshot contents</p>
+		<h2 class="h3">Game resources</h2>
 	</header>
 
-	<div class="grid gap-6 2xl:grid-cols-2">
-		<div>
-			<div class="mb-3 flex items-center justify-between">
-				<h3 class="h4">Champions</h3>
-				<span class="badge preset-tonal-surface"
-					>{champions.length} of {activeCatalog.champions.length}</span
-				>
-			</div>
-			<div class="max-h-144 table-wrap rounded-container border border-surface-200-800">
-				<table class="table table-zebra">
-					<thead class="sticky top-0 bg-surface-100-900"
-						><tr><th>Icon</th><th>Resource</th><th>Correction</th><th>Actions</th></tr></thead
-					><tbody>
-						{#each champions as champion (champion.id)}<tr
-								><td
-									>{#if champion.iconPath}<img
-											src={champion.iconPath}
-											alt=""
-											class="size-9 rounded-base object-cover"
-											loading="lazy"
-										/>{:else}<span class="text-xs text-surface-500">No image supplied</span
-										>{/if}</td
-								><td
-									><strong>{champion.displayName}</strong><br /><code class="text-xs"
-										>{champion.externalId}</code
-									><br /><span class="text-xs">Tier {champion.tier ?? '—'}</span></td
-								><td
-									><span class="badge preset-tonal-surface">{provenance(champion)}</span
-									>{#if champion.isExcluded}<br /><span
-											class="mt-1 inline-block text-xs text-warning-600-400">Hidden</span
-										>{/if}</td
-								><td class="space-y-2">
-									{#if champion.correctionId}<form
-											method="POST"
-											action="?/updateCorrection"
-											enctype="multipart/form-data"
-											use:enhance={trackSubmission(`update:${champion.id}`)}
-											class="grid gap-1"
-										>
-											<input
-												type="hidden"
-												name="correctionId"
-												value={champion.correctionId}
-											/><input
-												class="input-sm input"
-												name="displayNameOverride"
-												value={champion.displayName}
-												aria-label={`Edit ${champion.displayName} name`}
-												disabled={Boolean(submittingAction)}
-											/><input
-												class="input-sm input"
-												type="number"
-												name="tierOverride"
-												min="1"
-												max="5"
-												value={champion.tier ?? ''}
-												aria-label={`Edit ${champion.displayName} tier`}
-												disabled={Boolean(submittingAction)}
-											/><input
-												class="input-sm input"
-												type="file"
-												name="image"
-												accept="image/png,image/jpeg,image/webp"
-												aria-label={`Replace ${champion.displayName} image`}
-												disabled={Boolean(submittingAction)}
-											/><button
-												class="btn preset-tonal-primary btn-sm"
-												type="submit"
-												disabled={Boolean(submittingAction)}>Save edit</button
+	<Tabs value={activeTab} onValueChange={selectResourceType}>
+		<Tabs.List
+			aria-label="Catalog resource type"
+			class="relative mb-5 flex gap-2 border-b border-surface-200-800"
+		>
+			<Tabs.Trigger value="champions" class="btn rounded-b-none px-4 py-2">
+				Champions ({champions.length}/{activeCatalog.champions.length})
+			</Tabs.Trigger>
+			<Tabs.Trigger value="augments" class="btn rounded-b-none px-4 py-2">
+				Augments ({augments.length}/{activeCatalog.augments.length})
+			</Tabs.Trigger>
+			<Tabs.Indicator class="absolute bottom-0 h-0.5 bg-primary-500" />
+		</Tabs.List>
+
+		<Tabs.Content value="champions">
+			{#if activeTab === 'champions'}
+				<div class="mb-4 flex flex-wrap items-end justify-between gap-3">
+					<div class="w-full space-y-1 sm:w-80">
+						<label class="label label-text" for="champion-catalog-search">Search champions</label>
+						<div class="field-group grid-cols-[auto_1fr]">
+							<span class="label label-text preset-tonal-primary" aria-hidden="true">
+								<SearchIcon class="size-4" />
+							</span>
+							<input
+								class="input"
+								id="champion-catalog-search"
+								type="search"
+								bind:value={championQuery}
+								placeholder="Champion name or external ID"
+							/>
+						</div>
+					</div>
+					<label class="flex items-center gap-2 text-sm font-medium">
+						<input class="checkbox" type="checkbox" bind:checked={championShowHidden} />
+						Show hidden champions
+					</label>
+				</div>
+				<div class="max-h-144 table-wrap rounded-container border border-surface-200-800">
+					<table class="table table-zebra" aria-label="Champion catalog resources">
+						<thead class="sticky top-0 bg-surface-100-900"
+							><tr><th>Icon</th><th>Resource</th><th>Correction</th><th>Actions</th></tr></thead
+						><tbody>
+							{#each champions as champion (champion.id)}<tr
+									><td
+										>{#if champion.iconPath}<img
+												src={champion.iconPath}
+												alt=""
+												class="size-9 rounded-base object-cover"
+												loading="lazy"
+											/>{:else}<span class="text-xs text-surface-500">No image supplied</span
+											>{/if}</td
+									><td
+										><strong>{champion.displayName}</strong><br /><code class="text-xs"
+											>{champion.externalId}</code
+										><br /><span class="text-xs">Tier {champion.tier ?? '—'}</span></td
+									><td
+										><span class="badge preset-tonal-surface">{provenance(champion)}</span
+										>{#if champion.isExcluded}<br /><span
+												class="mt-1 inline-block text-xs text-warning-600-400">Hidden</span
+											>{/if}</td
+									><td class="space-y-2">
+										{#if champion.correctionId}<form
+												method="POST"
+												action="?/updateCorrection"
+												enctype="multipart/form-data"
+												use:enhance={trackSubmission(`update:${champion.id}`)}
+												class="grid gap-1"
 											>
-										</form>{:else}<form
-											method="POST"
-											action="?/createCorrection"
-											enctype="multipart/form-data"
-											use:enhance={trackSubmission(`override:${champion.id}`)}
-											class="grid gap-1"
-										>
-											<input
-												type="hidden"
-												name="canonicalSetKey"
-												value={activeCatalog.snapshot?.canonicalSetKey ?? ''}
-											/><input
-												type="hidden"
-												name="patchLabel"
-												value={activeCatalog.snapshot?.patchLabel ?? 'latest'}
-											/><input type="hidden" name="resourceKind" value="champion" /><input
-												type="hidden"
-												name="operation"
-												value="override"
-											/><input
-												type="hidden"
-												name="targetExternalId"
-												value={champion.externalId}
-											/><input
-												class="input-sm input"
-												name="displayNameOverride"
-												value={champion.displayName}
-												aria-label={`Override ${champion.displayName} name`}
-												disabled={Boolean(submittingAction)}
-											/><input
-												class="input-sm input"
-												type="number"
-												name="tierOverride"
-												min="1"
-												max="5"
-												value={champion.tier ?? ''}
-												aria-label={`Override ${champion.displayName} tier`}
-												disabled={Boolean(submittingAction)}
-											/><input
-												class="input-sm input"
-												type="file"
-												name="image"
-												accept="image/png,image/jpeg,image/webp"
-												aria-label={`Override ${champion.displayName} image`}
-												disabled={Boolean(submittingAction)}
-											/><button
-												class="btn preset-tonal-primary btn-sm"
-												type="submit"
-												disabled={Boolean(submittingAction)}>Create override</button
+												<input
+													type="hidden"
+													name="correctionId"
+													value={champion.correctionId}
+												/><input
+													class="input-sm input"
+													name="displayNameOverride"
+													value={champion.displayName}
+													aria-label={`Edit ${champion.displayName} name`}
+													disabled={Boolean(submittingAction)}
+												/><input
+													class="input-sm input"
+													type="number"
+													name="tierOverride"
+													min="1"
+													max="5"
+													value={champion.tier ?? ''}
+													aria-label={`Edit ${champion.displayName} tier`}
+													disabled={Boolean(submittingAction)}
+												/><input
+													class="input-sm input"
+													type="file"
+													name="image"
+													accept="image/png,image/jpeg,image/webp"
+													aria-label={`Replace ${champion.displayName} image`}
+													disabled={Boolean(submittingAction)}
+												/><button
+													class="btn preset-tonal-primary btn-sm"
+													type="submit"
+													disabled={Boolean(submittingAction)}>Save edit</button
+												>
+											</form>{:else}<form
+												method="POST"
+												action="?/createCorrection"
+												enctype="multipart/form-data"
+												use:enhance={trackSubmission(`override:${champion.id}`)}
+												class="grid gap-1"
 											>
-										</form>{/if}
-									{#if champion.isExcluded}<form
-											method="POST"
-											action="?/restoreResource"
-											use:enhance={trackSubmission(`restore:${champion.id}`)}
-										>
-											<input type="hidden" name="tournamentId" value={tournament.id} /><input
-												type="hidden"
-												name="resourceKind"
-												value="champion"
-											/><input type="hidden" name="resourceId" value={champion.id} /><button
-												class="btn preset-tonal-success btn-sm"
-												type="submit"
-												disabled={Boolean(submittingAction)}>Restore</button
+												<input
+													type="hidden"
+													name="canonicalSetKey"
+													value={activeCatalog.snapshot?.canonicalSetKey ?? ''}
+												/><input
+													type="hidden"
+													name="patchLabel"
+													value={activeCatalog.snapshot?.patchLabel ?? 'latest'}
+												/><input type="hidden" name="resourceKind" value="champion" /><input
+													type="hidden"
+													name="operation"
+													value="override"
+												/><input
+													type="hidden"
+													name="targetExternalId"
+													value={champion.externalId}
+												/><input
+													class="input-sm input"
+													name="displayNameOverride"
+													value={champion.displayName}
+													aria-label={`Override ${champion.displayName} name`}
+													disabled={Boolean(submittingAction)}
+												/><input
+													class="input-sm input"
+													type="number"
+													name="tierOverride"
+													min="1"
+													max="5"
+													value={champion.tier ?? ''}
+													aria-label={`Override ${champion.displayName} tier`}
+													disabled={Boolean(submittingAction)}
+												/><input
+													class="input-sm input"
+													type="file"
+													name="image"
+													accept="image/png,image/jpeg,image/webp"
+													aria-label={`Override ${champion.displayName} image`}
+													disabled={Boolean(submittingAction)}
+												/><button
+													class="btn preset-tonal-primary btn-sm"
+													type="submit"
+													disabled={Boolean(submittingAction)}>Create override</button
+												>
+											</form>{/if}
+										{#if champion.isExcluded}<form
+												method="POST"
+												action="?/restoreResource"
+												use:enhance={trackSubmission(`restore:${champion.id}`)}
 											>
-										</form>{:else}<form
-											method="POST"
-											action="?/excludeResource"
-											use:enhance={submitExclude(champion, 'champion')}
-										>
-											<input type="hidden" name="tournamentId" value={tournament.id} /><input
-												type="hidden"
-												name="resourceKind"
-												value="champion"
-											/><input type="hidden" name="resourceId" value={champion.id} /><button
-												class="btn preset-tonal-error btn-sm"
-												type="submit"
-												disabled={Boolean(submittingAction)}>Hide</button
+												<input type="hidden" name="tournamentId" value={tournament.id} /><input
+													type="hidden"
+													name="resourceKind"
+													value="champion"
+												/><input type="hidden" name="resourceId" value={champion.id} /><button
+													class="btn preset-tonal-success btn-sm"
+													type="submit"
+													disabled={Boolean(submittingAction)}>Restore</button
+												>
+											</form>{:else}<form
+												method="POST"
+												action="?/excludeResource"
+												use:enhance={submitExclude(champion, 'champion')}
 											>
-										</form>{/if}
-								</td></tr
-							>{:else}<tr
-								><td colspan="4" class="py-10 text-center text-surface-500"
-									>No champions match this filter.</td
-								></tr
-							>{/each}
-					</tbody>
-				</table>
-			</div>
-		</div>
-		<div>
-			<div class="mb-3 flex items-center justify-between">
-				<h3 class="h4">Augments</h3>
-				<span class="badge preset-tonal-surface"
-					>{augments.length} of {activeCatalog.augments.length}</span
-				>
-			</div>
-			<div class="max-h-144 table-wrap rounded-container border border-surface-200-800">
-				<table class="table table-zebra">
-					<thead class="sticky top-0 bg-surface-100-900"
-						><tr><th>Icon</th><th>Resource</th><th>Correction</th><th>Actions</th></tr></thead
-					><tbody>
-						{#each augments as augment (augment.id)}<tr
-								><td
-									>{#if augment.iconPath}<img
-											src={augment.iconPath}
-											alt=""
-											class="size-9 rounded-base object-cover"
-											loading="lazy"
-										/>{:else}<span class="text-xs text-surface-500">No image supplied</span
-										>{/if}</td
-								><td
-									><strong>{augment.displayName}</strong><br /><code class="text-xs"
-										>{augment.externalId}</code
-									><br /><span class="text-xs">Tier {augment.tier ?? '—'}</span></td
-								><td
-									><span class="badge preset-tonal-surface">{provenance(augment)}</span
-									>{#if augment.isExcluded}<br /><span
-											class="mt-1 inline-block text-xs text-warning-600-400">Hidden</span
-										>{/if}</td
-								><td class="space-y-2">
-									{#if augment.correctionId}<form
-											method="POST"
-											action="?/updateCorrection"
-											enctype="multipart/form-data"
-											use:enhance={trackSubmission(`update:${augment.id}`)}
-											class="grid gap-1"
-										>
-											<input type="hidden" name="correctionId" value={augment.correctionId} /><input
-												class="input-sm input"
-												name="displayNameOverride"
-												value={augment.displayName}
-												aria-label={`Edit ${augment.displayName} name`}
-												disabled={Boolean(submittingAction)}
-											/><input
-												class="input-sm input"
-												type="number"
-												name="tierOverride"
-												min="1"
-												max="5"
-												value={augment.tier ?? ''}
-												aria-label={`Edit ${augment.displayName} tier`}
-												disabled={Boolean(submittingAction)}
-											/><input
-												class="input-sm input"
-												type="file"
-												name="image"
-												accept="image/png,image/jpeg,image/webp"
-												aria-label={`Replace ${augment.displayName} image`}
-												disabled={Boolean(submittingAction)}
-											/><button
-												class="btn preset-tonal-primary btn-sm"
-												type="submit"
-												disabled={Boolean(submittingAction)}>Save edit</button
+												<input type="hidden" name="tournamentId" value={tournament.id} /><input
+													type="hidden"
+													name="resourceKind"
+													value="champion"
+												/><input type="hidden" name="resourceId" value={champion.id} /><button
+													class="btn preset-tonal-error btn-sm"
+													type="submit"
+													disabled={Boolean(submittingAction)}>Hide</button
+												>
+											</form>{/if}
+									</td></tr
+								>{:else}<tr
+									><td colspan="4" class="py-10 text-center text-surface-500"
+										>No champions match this filter.</td
+									></tr
+								>{/each}
+						</tbody>
+					</table>
+				</div>
+			{/if}
+		</Tabs.Content>
+
+		<Tabs.Content value="augments">
+			{#if activeTab === 'augments'}
+				<div class="mb-4 flex flex-wrap items-end justify-between gap-3">
+					<div class="w-full space-y-1 sm:w-80">
+						<label class="label label-text" for="augment-catalog-search">Search augments</label>
+						<div class="field-group grid-cols-[auto_1fr]">
+							<span class="label label-text preset-tonal-primary" aria-hidden="true">
+								<SearchIcon class="size-4" />
+							</span>
+							<input
+								class="input"
+								id="augment-catalog-search"
+								type="search"
+								bind:value={augmentQuery}
+								placeholder="Augment name or external ID"
+							/>
+						</div>
+					</div>
+					<label class="flex items-center gap-2 text-sm font-medium">
+						<input class="checkbox" type="checkbox" bind:checked={augmentShowHidden} />
+						Show hidden augments
+					</label>
+				</div>
+				<div class="max-h-144 table-wrap rounded-container border border-surface-200-800">
+					<table class="table table-zebra" aria-label="Augment catalog resources">
+						<thead class="sticky top-0 bg-surface-100-900"
+							><tr><th>Icon</th><th>Resource</th><th>Correction</th><th>Actions</th></tr></thead
+						><tbody>
+							{#each augments as augment (augment.id)}<tr
+									><td
+										>{#if augment.iconPath}<img
+												src={augment.iconPath}
+												alt=""
+												class="size-9 rounded-base object-cover"
+												loading="lazy"
+											/>{:else}<span class="text-xs text-surface-500">No image supplied</span
+											>{/if}</td
+									><td
+										><strong>{augment.displayName}</strong><br /><code class="text-xs"
+											>{augment.externalId}</code
+										><br /><span class="text-xs">Tier {augment.tier ?? '—'}</span></td
+									><td
+										><span class="badge preset-tonal-surface">{provenance(augment)}</span
+										>{#if augment.isExcluded}<br /><span
+												class="mt-1 inline-block text-xs text-warning-600-400">Hidden</span
+											>{/if}</td
+									><td class="space-y-2">
+										{#if augment.correctionId}<form
+												method="POST"
+												action="?/updateCorrection"
+												enctype="multipart/form-data"
+												use:enhance={trackSubmission(`update:${augment.id}`)}
+												class="grid gap-1"
 											>
-										</form>{:else}<form
-											method="POST"
-											action="?/createCorrection"
-											enctype="multipart/form-data"
-											use:enhance={trackSubmission(`override:${augment.id}`)}
-											class="grid gap-1"
-										>
-											<input
-												type="hidden"
-												name="canonicalSetKey"
-												value={activeCatalog.snapshot?.canonicalSetKey ?? ''}
-											/><input
-												type="hidden"
-												name="patchLabel"
-												value={activeCatalog.snapshot?.patchLabel ?? 'latest'}
-											/><input type="hidden" name="resourceKind" value="augment" /><input
-												type="hidden"
-												name="operation"
-												value="override"
-											/><input
-												type="hidden"
-												name="targetExternalId"
-												value={augment.externalId}
-											/><input
-												class="input-sm input"
-												name="displayNameOverride"
-												value={augment.displayName}
-												aria-label={`Override ${augment.displayName} name`}
-												disabled={Boolean(submittingAction)}
-											/><input
-												class="input-sm input"
-												type="number"
-												name="tierOverride"
-												min="1"
-												max="5"
-												value={augment.tier ?? ''}
-												aria-label={`Override ${augment.displayName} tier`}
-												disabled={Boolean(submittingAction)}
-											/><input
-												class="input-sm input"
-												type="file"
-												name="image"
-												accept="image/png,image/jpeg,image/webp"
-												aria-label={`Override ${augment.displayName} image`}
-												disabled={Boolean(submittingAction)}
-											/><button
-												class="btn preset-tonal-primary btn-sm"
-												type="submit"
-												disabled={Boolean(submittingAction)}>Create override</button
+												<input
+													type="hidden"
+													name="correctionId"
+													value={augment.correctionId}
+												/><input
+													class="input-sm input"
+													name="displayNameOverride"
+													value={augment.displayName}
+													aria-label={`Edit ${augment.displayName} name`}
+													disabled={Boolean(submittingAction)}
+												/><input
+													class="input-sm input"
+													type="number"
+													name="tierOverride"
+													min="1"
+													max="5"
+													value={augment.tier ?? ''}
+													aria-label={`Edit ${augment.displayName} tier`}
+													disabled={Boolean(submittingAction)}
+												/><input
+													class="input-sm input"
+													type="file"
+													name="image"
+													accept="image/png,image/jpeg,image/webp"
+													aria-label={`Replace ${augment.displayName} image`}
+													disabled={Boolean(submittingAction)}
+												/><button
+													class="btn preset-tonal-primary btn-sm"
+													type="submit"
+													disabled={Boolean(submittingAction)}>Save edit</button
+												>
+											</form>{:else}<form
+												method="POST"
+												action="?/createCorrection"
+												enctype="multipart/form-data"
+												use:enhance={trackSubmission(`override:${augment.id}`)}
+												class="grid gap-1"
 											>
-										</form>{/if}
-									{#if augment.isExcluded}<form
-											method="POST"
-											action="?/restoreResource"
-											use:enhance={trackSubmission(`restore:${augment.id}`)}
-										>
-											<input type="hidden" name="tournamentId" value={tournament.id} /><input
-												type="hidden"
-												name="resourceKind"
-												value="augment"
-											/><input type="hidden" name="resourceId" value={augment.id} /><button
-												class="btn preset-tonal-success btn-sm"
-												type="submit"
-												disabled={Boolean(submittingAction)}>Restore</button
+												<input
+													type="hidden"
+													name="canonicalSetKey"
+													value={activeCatalog.snapshot?.canonicalSetKey ?? ''}
+												/><input
+													type="hidden"
+													name="patchLabel"
+													value={activeCatalog.snapshot?.patchLabel ?? 'latest'}
+												/><input type="hidden" name="resourceKind" value="augment" /><input
+													type="hidden"
+													name="operation"
+													value="override"
+												/><input
+													type="hidden"
+													name="targetExternalId"
+													value={augment.externalId}
+												/><input
+													class="input-sm input"
+													name="displayNameOverride"
+													value={augment.displayName}
+													aria-label={`Override ${augment.displayName} name`}
+													disabled={Boolean(submittingAction)}
+												/><input
+													class="input-sm input"
+													type="number"
+													name="tierOverride"
+													min="1"
+													max="5"
+													value={augment.tier ?? ''}
+													aria-label={`Override ${augment.displayName} tier`}
+													disabled={Boolean(submittingAction)}
+												/><input
+													class="input-sm input"
+													type="file"
+													name="image"
+													accept="image/png,image/jpeg,image/webp"
+													aria-label={`Override ${augment.displayName} image`}
+													disabled={Boolean(submittingAction)}
+												/><button
+													class="btn preset-tonal-primary btn-sm"
+													type="submit"
+													disabled={Boolean(submittingAction)}>Create override</button
+												>
+											</form>{/if}
+										{#if augment.isExcluded}<form
+												method="POST"
+												action="?/restoreResource"
+												use:enhance={trackSubmission(`restore:${augment.id}`)}
 											>
-										</form>{:else}<form
-											method="POST"
-											action="?/excludeResource"
-											use:enhance={submitExclude(augment, 'augment')}
-										>
-											<input type="hidden" name="tournamentId" value={tournament.id} /><input
-												type="hidden"
-												name="resourceKind"
-												value="augment"
-											/><input type="hidden" name="resourceId" value={augment.id} /><button
-												class="btn preset-tonal-error btn-sm"
-												type="submit"
-												disabled={Boolean(submittingAction)}>Hide</button
+												<input type="hidden" name="tournamentId" value={tournament.id} /><input
+													type="hidden"
+													name="resourceKind"
+													value="augment"
+												/><input type="hidden" name="resourceId" value={augment.id} /><button
+													class="btn preset-tonal-success btn-sm"
+													type="submit"
+													disabled={Boolean(submittingAction)}>Restore</button
+												>
+											</form>{:else}<form
+												method="POST"
+												action="?/excludeResource"
+												use:enhance={submitExclude(augment, 'augment')}
 											>
-										</form>{/if}
-								</td></tr
-							>{:else}<tr
-								><td colspan="4" class="py-10 text-center text-surface-500"
-									>No augments match this filter.</td
-								></tr
-							>{/each}
-					</tbody>
-				</table>
-			</div>
-		</div>
-	</div>
+												<input type="hidden" name="tournamentId" value={tournament.id} /><input
+													type="hidden"
+													name="resourceKind"
+													value="augment"
+												/><input type="hidden" name="resourceId" value={augment.id} /><button
+													class="btn preset-tonal-error btn-sm"
+													type="submit"
+													disabled={Boolean(submittingAction)}>Hide</button
+												>
+											</form>{/if}
+									</td></tr
+								>{:else}<tr
+									><td colspan="4" class="py-10 text-center text-surface-500"
+										>No augments match this filter.</td
+									></tr
+								>{/each}
+						</tbody>
+					</table>
+				</div>
+			{/if}
+		</Tabs.Content>
+	</Tabs>
 </section>
 
 <ResetRequiredDialog

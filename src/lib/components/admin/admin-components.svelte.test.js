@@ -106,6 +106,67 @@ function composerProps(overrides = {}) {
 	};
 }
 
+function catalogProps() {
+	return {
+		tournament: { id: 'tournament-1', name: 'Unitour' },
+		activeCatalog: {
+			snapshot: {
+				source: 'communitydragon',
+				patchLabel: '16.14',
+				setLabel: 'Set 16',
+				canonicalSetKey: 'TFT16',
+				locale: 'en_us',
+				syncedAt: new Date(),
+				metadataJson: '{}'
+			},
+			champions: [
+				{
+					id: 'champion-irelia',
+					externalId: 'TFT16_Champion_Irelia',
+					displayName: 'Irelia',
+					iconPath: null,
+					tier: 4,
+					correctionId: null,
+					isExcluded: false,
+					provenanceJson: '{"source":"upstream"}'
+				},
+				{
+					id: 'champion-hidden',
+					externalId: 'TFT16_Champion_Hidden',
+					displayName: 'Hidden Champion',
+					iconPath: null,
+					tier: 2,
+					correctionId: 'champion-hidden-correction',
+					isExcluded: true,
+					provenanceJson: '{"source":"upstream","operation":"exclude"}'
+				}
+			],
+			augments: [
+				{
+					id: 'augment-lotus',
+					externalId: 'TFT16_Augment_JeweledLotus',
+					displayName: 'Jeweled Lotus',
+					iconPath: null,
+					tier: null,
+					correctionId: null,
+					isExcluded: false,
+					provenanceJson: '{"source":"upstream"}'
+				},
+				{
+					id: 'augment-hidden',
+					externalId: 'TFT16_Augment_Hidden',
+					displayName: 'Hidden Augment',
+					iconPath: null,
+					tier: null,
+					correctionId: 'augment-hidden-correction',
+					isExcluded: true,
+					provenanceJson: '{"source":"upstream","operation":"exclude"}'
+				}
+			]
+		}
+	};
+}
+
 /** @param {RegExp} name */
 function requiredButton(name) {
 	const button = [...document.querySelectorAll('button')].find((candidate) =>
@@ -630,6 +691,75 @@ describe('persisted import status', () => {
 	});
 });
 
+describe('catalog resource tabs', () => {
+	test('mounts only the active resource table with accessible tab state and counts', async () => {
+		render(CatalogManager, catalogProps());
+
+		await expect
+			.element(page.getByRole('tablist', { name: 'Catalog resource type' }))
+			.toBeVisible();
+		await expect
+			.element(page.getByRole('tab', { name: 'Champions (1/2)' }))
+			.toHaveAttribute('aria-selected', 'true');
+		expect(document.querySelectorAll('table')).toHaveLength(1);
+		await expect.element(page.getByText('Irelia', { exact: true })).toBeVisible();
+		await expect.element(page.getByText('Jeweled Lotus', { exact: true })).not.toBeInTheDocument();
+	});
+
+	test('switches the mounted panel with ArrowRight', async () => {
+		render(CatalogManager, catalogProps());
+		const championTab = document.querySelector('[role="tab"][data-value="champions"]');
+		expect(championTab).toBeTruthy();
+		/** @type {HTMLElement | null} */ (championTab)?.focus();
+		championTab?.dispatchEvent(
+			new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true })
+		);
+
+		await expect
+			.element(page.getByRole('tab', { name: 'Augments (1/2)' }))
+			.toHaveAttribute('aria-selected', 'true');
+		expect(document.querySelectorAll('table')).toHaveLength(1);
+		await expect.element(page.getByText('Jeweled Lotus', { exact: true })).toBeVisible();
+		await expect.element(page.getByText('Irelia', { exact: true })).not.toBeInTheDocument();
+	});
+
+	test('retains separate queries and keeps search scoped to the active resource type', async () => {
+		render(CatalogManager, catalogProps());
+		await page.getByLabelText('Search champions').fill('lotus');
+		await expect.element(page.getByRole('tab', { name: 'Champions (0/2)' })).toBeVisible();
+		await expect.element(page.getByText('Jeweled Lotus', { exact: true })).not.toBeInTheDocument();
+
+		await page.getByRole('tab', { name: 'Augments (1/2)' }).click();
+		await expect.element(page.getByLabelText('Search augments')).toHaveValue('');
+		await page.getByLabelText('Search augments').fill('lotus');
+		await expect.element(page.getByText('Jeweled Lotus', { exact: true })).toBeVisible();
+
+		await page.getByRole('tab', { name: 'Champions (0/2)' }).click();
+		await expect.element(page.getByLabelText('Search champions')).toHaveValue('lotus');
+		await expect.element(page.getByText('Jeweled Lotus', { exact: true })).not.toBeInTheDocument();
+	});
+
+	test('reveals excluded resources only for the active type', async () => {
+		render(CatalogManager, catalogProps());
+		await expect
+			.element(page.getByText('Hidden Champion', { exact: true }))
+			.not.toBeInTheDocument();
+		/** @type {HTMLInputElement | null} */ (
+			document
+				.querySelector('#champion-catalog-search')
+				?.closest('[role="tabpanel"]')
+				?.querySelector('input[type="checkbox"]')
+		)?.click();
+		await expect.element(page.getByText('Hidden Champion', { exact: true })).toBeVisible();
+		await expect.element(page.getByRole('tab', { name: 'Champions (2/2)' })).toBeVisible();
+
+		await page.getByRole('tab', { name: 'Augments (1/2)' }).click();
+		await expect.element(page.getByText('Hidden Augment', { exact: true })).not.toBeInTheDocument();
+		await page.getByLabelText('Show hidden augments').click();
+		await expect.element(page.getByText('Hidden Augment', { exact: true })).toBeVisible();
+	});
+});
+
 describe('operator maintenance surfaces', () => {
 	test('edits every player identity field and confirms destructive deletion', async () => {
 		render(
@@ -803,7 +933,7 @@ describe('operator maintenance surfaces', () => {
 			.toBeInTheDocument();
 	});
 
-	test('shows catalog provenance, correction controls, placeholders, and reset confirmation', () => {
+	test('shows catalog provenance, correction controls, placeholders, and reset confirmation', async () => {
 		render(CatalogManager, {
 			tournament: { id: 'tournament-1', name: 'Unitour' },
 			activeCatalog: {
@@ -851,6 +981,8 @@ describe('operator maintenance surfaces', () => {
 		expect(
 			document.querySelector('form[action*="/createCorrection"] input[type="file"]')
 		).toBeTruthy();
+		/** @type {HTMLInputElement} */ (document.querySelector('input[type="checkbox"]')).click();
+		await tick();
 		expect(document.querySelector('form[action*="/updateCorrection"]')).toBeTruthy();
 		expect(document.querySelector('form[action*="/excludeResource"]')).toBeTruthy();
 		expect(document.querySelector('form[action*="/restoreResource"]')).toBeTruthy();
@@ -914,7 +1046,7 @@ describe('operator maintenance surfaces', () => {
 		).toBe('augment');
 	});
 
-	test('offers create-override forms for ordinary upstream champions and augments', () => {
+	test('offers create-override forms for ordinary upstream champions and augments', async () => {
 		render(CatalogManager, {
 			tournament: { id: 'tournament-1', name: 'Unitour' },
 			activeCatalog: {
@@ -958,6 +1090,7 @@ describe('operator maintenance surfaces', () => {
 			['Upstream Champion', 'champion', 'TFT16_UpstreamChampion'],
 			['Upstream Augment', 'augment', 'TFT16_UpstreamAugment']
 		]) {
+			if (kind === 'augment') await page.getByRole('tab', { name: 'Augments (1/1)' }).click();
 			const row = [...document.querySelectorAll('tr')].find((candidate) =>
 				candidate.textContent?.includes(label)
 			);
@@ -1021,6 +1154,8 @@ describe('catalog manager progress', () => {
 			await page.getByRole('button', { name: 'Sync catalog' }).click();
 			await expect.element(page.getByText('Downloading catalog images')).toBeInTheDocument();
 			await expect.element(page.getByText('50%')).toBeInTheDocument();
+			await page.getByRole('tab', { name: 'Augments (0/0)' }).click();
+			await expect.element(page.getByText('Downloading catalog images')).toBeVisible();
 			await expect.element(page.getByRole('button', { name: 'Downloading…' })).toBeDisabled();
 			finish();
 			await expect.element(page.getByRole('button', { name: 'Sync catalog' })).toBeEnabled();
