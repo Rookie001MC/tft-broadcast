@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import {
 	catalogSearchDocument,
+	catalogSearchTokens,
 	createCatalogSearchIndex,
 	normalizeCatalogSearchText,
 	searchCatalogResources
@@ -63,6 +64,20 @@ describe('catalog search normalization', () => {
 		});
 		expect(document.resource).toBe(champions[7]);
 	});
+
+	test('splits uppercase letter-number suffixes while preserving the TFT version token', () => {
+		expect(catalogSearchTokens('TFT15_Champion-X2_ABC3')).toEqual([
+			'tft15',
+			'champion',
+			'x',
+			'2',
+			'abc',
+			'3'
+		]);
+
+		const uppercaseSuffix = resource('champ-uppercase-suffix', 'TFT15_Champion-X2', 'Sentinel');
+		expect(searchCatalogResources([uppercaseSuffix], 'x 2')).toEqual([uppercaseSuffix]);
+	});
 });
 
 describe('catalog search indexing', () => {
@@ -119,6 +134,12 @@ describe('catalog search ranking and identity', () => {
 
 		expect(result).toHaveLength(champions.length);
 		champions.forEach((item, index) => expect(result[index]).toBe(item));
+	});
+
+	test('returns no matches for a nonempty query without searchable tokens', () => {
+		for (const query of ['-', '_', '!!!']) {
+			expect(searchCatalogResources(champions, query)).toEqual([]);
+		}
 	});
 
 	test('keeps independently-created champion and augment scopes isolated', () => {
