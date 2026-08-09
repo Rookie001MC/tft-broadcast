@@ -1,13 +1,25 @@
 <script>
+	import { enhance } from '$app/forms';
+	import { resolve } from '$app/paths';
+	import ExternalLinkIcon from '@lucide/svelte/icons/external-link';
 	import SaveIcon from '@lucide/svelte/icons/save';
+	import TrashIcon from '@lucide/svelte/icons/trash-2';
 	import { untrack } from 'svelte';
 	import WinnerBoardGraphic from '$lib/components/WinnerBoardGraphic.svelte';
+	import ResetRequiredDialog from './ResetRequiredDialog.svelte';
 	/** @import { WinnerBoardView } from '$lib/winner-board.js' */
 	/** @typedef {{ id: string, displayName: string, fullName: string, riotId: string | null, imagePath: string | null }} Player */
 	/** @typedef {{ id: string, displayName: string, iconPath: string | null }} CatalogAsset */
 
-	/** @type {{ tournament: { id: string } | null, roster: Player[], activeCatalog: { snapshot: any, champions: CatalogAsset[], augments: CatalogAsset[] }, savedBoard: import('$lib/winner-board.js').WinnerBoardStateView | null, form?: any }} */
-	let { tournament, roster, activeCatalog, savedBoard, form = null } = $props();
+	/** @type {{ tournament: { id: string } | null, roster: Player[], activeCatalog: { snapshot: any, champions: CatalogAsset[], augments: CatalogAsset[] }, savedBoard: import('$lib/winner-board.js').WinnerBoardStateView | null, livePublicationId?: string | null, form?: any }} */
+	let {
+		tournament,
+		roster,
+		activeCatalog,
+		savedBoard,
+		livePublicationId = null,
+		form = null
+	} = $props();
 
 	/** @param {import('$lib/winner-board.js').WinnerBoardStateView | null} board */
 	function formState(board) {
@@ -23,20 +35,104 @@
 		};
 	}
 
+	/** @param {ReturnType<typeof formState>} value */
+	function normalizedForm(value) {
+		return {
+			title: value.title.trim(),
+			winnerPlayerId: value.winnerPlayerId,
+			championIds: [...value.championIds],
+			augmentIds: [...value.augmentIds],
+			starLevels: Object.fromEntries(
+				value.championIds.map((id) => [id, String(value.starLevels[id] ?? '')])
+			)
+		};
+	}
+
+	/** @param {import('$lib/winner-board.js').WinnerBoardStateView | null} board */
+	function boardKey(board) {
+		return board ? `${board.id}:${new Date(board.updatedAt).getTime()}` : 'empty';
+	}
+
 	/** @param {string} name */
 	function actionUrl(name) {
 		return `?tournament=${encodeURIComponent(tournament?.id ?? '')}&/${name}`;
 	}
 
 	let composer = $state(untrack(() => formState(savedBoard)));
+	let savedForm = $state.raw(untrack(() => normalizedForm(formState(savedBoard))));
+	let lastBaselineKey = untrack(() => boardKey(savedBoard));
+	/** @type {string | null} */
+	let submittingAction = $state(null);
+	let resetOpen = $state(false);
+	/** @type {HTMLButtonElement | null} */
+	let resetInvoker = $state(null);
+	/** @type {any} */
+	let resetDialog;
+
+	const canonicalBoard = $derived(
+		form?.action === 'saveBoard' && form.board ? form.board : savedBoard
+	);
+	const canonicalKey = $derived(boardKey(canonicalBoard));
+
+	/** @param {string} key @returns {import('svelte/attachments').Attachment<HTMLElement>} */
+	function synchronizeCanonical(key) {
+		return () => {
+			if (key !== lastBaselineKey) {
+				const next = formState(canonicalBoard);
+				composer = next;
+				savedForm = normalizedForm(next);
+				lastBaselineKey = key;
+			}
+		};
+	}
+
+	const normalizedComposer = $derived(normalizedForm(composer));
+	const dirty = $derived(JSON.stringify(normalizedComposer) !== JSON.stringify(savedForm));
+	const invalid = $derived(
+		!tournament ||
+			!activeCatalog.snapshot ||
+			!composer.title.trim() ||
+			!roster.some((player) => player.id === composer.winnerPlayerId) ||
+			composer.championIds.length === 0
+	);
+	const isLive = $derived(Boolean(livePublicationId));
 
 	/** @type {WinnerBoardView | null} */
 	const previewBoard = $derived.by(() => {
 		const winner = roster.find((player) => player.id === composer.winnerPlayerId);
-		if (!winner || composer.championIds.length === 0) return null;
+		if (!winner || !composer.title.trim() || composer.championIds.length === 0) return null;
+		const champions = composer.championIds.flatMap((id, displayOrder) => {
+			const champion = activeCatalog.champions.find((item) => item.id === id);
+			return champion
+				? [
+						{
+							id: champion.id,
+							displayName: champion.displayName,
+							iconPath: champion.iconPath,
+							starLevel: Number(composer.starLevels[id]) || null,
+							displayOrder
+						}
+					]
+				: [];
+		});
+		if (champions.length !== composer.championIds.length) return null;
+		const augments = composer.augmentIds.flatMap((id, displayOrder) => {
+			const augment = activeCatalog.augments.find((item) => item.id === id);
+			return augment
+				? [
+						{
+							id: augment.id,
+							displayName: augment.displayName,
+							iconPath: augment.iconPath,
+							displayOrder
+						}
+					]
+				: [];
+		});
+		if (augments.length !== composer.augmentIds.length) return null;
 		return {
 			id: savedBoard?.id ?? 'preview',
-			title: composer.title,
+			title: composer.title.trim(),
 			tournamentId: tournament?.id ?? '',
 			updatedAt: savedBoard?.updatedAt ?? new Date(),
 			winner: {
@@ -45,35 +141,26 @@
 				riotId: winner.riotId,
 				imagePath: winner.imagePath
 			},
-			champions: composer.championIds.flatMap((id, displayOrder) => {
-				const champion = activeCatalog.champions.find((item) => item.id === id);
-				return champion
-					? [
-							{
-								id: champion.id,
-								displayName: champion.displayName,
-								iconPath: champion.iconPath,
-								starLevel: Number(composer.starLevels[id]) || null,
-								displayOrder
-							}
-						]
-					: [];
-			}),
-			augments: composer.augmentIds.flatMap((id, displayOrder) => {
-				const augment = activeCatalog.augments.find((item) => item.id === id);
-				return augment
-					? [
-							{
-								id: augment.id,
-								displayName: augment.displayName,
-								iconPath: augment.iconPath,
-								displayOrder
-							}
-						]
-					: [];
-			})
+			champions,
+			augments
 		};
 	});
+	const liveDisabled = $derived(
+		isLive
+			? submittingAction === 'setLive'
+			: Boolean(submittingAction) || dirty || !previewBoard || !savedBoard
+	);
+
+	/** @param {string} action @returns {import('@sveltejs/kit').SubmitFunction} */
+	function trackSubmission(action) {
+		return () => {
+			submittingAction = action;
+			return async ({ update }) => {
+				await update({ reset: false });
+				submittingAction = null;
+			};
+		};
+	}
 
 	/** @param {string} id @param {boolean} checked */
 	function toggleChampion(id, checked) {
@@ -93,24 +180,87 @@
 			? [...composer.augmentIds, id]
 			: composer.augmentIds.filter((value) => value !== id);
 	}
+
+	/** @param {MouseEvent & { currentTarget: HTMLButtonElement }} event */
+	function requestReset(event) {
+		resetInvoker = event.currentTarget;
+		resetOpen = true;
+		resetDialog?.showModal();
+	}
 </script>
 
-<section id="composer" class="card preset-outlined-surface-200-800 bg-surface-50-950 p-5">
-	<header class="mb-5 flex flex-wrap items-start justify-between gap-3">
+<section
+	id="composer"
+	class="card preset-outlined-surface-200-800 bg-surface-50-950 p-5"
+	{@attach synchronizeCanonical(canonicalKey)}
+>
+	<header class="mb-5 flex flex-wrap items-start justify-between gap-4">
 		<div>
 			<p class="text-xs font-bold tracking-wider text-primary-600-400 uppercase">
-				Saved board workspace
+				Broadcast workspace
 			</p>
 			<h2 class="h3">Winner board composer</h2>
 			<p class="mt-1 text-sm text-surface-600-400">
-				Saving replaces the one editable board. Take it live separately after review.
+				Save one canonical board, inspect the exact canvas, then deliberately control publication.
 			</p>
 		</div>
-		<span class="badge preset-tonal-surface">{savedBoard ? 'Saved board' : 'Not saved'}</span>
+		<div class="flex flex-wrap items-center justify-end gap-2">
+			<span class="badge preset-tonal-surface">{savedBoard ? 'Saved' : 'Unsaved'}</span>
+			<span class:badge-success={isLive} class="badge">{isLive ? 'Live' : 'Hidden'}</span>
+			<a
+				class="btn preset-tonal-surface btn-sm"
+				href={resolve('/gfx')}
+				target="_blank"
+				rel="noreferrer"
+			>
+				<ExternalLinkIcon class="size-4" /> Open /gfx
+			</a>
+		</div>
 	</header>
 
+	<div class="mb-5 flex flex-wrap items-center gap-3 rounded-container bg-surface-100-900 p-3">
+		<form method="POST" action={actionUrl('setLive')} use:enhance={trackSubmission('setLive')}>
+			<input type="hidden" name="enabled" value={isLive ? 'false' : 'true'} />
+			<button
+				class={isLive ? 'btn preset-filled-success-500' : 'btn preset-tonal-surface'}
+				type="submit"
+				role="switch"
+				aria-checked={isLive}
+				aria-label="Live graphic"
+				disabled={liveDisabled}
+			>
+				<span class="size-2 rounded-full bg-current" aria-hidden="true"></span>
+				{isLive ? 'Live on' : 'Live off'}
+			</button>
+		</form>
+		<button
+			class="btn preset-tonal-error"
+			type="button"
+			disabled={!savedBoard || Boolean(submittingAction)}
+			onclick={requestReset}
+		>
+			<TrashIcon class="size-4" /> Reset
+		</button>
+		{#if dirty}
+			<p class="text-sm font-medium text-warning-700-300">
+				Save changes before taking the board live.
+			</p>
+		{:else if invalid || !previewBoard}
+			<p class="text-sm text-surface-600-400">
+				Complete the required board fields before going live.
+			</p>
+		{:else}
+			<p class="text-sm text-surface-600-400">Publication state comes from the server.</p>
+		{/if}
+	</div>
+
 	<div class="grid gap-6 2xl:grid-cols-[minmax(380px,0.75fr)_minmax(0,1.25fr)]">
-		<form method="POST" action={actionUrl('saveBoard')} class="space-y-5">
+		<form
+			method="POST"
+			action={actionUrl('saveBoard')}
+			use:enhance={trackSubmission('saveBoard')}
+			class="space-y-5"
+		>
 			<input type="hidden" name="tournamentId" value={tournament?.id ?? ''} />
 
 			<div class="grid gap-3 sm:grid-cols-2">
@@ -168,10 +318,9 @@
 								disabled={!selected}
 								aria-label={`${champion.displayName} star level`}
 							>
-								<option value="">Stars</option>
-								<option value="1">1 ★</option><option value="2">2 ★</option><option value="3"
-									>3 ★</option
-								>
+								<option value="">Stars</option><option value="1">1 ★</option><option value="2"
+									>2 ★</option
+								><option value="3">3 ★</option>
 							</select>
 						</div>
 					{:else}<p class="text-sm text-surface-500">
@@ -207,13 +356,10 @@
 			<button
 				class="btn preset-filled-primary-500"
 				type="submit"
-				disabled={!tournament ||
-					!roster.length ||
-					!activeCatalog.snapshot ||
-					!composer.championIds.length}
+				disabled={invalid || Boolean(submittingAction)}
 			>
 				<SaveIcon class="size-4" />
-				Save board
+				{submittingAction === 'saveBoard' ? 'Saving…' : 'Save board'}
 			</button>
 		</form>
 
@@ -233,10 +379,23 @@
 		</div>
 	</div>
 
-	{#if form?.action === 'saveBoard' && form.message}
-		<p class="mt-4 rounded-base preset-tonal-error p-3 text-sm">{form.message}</p>
+	{#if form?.message && ['saveBoard', 'setLive', 'resetBoard'].includes(form.action)}
+		<p class="mt-4 rounded-base preset-tonal-error p-3 text-sm" role="alert">{form.message}</p>
 	{/if}
 </section>
+
+<ResetRequiredDialog
+	bind:this={resetDialog}
+	open={resetOpen}
+	title="Reset the saved winner board?"
+	description={isLive
+		? 'This permanently clears the saved board and will hide the live graphic.'
+		: 'This permanently clears the saved board. The broadcast graphic will remain hidden.'}
+	confirmAction={actionUrl('resetBoard')}
+	hiddenInputs={{ tournamentId: tournament?.id ?? '' }}
+	invokingControl={resetInvoker}
+	onclose={() => (resetOpen = false)}
+/>
 
 <style>
 	.selected-card {

@@ -1,6 +1,7 @@
 import { page } from 'vitest/browser';
 import { describe, expect, test, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
+import { tick } from 'svelte';
 import WinnerBoardGraphic from '../WinnerBoardGraphic.svelte';
 import CatalogManager from './CatalogManager.svelte';
 import PlayerImportPanel from './PlayerImportPanel.svelte';
@@ -11,6 +12,8 @@ vi.mock('$lib/context/pageMetaContext.js', () => ({
 }));
 
 import GraphicsPage from '../../../routes/(admin)/admin/graphics/+page.svelte';
+import PlayersPage from '../../../routes/(admin)/admin/players/+page.svelte';
+import TournamentsPage from '../../../routes/(admin)/admin/tournaments/+page.svelte';
 
 /** @type {import('$lib/winner-board.js').WinnerBoardStateView} */
 const board = {
@@ -135,9 +138,8 @@ describe('winner graphic components', () => {
 	test('renders the fixed canvas from controlled player and local catalog URLs', async () => {
 		const requestedSources = new WeakMap();
 		const originalSetAttribute = Element.prototype.setAttribute;
-		const setAttribute = vi
-			.spyOn(Element.prototype, 'setAttribute')
-			.mockImplementation(function (name, value) {
+		const setAttribute = vi.spyOn(Element.prototype, 'setAttribute').mockImplementation(
+			/** @this {Element} */ function (name, value) {
 				if (this instanceof HTMLImageElement && name === 'src' && value.startsWith('/media/')) {
 					requestedSources.set(this, value);
 					return originalSetAttribute.call(
@@ -148,7 +150,8 @@ describe('winner graphic components', () => {
 				}
 
 				return originalSetAttribute.call(this, name, value);
-			});
+			}
+		);
 
 		try {
 			render(WinnerBoardGraphic, { board });
@@ -211,6 +214,31 @@ describe('winner graphic components', () => {
 		expect(requiredButton(/^\s*Save board\s*$/i).disabled).toBe(false);
 	});
 
+	test('keeps Live-off available when an already-live board has invalid unsaved edits', async () => {
+		render(WinnerBoardComposer, composerProps({ livePublicationId: 'publication-1' }));
+		await page.getByLabelText('Graphic title').fill('');
+
+		expect(requiredLiveSwitch().disabled).toBe(false);
+		expect(liveIsOn(requiredLiveSwitch())).toBe(true);
+		expect(
+			/** @type {HTMLInputElement | null} */ (
+				document.querySelector('form[action*="/setLive"] input[name="enabled"]')
+			)?.value
+		).toBe('false');
+	});
+
+	test('blocks Live-on when saved catalog IDs cannot produce the exact preview', () => {
+		render(
+			WinnerBoardComposer,
+			composerProps({
+				activeCatalog: { snapshot: { id: 'snapshot-2' }, champions: [], augments: [] }
+			})
+		);
+
+		expect(requiredLiveSwitch().disabled).toBe(true);
+		expect(document.body.textContent).toMatch(/complete.*required.*before.*live/i);
+	});
+
 	test('uses a successful hidden Save as the canonical baseline without publishing', async () => {
 		const rendered = render(WinnerBoardComposer, composerProps({ livePublicationId: null }));
 		await page.getByLabelText('Graphic title').fill('Canonical hidden title');
@@ -242,7 +270,7 @@ describe('winner graphic components', () => {
 			composerProps({ livePublicationId: 'publication-1' })
 		);
 		await page.getByLabelText('Graphic title').fill('Canonical live title');
-		expect(requiredLiveSwitch().disabled).toBe(true);
+		expect(requiredLiveSwitch().disabled).toBe(false);
 		const saved = {
 			...composerBoard,
 			title: 'Canonical live title',
@@ -295,7 +323,9 @@ describe('winner graphic components', () => {
 			/hide.*live/i
 		);
 		expect(document.body.textContent).toMatch(/hide.*live/i);
-		await page.getByRole('dialog').press('Escape');
+		dialog.dispatchEvent(
+			new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
+		);
 		expect(document.activeElement).toBe(resetButton);
 	});
 
@@ -304,8 +334,9 @@ describe('winner graphic components', () => {
 		requiredButton(/reset/i).click();
 		expect(document.querySelector('dialog')).toBeTruthy();
 		const cancel = page.getByRole('button', { name: 'Cancel' });
-		const confirm = page.getByRole('button', { name: 'Confirm reset' });
-		await confirm.press('Tab');
+		const confirm = requiredButton(/^\s*Confirm reset\s*$/i);
+		confirm.focus();
+		confirm.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
 		await expect.element(cancel).toHaveFocus();
 	});
 
@@ -358,7 +389,7 @@ describe('winner graphic components', () => {
 
 describe('graphics page workflow', () => {
 	test('renders one integrated composer without a separate Live controls panel', async () => {
-		render(GraphicsPage, { data: graphicsPageData });
+		render(GraphicsPage, /** @type {any} */ ({ data: graphicsPageData }));
 
 		await expect
 			.element(page.getByRole('heading', { name: 'Winner board composer' }))
@@ -372,7 +403,7 @@ describe('graphics page workflow', () => {
 	});
 
 	test('cancelling a tournament change preserves the selected tournament and local board', async () => {
-		render(GraphicsPage, { data: graphicsPageData });
+		render(GraphicsPage, /** @type {any} */ ({ data: graphicsPageData }));
 		const tournament = page.getByLabelText('Tournament scope');
 
 		await tournament.selectOptions('tournament-2');
@@ -385,7 +416,7 @@ describe('graphics page workflow', () => {
 	});
 
 	test('confirming a tournament change requests an atomic reset for the next tournament', async () => {
-		render(GraphicsPage, { data: graphicsPageData });
+		render(GraphicsPage, /** @type {any} */ ({ data: graphicsPageData }));
 		await page.getByLabelText('Tournament scope').selectOptions('tournament-2');
 		const dialog = requiredDialog();
 		const form = dialog.querySelector('form');
@@ -398,6 +429,40 @@ describe('graphics page workflow', () => {
 				?.value
 		).toBe('tournament-2');
 	});
+
+	test('offers a native reset-and-select POST fallback while saved state exists', () => {
+		render(GraphicsPage, /** @type {any} */ ({ data: graphicsPageData }));
+		const selector = /** @type {HTMLSelectElement} */ (
+			document.querySelector('select[name="nextTournamentId"]')
+		);
+		const form = selector?.closest('form');
+
+		expect(selector).toBeTruthy();
+		expect(form?.method).toBe('post');
+		expect(
+			new URL(/** @type {HTMLFormElement} */ (form).action).searchParams.has(
+				'/resetAndSelectTournament'
+			)
+		).toBe(true);
+	});
+
+	test.each(['The target tournament is no longer available.', 'Winner board could not be reset.'])(
+		'renders the safe native reset-and-select action failure: %s',
+		async (message) => {
+			render(
+				GraphicsPage,
+				/** @type {any} */ ({
+					data: graphicsPageData,
+					form: {
+						action: 'resetAndSelectTournament',
+						message
+					}
+				})
+			);
+
+			await expect.element(page.getByRole('alert')).toHaveTextContent(message);
+		}
+	);
 });
 
 describe('persisted import status', () => {
@@ -450,6 +515,59 @@ describe('persisted import status', () => {
 		).toBe(false);
 	});
 
+	test('uses the persisted preview when an enhanced preview result has no expiry authority', () => {
+		const persisted = {
+			token: 'persisted-token',
+			status: 'previewed',
+			preview,
+			expiresAt: new Date(Date.now() + 60_000)
+		};
+		render(PlayerImportPanel, {
+			form: {
+				action: 'previewBundle',
+				token: 'action-token',
+				preview: {
+					...preview,
+					rows: [{ ...preview.rows[0], displayName: 'Unauthoritative action row' }]
+				}
+			},
+			importPreview: persisted
+		});
+
+		expect(document.body.textContent).toContain('Player A');
+		expect(document.body.textContent).not.toContain('Unauthoritative action row');
+		expect(
+			/** @type {HTMLInputElement} */ (document.querySelector('input[name="token"]')).value
+		).toBe('persisted-token');
+	});
+
+	test('transitions an active preview to expired at its persisted deadline', async () => {
+		vi.useFakeTimers();
+		try {
+			render(PlayerImportPanel, {
+				importPreview: {
+					token: 'expiring-token',
+					status: 'previewed',
+					preview,
+					expiresAt: new Date(Date.now() + 1_000)
+				}
+			});
+			expect(requiredButton(/confirm exact preview/i).disabled).toBe(false);
+
+			await vi.advanceTimersByTimeAsync(1_001);
+			await tick();
+
+			expect(document.body.textContent).toMatch(/preview expired/i);
+			expect(
+				[...document.querySelectorAll('button')].some((button) =>
+					/confirm exact preview/i.test(button.textContent ?? '')
+				)
+			).toBe(false);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
 	test.each([
 		[{ ...committed, status: 'expired' }, /expired/i],
 		[{ ...committed, status: 'unavailable' }, /unavailable/i]
@@ -462,6 +580,350 @@ describe('persisted import status', () => {
 				/confirm exact preview/i.test(button.textContent ?? '')
 			)
 		).toBe(false);
+	});
+});
+
+describe('operator maintenance surfaces', () => {
+	test('edits every player identity field and confirms destructive deletion', async () => {
+		render(
+			PlayersPage,
+			/** @type {any} */ ({
+				data: /** @type {any} */ ({
+					players: [
+						{
+							id: 'player-1',
+							fullName: 'Earl Grey Teemo',
+							displayName: 'EarlGreyTeemo',
+							riotId: 'EarlGreyTeemo#sip',
+							riotGameName: 'EarlGreyTeemo',
+							riotTagline: 'sip',
+							imagePath: 'player-images/player-1.png',
+							updatedAt: new Date()
+						}
+					],
+					importPreview: null
+				})
+			})
+		);
+
+		for (const name of ['fullName', 'displayName', 'riotId', 'riotGameName', 'riotTagline']) {
+			expect(document.querySelector(`form[action*="/updatePlayer"] [name="${name}"]`)).toBeTruthy();
+		}
+		expect(
+			document.querySelector('form[action*="/replacePlayerImage"] input[type="file"]')
+		).toBeTruthy();
+		expect(document.querySelector('form[action*="/removePlayerImage"]')).toBeTruthy();
+		await page.getByRole('button', { name: /delete earlgreyteemo/i }).click();
+		expect(requiredDialog().textContent).toMatch(/delete.*permanently/i);
+	});
+
+	test('edits tournament name and slug and confirms destructive deletion', async () => {
+		const tournament = {
+			id: 'tournament-1',
+			name: 'Unitour',
+			slug: 'unitour',
+			activeCatalogSnapshotId: null,
+			updatedAt: new Date()
+		};
+		render(
+			TournamentsPage,
+			/** @type {any} */ ({
+				data: /** @type {any} */ ({
+					tournaments: [tournament],
+					selectedTournament: tournament,
+					players: [],
+					roster: []
+				})
+			})
+		);
+
+		expect(document.querySelector('form[action*="/updateTournament"] [name="name"]')).toBeTruthy();
+		expect(document.querySelector('form[action*="/updateTournament"] [name="slug"]')).toBeTruthy();
+		await page.getByRole('button', { name: /delete unitour/i }).click();
+		expect(requiredDialog().textContent).toMatch(/delete.*permanently/i);
+	});
+
+	test('shows player reset-required confirmation without claiming deletion completed', () => {
+		render(
+			PlayersPage,
+			/** @type {any} */ ({
+				data: {
+					players: [
+						{
+							id: 'player-1',
+							fullName: 'Earl Grey Teemo',
+							displayName: 'EarlGreyTeemo',
+							riotId: 'EarlGreyTeemo#sip',
+							riotGameName: 'EarlGreyTeemo',
+							riotTagline: 'sip',
+							imagePath: null,
+							updatedAt: new Date()
+						},
+						{
+							id: 'player-2',
+							fullName: 'Earl Grey Teemo',
+							displayName: 'EarlGreyTeemo',
+							riotId: 'EarlGreyTeemo#two',
+							riotGameName: 'EarlGreyTeemo',
+							riotTagline: 'two',
+							imagePath: null,
+							updatedAt: new Date()
+						}
+					],
+					importPreview: null
+				},
+				form: {
+					action: 'deletePlayer',
+					playerId: 'player-2',
+					result: { kind: 'reset_required', label: 'EarlGreyTeemo' }
+				}
+			})
+		);
+
+		const dialog = requiredDialog();
+		expect(dialog.textContent).toMatch(/reset.*delete/i);
+		expect(
+			/** @type {HTMLInputElement | null} */ (dialog.querySelector('input[name="playerId"]'))?.value
+		).toBe('player-2');
+		expect(document.body.textContent).not.toContain('Player deleted.');
+	});
+
+	test('shows player deletion success only for an actual deleted result', async () => {
+		render(
+			PlayersPage,
+			/** @type {any} */ ({
+				data: { players: [], importPreview: null },
+				form: { action: 'confirmDeletePlayer', result: { deleted: true, reset: true } }
+			})
+		);
+
+		await expect.element(page.getByText('Player deleted.', { exact: true })).toBeInTheDocument();
+	});
+
+	test('shows tournament reset-required confirmation without claiming deletion completed', () => {
+		const tournament = {
+			id: 'tournament-1',
+			name: 'Unitour',
+			slug: 'unitour',
+			activeCatalogSnapshotId: null,
+			updatedAt: new Date()
+		};
+		const duplicateTournament = {
+			...tournament,
+			id: 'tournament-2',
+			slug: 'unitour-duplicate'
+		};
+		render(
+			TournamentsPage,
+			/** @type {any} */ ({
+				data: {
+					tournaments: [tournament, duplicateTournament],
+					selectedTournament: tournament,
+					players: [],
+					roster: []
+				},
+				form: {
+					action: 'deleteTournament',
+					tournamentId: 'tournament-2',
+					result: { kind: 'reset_required', label: 'Unitour' }
+				}
+			})
+		);
+
+		const dialog = requiredDialog();
+		expect(dialog.textContent).toMatch(/reset.*delete/i);
+		expect(
+			/** @type {HTMLInputElement | null} */ (dialog.querySelector('input[name="tournamentId"]'))
+				?.value
+		).toBe('tournament-2');
+		expect(document.body.textContent).not.toContain('Tournament deleted.');
+	});
+
+	test('shows tournament deletion success only for an actual deleted result', async () => {
+		render(
+			TournamentsPage,
+			/** @type {any} */ ({
+				data: { tournaments: [], selectedTournament: null, players: [], roster: [] },
+				form: {
+					action: 'confirmDeleteTournament',
+					result: { deleted: true, reset: true }
+				}
+			})
+		);
+
+		await expect
+			.element(page.getByText('Tournament deleted.', { exact: true }))
+			.toBeInTheDocument();
+	});
+
+	test('shows catalog provenance, correction controls, placeholders, and reset confirmation', () => {
+		render(CatalogManager, {
+			tournament: { id: 'tournament-1', name: 'Unitour' },
+			activeCatalog: {
+				snapshot: {
+					source: 'communitydragon',
+					patchLabel: '16.14',
+					setLabel: 'Set 16',
+					canonicalSetKey: 'TFT16',
+					locale: 'en_us',
+					syncedAt: new Date(),
+					metadataJson: '{}'
+				},
+				champions: [
+					{
+						id: 'champion-1',
+						externalId: 'manual-champion',
+						displayName: 'Manual Champion',
+						iconPath: null,
+						tier: 3,
+						correctionId: 'correction-1',
+						isExcluded: false,
+						provenanceJson: '{"source":"manual"}'
+					},
+					{
+						id: 'champion-2',
+						externalId: 'hidden-champion',
+						displayName: 'Hidden Champion',
+						iconPath: null,
+						tier: 2,
+						correctionId: 'correction-2',
+						isExcluded: true,
+						provenanceJson: '{"source":"upstream","operation":"exclude"}'
+					}
+				],
+				augments: []
+			},
+			form: {
+				action: 'excludeResource',
+				resourceKind: 'champion',
+				resourceId: 'champion-1',
+				result: { kind: 'reset_required', label: 'Manual Champion' }
+			}
+		});
+
+		expect(
+			document.querySelector('form[action*="/createCorrection"] input[type="file"]')
+		).toBeTruthy();
+		expect(document.querySelector('form[action*="/updateCorrection"]')).toBeTruthy();
+		expect(document.querySelector('form[action*="/excludeResource"]')).toBeTruthy();
+		expect(document.querySelector('form[action*="/restoreResource"]')).toBeTruthy();
+		expect(document.body.textContent).toMatch(/manual provenance/i);
+		expect(document.body.textContent).toMatch(/no image supplied/i);
+		expect(requiredDialog().textContent).toMatch(/reset.*saved board/i);
+	});
+
+	test('keeps duplicate catalog labels bound to the exact resource ID and kind', () => {
+		render(CatalogManager, {
+			tournament: { id: 'tournament-1', name: 'Unitour' },
+			activeCatalog: {
+				snapshot: {
+					patchLabel: '16.14',
+					canonicalSetKey: 'TFT16',
+					locale: 'en_us',
+					syncedAt: new Date(),
+					metadataJson: '{}'
+				},
+				champions: [
+					{
+						id: 'champion-duplicate',
+						externalId: 'champion-duplicate',
+						displayName: 'Shared Label',
+						iconPath: null,
+						tier: 2,
+						correctionId: null,
+						isExcluded: false,
+						provenanceJson: '{"source":"upstream"}'
+					}
+				],
+				augments: [
+					{
+						id: 'augment-exact',
+						externalId: 'augment-exact',
+						displayName: 'Shared Label',
+						iconPath: null,
+						tier: null,
+						correctionId: null,
+						isExcluded: false,
+						provenanceJson: '{"source":"upstream"}'
+					}
+				]
+			},
+			form: {
+				action: 'excludeResource',
+				resourceId: 'augment-exact',
+				resourceKind: 'augment',
+				result: { kind: 'reset_required', label: 'Shared Label' }
+			}
+		});
+
+		const dialog = requiredDialog();
+		expect(
+			/** @type {HTMLInputElement | null} */ (dialog.querySelector('input[name="resourceId"]'))
+				?.value
+		).toBe('augment-exact');
+		expect(
+			/** @type {HTMLInputElement | null} */ (dialog.querySelector('input[name="resourceKind"]'))
+				?.value
+		).toBe('augment');
+	});
+
+	test('offers create-override forms for ordinary upstream champions and augments', () => {
+		render(CatalogManager, {
+			tournament: { id: 'tournament-1', name: 'Unitour' },
+			activeCatalog: {
+				snapshot: {
+					source: 'communitydragon',
+					patchLabel: '16.14',
+					setLabel: 'Set 16',
+					canonicalSetKey: 'TFT16',
+					locale: 'en_us',
+					syncedAt: new Date(),
+					metadataJson: '{}'
+				},
+				champions: [
+					{
+						id: 'champion-upstream',
+						externalId: 'TFT16_UpstreamChampion',
+						displayName: 'Upstream Champion',
+						iconPath: '/media/upstream.png',
+						tier: 4,
+						correctionId: null,
+						isExcluded: false,
+						provenanceJson: '{"source":"upstream"}'
+					}
+				],
+				augments: [
+					{
+						id: 'augment-upstream',
+						externalId: 'TFT16_UpstreamAugment',
+						displayName: 'Upstream Augment',
+						iconPath: '/media/upstream-augment.png',
+						tier: null,
+						correctionId: null,
+						isExcluded: false,
+						provenanceJson: '{"source":"upstream"}'
+					}
+				]
+			}
+		});
+
+		for (const [label, kind, externalId] of [
+			['Upstream Champion', 'champion', 'TFT16_UpstreamChampion'],
+			['Upstream Augment', 'augment', 'TFT16_UpstreamAugment']
+		]) {
+			const row = [...document.querySelectorAll('tr')].find((candidate) =>
+				candidate.textContent?.includes(label)
+			);
+			const form = row?.querySelector('form[action*="/createCorrection"]');
+			expect(form, `${label} override form`).toBeTruthy();
+			expect(form?.querySelector('input[name="operation"]')?.getAttribute('value')).toBe(
+				'override'
+			);
+			expect(form?.querySelector('input[name="resourceKind"]')?.getAttribute('value')).toBe(kind);
+			expect(form?.querySelector('input[name="targetExternalId"]')?.getAttribute('value')).toBe(
+				externalId
+			);
+		}
 	});
 });
 

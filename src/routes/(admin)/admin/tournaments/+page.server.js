@@ -32,7 +32,7 @@ async function deleteFromForm(form, action, confirmReset) {
 	const tournamentId = text(form.get('tournamentId'));
 	if (!tournamentId) return fail(400, { action, message: 'A tournament is required.' });
 	const result = await deleteTournament(db, { tournamentId, confirmReset });
-	return { action, result };
+	return { action, tournamentId, result };
 }
 
 /** @type {import('./$types').PageServerLoad} */

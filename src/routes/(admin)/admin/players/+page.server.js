@@ -39,7 +39,7 @@ async function deleteFromForm(form, action, confirmReset) {
 	const playerId = text(form.get('playerId'));
 	if (!playerId) return fail(400, { action, message: 'A player is required.' });
 	const result = await deletePlayer(db, { playerId, confirmReset, mediaRoot: MEDIA_ROOT });
-	return { action, result };
+	return { action, playerId, result };
 }
 
 /** @type {import('./$types').PageServerLoad} */

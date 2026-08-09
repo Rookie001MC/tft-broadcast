@@ -134,7 +134,7 @@ async function excludeFromForm(form, action, confirmReset) {
 		resourceId,
 		confirmReset
 	});
-	return { action, result };
+	return { action, resourceKind, resourceId, result };
 }
 
 /** @type {import('./$types').PageServerLoad} */

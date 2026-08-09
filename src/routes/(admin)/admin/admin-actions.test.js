@@ -142,7 +142,11 @@ const actionRoutes = [
 			'confirmExcludeResource'
 		]
 	],
-	['/admin/graphics', graphicActions, ['saveBoard', 'setLive', 'resetBoard']],
+	[
+		'/admin/graphics',
+		graphicActions,
+		['saveBoard', 'setLive', 'resetBoard', 'resetAndSelectTournament']
+	],
 	['/admin/settings', settingsActions, ['logout']]
 ];
 
@@ -678,6 +682,67 @@ describe('admin action results', () => {
 		});
 	});
 
+	test('rechecks a native tournament target, resets, and redirects to its selected scope', async () => {
+		mocks.loadTournamentAdminData.mockResolvedValue({
+			selectedTournament: { id: 'tournament-2', name: 'Tournament Two' }
+		});
+		mocks.resetWinnerBoardState.mockResolvedValue({ reset: true, wasLive: true });
+		const action = /** @type {Record<string, any>} */ (graphicActions).resetAndSelectTournament;
+		expect(action).toBeTypeOf('function');
+		const form = new FormData();
+		form.set('nextTournamentId', 'tournament-2');
+		const request = new Request('https://broadcast.example/admin/graphics', {
+			method: 'POST',
+			body: form
+		});
+
+		await expect(
+			action(
+				asEvent({
+					locals: { user: { id: 'operator-1' } },
+					request,
+					url: new URL(request.url)
+				})
+			)
+		).rejects.toEqual(
+			expect.objectContaining({
+				status: 303,
+				location: '/admin/graphics?tournament=tournament-2'
+			})
+		);
+
+		expect(mocks.loadTournamentAdminData).toHaveBeenCalledWith({}, 'tournament-2');
+		expect(mocks.resetWinnerBoardState).toHaveBeenCalledWith({});
+	});
+
+	test('rejects a native tournament target that does not survive the server recheck', async () => {
+		mocks.loadTournamentAdminData.mockResolvedValue({
+			selectedTournament: { id: 'tournament-1', name: 'Tournament One' }
+		});
+		const action = /** @type {Record<string, any>} */ (graphicActions).resetAndSelectTournament;
+		expect(action).toBeTypeOf('function');
+		const form = new FormData();
+		form.set('nextTournamentId', 'missing-tournament');
+		const request = new Request('https://broadcast.example/admin/graphics', {
+			method: 'POST',
+			body: form
+		});
+
+		const result = await action(
+			asEvent({
+				locals: { user: { id: 'operator-1' } },
+				request,
+				url: new URL(request.url)
+			})
+		);
+
+		expect(result).toMatchObject({
+			status: 400,
+			data: { action: 'resetAndSelectTournament' }
+		});
+		expect(mocks.resetWinnerBoardState).not.toHaveBeenCalled();
+	});
+
 	test.each([
 		['deletePlayer', false],
 		['confirmDeletePlayer', true]
@@ -708,7 +773,10 @@ describe('admin action results', () => {
 			{},
 			expect.objectContaining({ playerId: 'player-one', confirmReset })
 		);
-		expect(result).toMatchObject({ action: actionName });
+		expect(result).toMatchObject({
+			action: actionName,
+			...(confirmReset ? {} : { playerId: 'player-one' })
+		});
 	});
 
 	test.each([
@@ -743,7 +811,50 @@ describe('admin action results', () => {
 				{},
 				expect.objectContaining({ tournamentId: 'tournament-one', confirmReset })
 			);
-			expect(result).toMatchObject({ action: actionName });
+			expect(result).toMatchObject({
+				action: actionName,
+				...(confirmReset ? {} : { tournamentId: 'tournament-one' })
+			});
 		}
 	);
+
+	test('excludeResource preserves the exact resource identity for confirmation', async () => {
+		mocks.excludeCatalogResource.mockResolvedValue({
+			kind: 'reset_required',
+			label: 'Shared Label'
+		});
+		const action = /** @type {Record<string, any>} */ (catalogActions).excludeResource;
+		const form = new FormData();
+		form.set('tournamentId', 'tournament-one');
+		form.set('resourceKind', 'augment');
+		form.set('resourceId', 'augment-exact');
+		const request = new Request('https://broadcast.example/admin/game-resources', {
+			method: 'POST',
+			body: form
+		});
+
+		const result = await action(
+			asEvent({
+				locals: { user: { id: 'operator-1' } },
+				request,
+				url: new URL(request.url)
+			})
+		);
+
+		expect(mocks.excludeCatalogResource).toHaveBeenCalledWith(
+			{},
+			expect.objectContaining({
+				tournamentId: 'tournament-one',
+				resourceKind: 'augment',
+				resourceId: 'augment-exact',
+				confirmReset: false
+			})
+		);
+		expect(result).toMatchObject({
+			action: 'excludeResource',
+			resourceKind: 'augment',
+			resourceId: 'augment-exact',
+			result: { kind: 'reset_required', label: 'Shared Label' }
+		});
+	});
 });

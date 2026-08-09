@@ -4,9 +4,11 @@ import {
 	text,
 	toStringValues
 } from '$lib/server/admin/form-helpers.js';
+import { redirect } from '@sveltejs/kit';
 import { loadAdminData } from '$lib/server/admin/load.js';
 import { requireAdmin } from '$lib/server/auth/guards.js';
 import { db } from '$lib/server/db';
+import { loadTournamentAdminData } from '$lib/server/tournaments/repository.js';
 import {
 	getWinnerBoardState,
 	resetWinnerBoardState,
@@ -81,5 +83,35 @@ export const actions = {
 		} catch {
 			return actionFailure('resetBoard', new Error('Winner board could not be reset.'), 409);
 		}
+	},
+	resetAndSelectTournament: async (event) => {
+		requireAdmin(event);
+		const form = await event.request.formData();
+		const nextTournamentId = text(form.get('nextTournamentId'));
+		if (!nextTournamentId) {
+			return actionFailure(
+				'resetAndSelectTournament',
+				new Error('A target tournament is required.'),
+				400
+			);
+		}
+		try {
+			const { selectedTournament } = await loadTournamentAdminData(db, nextTournamentId);
+			if (selectedTournament?.id !== nextTournamentId) {
+				return actionFailure(
+					'resetAndSelectTournament',
+					new Error('The target tournament is no longer available.'),
+					400
+				);
+			}
+			await resetWinnerBoardState(db);
+		} catch {
+			return actionFailure(
+				'resetAndSelectTournament',
+				new Error('Winner board could not be reset.'),
+				409
+			);
+		}
+		redirect(303, `/admin/graphics?tournament=${encodeURIComponent(nextTournamentId)}`);
 	}
 };
