@@ -92,6 +92,11 @@ async function runSerializedWrite(operation) {
 	}
 }
 
+export {
+	runSerializedWrite as runSerializedWinnerBoardWrite,
+	runWriteTransaction as runWinnerBoardWriteTransaction
+};
+
 /** @param {SaveWinnerBoardStateInput} input */
 function validateInputShape(input) {
 	if (!Array.isArray(input.champions) || !Array.isArray(input.augmentIds))
@@ -711,32 +716,35 @@ export async function setWinnerBoardLive(database, live) {
  * Remove the editable singleton. A currently live graphic is hidden and bumps
  * its version in the same transaction; a hidden reset does neither.
  *
- * @param {any} database
+ * @param {any} transaction
  * @returns {Promise<boolean>}
  */
+export async function resetWinnerBoardStateInTransaction(transaction) {
+	const [current] = await transaction
+		.select({ id: winnerBoardState.id })
+		.from(winnerBoardState)
+		.where(eq(winnerBoardState.id, CURRENT_STATE_ID))
+		.limit(1);
+	const state = await currentGraphicState(transaction);
+	if (current)
+		await transaction.delete(winnerBoardState).where(eq(winnerBoardState.id, CURRENT_STATE_ID));
+	if (state?.publishedPublicationId) {
+		await transaction
+			.update(graphicState)
+			.set({
+				publishedPublicationId: null,
+				version: sql`${graphicState.version} + 1`,
+				updatedAt: new Date()
+			})
+			.where(eq(graphicState.id, LIVE_STATE_ID));
+	}
+	return Boolean(current);
+}
+
+/** @param {any} database @returns {Promise<boolean>} */
 export async function resetWinnerBoardState(database) {
 	return runSerializedWrite(() =>
-		runWriteTransaction(database, async (transaction) => {
-			const [current] = await transaction
-				.select({ id: winnerBoardState.id })
-				.from(winnerBoardState)
-				.where(eq(winnerBoardState.id, CURRENT_STATE_ID))
-				.limit(1);
-			const state = await currentGraphicState(transaction);
-			if (current)
-				await transaction.delete(winnerBoardState).where(eq(winnerBoardState.id, CURRENT_STATE_ID));
-			if (state?.publishedPublicationId) {
-				await transaction
-					.update(graphicState)
-					.set({
-						publishedPublicationId: null,
-						version: sql`${graphicState.version} + 1`,
-						updatedAt: new Date()
-					})
-					.where(eq(graphicState.id, LIVE_STATE_ID));
-			}
-			return Boolean(current);
-		})
+		runWriteTransaction(database, resetWinnerBoardStateInTransaction)
 	);
 }
 

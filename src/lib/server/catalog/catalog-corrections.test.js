@@ -228,6 +228,8 @@ describe('catalog correction persistence', () => {
 		database = drizzle(client);
 		await client.batch([
 			'PRAGMA foreign_keys = ON',
+			'DROP TABLE IF EXISTS winner_board_state_augments',
+			'DROP TABLE IF EXISTS winner_board_state_champions',
 			'DROP TABLE IF EXISTS tournaments',
 			'DROP TABLE IF EXISTS catalog_augments',
 			'DROP TABLE IF EXISTS catalog_champions',
@@ -237,6 +239,8 @@ describe('catalog correction persistence', () => {
 			`CREATE TABLE catalog_corrections (id TEXT PRIMARY KEY NOT NULL, canonical_set_key TEXT, patch_label TEXT NOT NULL, resource_kind TEXT NOT NULL, operation TEXT NOT NULL, target_external_id TEXT, manual_external_id TEXT, display_name_override TEXT, tier_override INTEGER, image_path_override TEXT, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)`,
 			`CREATE TABLE catalog_champions (id TEXT PRIMARY KEY NOT NULL, catalog_snapshot_id TEXT NOT NULL REFERENCES catalog_snapshots(id) ON DELETE CASCADE, external_id TEXT NOT NULL, display_name TEXT NOT NULL, icon_path TEXT, tier INTEGER, metadata_json TEXT NOT NULL, correction_id TEXT REFERENCES catalog_corrections(id) ON DELETE SET NULL, is_excluded INTEGER DEFAULT 0 NOT NULL, provenance_json TEXT DEFAULT '{"source":"upstream"}' NOT NULL, UNIQUE(catalog_snapshot_id, external_id))`,
 			`CREATE TABLE catalog_augments (id TEXT PRIMARY KEY NOT NULL, catalog_snapshot_id TEXT NOT NULL REFERENCES catalog_snapshots(id) ON DELETE CASCADE, external_id TEXT NOT NULL, display_name TEXT NOT NULL, icon_path TEXT, tier INTEGER, metadata_json TEXT NOT NULL, correction_id TEXT REFERENCES catalog_corrections(id) ON DELETE SET NULL, is_excluded INTEGER DEFAULT 0 NOT NULL, provenance_json TEXT DEFAULT '{"source":"upstream"}' NOT NULL, UNIQUE(catalog_snapshot_id, external_id))`,
+			`CREATE TABLE winner_board_state_champions (id TEXT PRIMARY KEY NOT NULL, winner_board_state_id TEXT NOT NULL, catalog_champion_id TEXT NOT NULL REFERENCES catalog_champions(id), star_level INTEGER, display_order INTEGER NOT NULL)`,
+			`CREATE TABLE winner_board_state_augments (id TEXT PRIMARY KEY NOT NULL, winner_board_state_id TEXT NOT NULL, catalog_augment_id TEXT NOT NULL REFERENCES catalog_augments(id), display_order INTEGER NOT NULL)`,
 			`CREATE TABLE tournaments (id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, slug TEXT NOT NULL UNIQUE, active_catalog_snapshot_id TEXT REFERENCES catalog_snapshots(id) ON DELETE SET NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)`
 		]);
 	});

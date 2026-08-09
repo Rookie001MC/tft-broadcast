@@ -7,6 +7,7 @@ import {
 	catalogSnapshots
 } from '../db/schema/catalog.js';
 import { tournaments } from '../db/schema/tournaments.js';
+import { runDestructiveMaintenance } from '../winner-boards/maintenance.js';
 import { assertCatalogCorrectionImagePath } from './catalog-media.js';
 
 const RESOURCE_KINDS = new Set(['champion', 'augment']);
@@ -299,128 +300,140 @@ function resourceTable(resourceKind) {
 
 /**
  * @param {any} database
- * @param {{ tournamentId: string, resourceKind: 'champion' | 'augment', resourceId: string }} input
+ * @param {{ tournamentId: string, resourceKind: 'champion' | 'augment', resourceId: string, confirmReset?: boolean }} input
  */
 export async function excludeCatalogResource(database, input) {
 	const tournamentId = requiredText(input.tournamentId, 'Tournament ID');
 	const resourceId = requiredText(input.resourceId, 'Catalog resource ID');
 	const table = resourceTable(input.resourceKind);
-	return database.transaction(async (/** @type {any} */ transaction) => {
-		const [tournament] = await transaction
-			.select({ activeCatalogSnapshotId: tournaments.activeCatalogSnapshotId })
-			.from(tournaments)
-			.where(eq(tournaments.id, tournamentId))
-			.limit(1);
-		if (!tournament?.activeCatalogSnapshotId) throw new Error('Tournament has no active catalog');
-		const [resource] = await transaction
-			.select()
-			.from(table)
-			.where(
-				and(
-					eq(table.id, resourceId),
-					eq(table.catalogSnapshotId, tournament.activeCatalogSnapshotId)
+	const outcome = await runDestructiveMaintenance(database, {
+		target: { kind: input.resourceKind, id: resourceId },
+		confirmReset: input.confirmReset === true,
+		operation: async (transaction) => {
+			const [tournament] = await transaction
+				.select({ activeCatalogSnapshotId: tournaments.activeCatalogSnapshotId })
+				.from(tournaments)
+				.where(eq(tournaments.id, tournamentId))
+				.limit(1);
+			if (!tournament?.activeCatalogSnapshotId) throw new Error('Tournament has no active catalog');
+			const [resource] = await transaction
+				.select()
+				.from(table)
+				.where(
+					and(
+						eq(table.id, resourceId),
+						eq(table.catalogSnapshotId, tournament.activeCatalogSnapshotId)
+					)
 				)
-			)
-			.limit(1);
-		if (!resource) throw new Error('Catalog resource not found in the active snapshot');
-		if (resource.isExcluded)
-			return { excluded: true, reset: false, correctionId: resource.correctionId };
-		const [snapshot] = await transaction
-			.select({
-				canonicalSetKey: catalogSnapshots.canonicalSetKey,
-				patchLabel: catalogSnapshots.patchLabel
-			})
-			.from(catalogSnapshots)
-			.where(eq(catalogSnapshots.id, resource.catalogSnapshotId))
-			.limit(1);
-		if (!snapshot) throw new Error('Catalog snapshot not found');
-		const correction = await createCatalogCorrection(transaction, {
-			canonicalSetKey: snapshot.canonicalSetKey,
-			patchLabel: snapshot.patchLabel,
-			resourceKind: input.resourceKind,
-			operation: 'exclude',
-			targetExternalId: resource.externalId
-		});
-		const previousProvenance = parsedProvenance(resource.provenanceJson, resource.externalId);
-		await transaction
-			.update(table)
-			.set({
-				correctionId: correction.id,
-				isExcluded: true,
-				provenanceJson: correctionProvenance(previousProvenance, correction.id, 'exclude')
-			})
-			.where(eq(table.id, resourceId));
-		return { excluded: true, reset: false, correctionId: correction.id };
+				.limit(1);
+			if (!resource) throw new Error('Catalog resource not found in the active snapshot');
+			if (resource.isExcluded)
+				return { excluded: true, reset: false, correctionId: resource.correctionId };
+			const [snapshot] = await transaction
+				.select({
+					canonicalSetKey: catalogSnapshots.canonicalSetKey,
+					patchLabel: catalogSnapshots.patchLabel
+				})
+				.from(catalogSnapshots)
+				.where(eq(catalogSnapshots.id, resource.catalogSnapshotId))
+				.limit(1);
+			if (!snapshot) throw new Error('Catalog snapshot not found');
+			const correction = await createCatalogCorrection(transaction, {
+				canonicalSetKey: snapshot.canonicalSetKey,
+				patchLabel: snapshot.patchLabel,
+				resourceKind: input.resourceKind,
+				operation: 'exclude',
+				targetExternalId: resource.externalId
+			});
+			const previousProvenance = parsedProvenance(resource.provenanceJson, resource.externalId);
+			await transaction
+				.update(table)
+				.set({
+					correctionId: correction.id,
+					isExcluded: true,
+					provenanceJson: correctionProvenance(previousProvenance, correction.id, 'exclude')
+				})
+				.where(eq(table.id, resourceId));
+			return { excluded: true, correctionId: correction.id };
+		}
 	});
+	if (outcome.kind === 'reset_required') return outcome;
+	return { ...outcome.value, reset: outcome.reset };
 }
 
 /**
  * @param {any} database
- * @param {{ tournamentId: string, resourceKind: 'champion' | 'augment', resourceId: string }} input
+ * @param {{ tournamentId: string, resourceKind: 'champion' | 'augment', resourceId: string, confirmReset?: boolean }} input
  */
 export async function restoreCatalogResource(database, input) {
 	const tournamentId = requiredText(input.tournamentId, 'Tournament ID');
 	const resourceId = requiredText(input.resourceId, 'Catalog resource ID');
 	const table = resourceTable(input.resourceKind);
-	return database.transaction(async (/** @type {any} */ transaction) => {
-		const [tournament] = await transaction
-			.select({ activeCatalogSnapshotId: tournaments.activeCatalogSnapshotId })
-			.from(tournaments)
-			.where(eq(tournaments.id, tournamentId))
-			.limit(1);
-		if (!tournament?.activeCatalogSnapshotId) throw new Error('Tournament has no active catalog');
-		const [resource] = await transaction
-			.select()
-			.from(table)
-			.where(
-				and(
-					eq(table.id, resourceId),
-					eq(table.catalogSnapshotId, tournament.activeCatalogSnapshotId)
+	const outcome = await runDestructiveMaintenance(database, {
+		target: { kind: input.resourceKind, id: resourceId },
+		confirmReset: input.confirmReset === true,
+		operation: async (transaction) => {
+			const [tournament] = await transaction
+				.select({ activeCatalogSnapshotId: tournaments.activeCatalogSnapshotId })
+				.from(tournaments)
+				.where(eq(tournaments.id, tournamentId))
+				.limit(1);
+			if (!tournament?.activeCatalogSnapshotId) throw new Error('Tournament has no active catalog');
+			const [resource] = await transaction
+				.select()
+				.from(table)
+				.where(
+					and(
+						eq(table.id, resourceId),
+						eq(table.catalogSnapshotId, tournament.activeCatalogSnapshotId)
+					)
 				)
-			)
-			.limit(1);
-		if (!resource) throw new Error('Catalog resource not found in the active snapshot');
-		if (!resource.isExcluded || !resource.correctionId) return { restored: false };
-		const [correction] = await transaction
-			.select({ operation: catalogCorrections.operation })
-			.from(catalogCorrections)
-			.where(eq(catalogCorrections.id, resource.correctionId))
-			.limit(1);
-		if (correction?.operation !== 'exclude')
-			throw new Error('Catalog resource is not linked to an exclusion correction');
-		const linkedResources = await transaction
-			.select()
-			.from(table)
-			.where(eq(table.correctionId, resource.correctionId));
-		for (const linkedResource of linkedResources) {
-			const exclusionProvenance = parsedProvenance(
-				linkedResource.provenanceJson,
-				linkedResource.externalId
-			);
-			const previousProvenance =
-				typeof exclusionProvenance.previous === 'object' &&
-				exclusionProvenance.previous !== null &&
-				!Array.isArray(exclusionProvenance.previous)
-					? exclusionProvenance.previous
-					: { source: 'upstream', externalId: linkedResource.externalId };
-			const previousCorrectionId = optionalText(previousProvenance.correctionId);
-			const remainsExcluded = previousProvenance.operation === 'exclude';
-			if (remainsExcluded && !previousCorrectionId)
-				throw new Error('Catalog exclusion provenance is missing its prior correction');
+				.limit(1);
+			if (!resource) throw new Error('Catalog resource not found in the active snapshot');
+			if (!resource.isExcluded || !resource.correctionId) return { restored: false };
+			const [correction] = await transaction
+				.select({ operation: catalogCorrections.operation })
+				.from(catalogCorrections)
+				.where(eq(catalogCorrections.id, resource.correctionId))
+				.limit(1);
+			if (correction?.operation !== 'exclude')
+				throw new Error('Catalog resource is not linked to an exclusion correction');
+			const linkedResources = await transaction
+				.select()
+				.from(table)
+				.where(eq(table.correctionId, resource.correctionId));
+			for (const linkedResource of linkedResources) {
+				const exclusionProvenance = parsedProvenance(
+					linkedResource.provenanceJson,
+					linkedResource.externalId
+				);
+				const previousProvenance =
+					typeof exclusionProvenance.previous === 'object' &&
+					exclusionProvenance.previous !== null &&
+					!Array.isArray(exclusionProvenance.previous)
+						? exclusionProvenance.previous
+						: { source: 'upstream', externalId: linkedResource.externalId };
+				const previousCorrectionId = optionalText(previousProvenance.correctionId);
+				const remainsExcluded = previousProvenance.operation === 'exclude';
+				if (remainsExcluded && !previousCorrectionId)
+					throw new Error('Catalog exclusion provenance is missing its prior correction');
+				await transaction
+					.update(table)
+					.set({
+						correctionId: previousCorrectionId,
+						isExcluded: remainsExcluded,
+						provenanceJson: JSON.stringify(previousProvenance)
+					})
+					.where(eq(table.id, linkedResource.id));
+			}
 			await transaction
-				.update(table)
-				.set({
-					correctionId: previousCorrectionId,
-					isExcluded: remainsExcluded,
-					provenanceJson: JSON.stringify(previousProvenance)
-				})
-				.where(eq(table.id, linkedResource.id));
+				.delete(catalogCorrections)
+				.where(eq(catalogCorrections.id, resource.correctionId));
+			return { restored: true };
 		}
-		await transaction
-			.delete(catalogCorrections)
-			.where(eq(catalogCorrections.id, resource.correctionId));
-		return { restored: true };
 	});
+	if (outcome.kind === 'reset_required') return outcome;
+	return { ...outcome.value, reset: outcome.reset };
 }
 
 /**

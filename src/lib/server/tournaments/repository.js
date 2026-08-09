@@ -13,6 +13,7 @@ import {
 	getPublishedWinnerBoard,
 	getWinnerBoardView
 } from '$lib/server/winner-boards/repository.js';
+import { runDestructiveMaintenance } from '$lib/server/winner-boards/maintenance.js';
 
 /** @param {any} database */
 async function allTournaments(database) {
@@ -174,14 +175,12 @@ export async function loadTournamentAdminData(database, tournamentId) {
 
 /** @param {string} value */
 function slugify(value) {
-	return (
-		value
-			.trim()
-			.toLocaleLowerCase('en-US')
-			.replace(/[^a-z0-9]+/g, '-')
-			.replace(/^-+|-+$/g, '')
-			.slice(0, 64) || randomUUID()
-	);
+	return value
+		.trim()
+		.toLocaleLowerCase('en-US')
+		.replace(/[^a-z0-9]+/g, '-')
+		.replace(/^-+|-+$/g, '')
+		.slice(0, 64);
 }
 
 /** @param {any} database @param {{ name: string }} input */
@@ -190,6 +189,7 @@ export async function createTournament(database, input) {
 	if (!name) throw new Error('Tournament name is required');
 	const now = new Date();
 	const slug = slugify(name);
+	if (!slug) throw new Error('Tournament slug is required');
 	const [created] = await database
 		.insert(tournaments)
 		.values({
@@ -202,6 +202,47 @@ export async function createTournament(database, input) {
 		})
 		.returning();
 	return created ?? null;
+}
+
+/**
+ * @param {any} database
+ * @param {{ tournamentId: string, name: string, slug: string }} input
+ */
+export async function updateTournament(database, input) {
+	const name = input.name.trim();
+	if (!name) throw new Error('Tournament name is required');
+	const slug = slugify(input.slug);
+	if (!slug) throw new Error('Tournament slug is required');
+	const [updated] = await database
+		.update(tournaments)
+		.set({ name, slug, updatedAt: new Date() })
+		.where(eq(tournaments.id, input.tournamentId))
+		.returning();
+	if (!updated) throw new Error('Tournament was not found');
+	return updated;
+}
+
+/**
+ * @param {any} database
+ * @param {{ tournamentId: string, confirmReset?: boolean }} input
+ */
+export async function deleteTournament(database, input) {
+	const outcome = await runDestructiveMaintenance(database, {
+		target: { kind: 'tournament', id: input.tournamentId },
+		confirmReset: input.confirmReset === true,
+		operation: async (transaction) => {
+			const [existing] = await transaction
+				.select({ id: tournaments.id })
+				.from(tournaments)
+				.where(eq(tournaments.id, input.tournamentId))
+				.limit(1);
+			if (!existing) throw new Error('Tournament was not found');
+			await transaction.delete(tournaments).where(eq(tournaments.id, input.tournamentId));
+			return existing;
+		}
+	});
+	if (outcome.kind === 'reset_required') return outcome;
+	return { deleted: true, reset: outcome.reset };
 }
 
 /** @param {any} database @param {{ tournamentId: string, playerIds: string[] }} input */

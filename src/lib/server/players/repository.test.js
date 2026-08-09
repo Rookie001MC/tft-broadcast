@@ -1,7 +1,7 @@
 import { createClient } from '@libsql/client';
 import { drizzle } from 'drizzle-orm/libsql';
 import { eq } from 'drizzle-orm';
-import { access, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
@@ -11,15 +11,18 @@ import * as playerRepository from './repository.js';
 const controlledFilesystem = vi.hoisted(() => ({ failManagedWrite: false }));
 
 vi.mock('node:fs/promises', async () => {
+	/** @type {typeof import('node:fs/promises')} */
 	const actual = await vi.importActual('node:fs/promises');
+	/** @type {typeof import('node:fs/promises').writeFile} */
+	const controlledWriteFile = async (...args) => {
+		if (controlledFilesystem.failManagedWrite) {
+			throw Object.assign(new Error('controlled managed-media write failure'), { code: 'EIO' });
+		}
+		return actual.writeFile(...args);
+	};
 	return {
 		...actual,
-		writeFile: async (...args) => {
-			if (controlledFilesystem.failManagedWrite) {
-				throw Object.assign(new Error('controlled managed-media write failure'), { code: 'EIO' });
-			}
-			return actual.writeFile(...args);
-		}
+		writeFile: controlledWriteFile
 	};
 });
 
@@ -201,17 +204,17 @@ describe('players repository', () => {
 			playerId: player.id,
 			fullName: '  New Full Name  ',
 			displayName: '  New Display  ',
-			riotId: ' NewGame # NewTag '
+			riotId: ' NewGame # NewTg '
 		});
 
 		expect(updated).toMatchObject({
 			id: player.id,
 			fullName: 'New Full Name',
 			displayName: 'New Display',
-			riotId: 'NewGame#NewTag',
-			riotIdKey: 'newgame#newtag',
+			riotId: 'NewGame#NewTg',
+			riotIdKey: 'newgame#newtg',
 			riotGameName: 'NewGame',
-			riotTagline: 'NewTag'
+			riotTagline: 'NewTg'
 		});
 	});
 
@@ -268,6 +271,44 @@ describe('players repository', () => {
 		const [stored] = await database.select().from(players).where(eq(players.id, player.id));
 		expect(stored.imagePath).toBe(oldRelativePath);
 		expect(await exists(path.join(mediaRoot, ...oldRelativePath.split('/')))).toBe(true);
+	});
+
+	test('removes a valid staged replacement when the database update fails', async () => {
+		const player = await playerRepository.createPlayer(database, {
+			fullName: 'Player One',
+			displayName: 'Winner One'
+		});
+		const oldRelativePath = `player-images/${player.id}-old.png`;
+		const imageDirectory = path.join(mediaRoot, 'player-images');
+		await mkdir(imageDirectory, { recursive: true });
+		await writeFile(path.join(mediaRoot, ...oldRelativePath.split('/')), 'old image');
+		await database
+			.update(players)
+			.set({ imagePath: oldRelativePath })
+			.where(eq(players.id, player.id));
+		await client.execute(`CREATE TRIGGER reject_player_image_update
+			BEFORE UPDATE OF image_path ON players
+			WHEN NEW.image_path <> OLD.image_path
+			BEGIN
+				SELECT RAISE(ABORT, 'controlled database update failure');
+			END`);
+		const replacePlayerImage = requiredFunction(
+			playerRepository.replacePlayerImage,
+			'replacePlayerImage'
+		);
+
+		await expect(
+			replacePlayerImage(database, {
+				playerId: player.id,
+				mediaRoot,
+				bytes: VALID_PNG,
+				mime: 'image/png'
+			})
+		).rejects.toThrow();
+
+		const [stored] = await database.select().from(players).where(eq(players.id, player.id));
+		expect(stored.imagePath).toBe(oldRelativePath);
+		expect(await readdir(imageDirectory)).toEqual([path.basename(oldRelativePath)]);
 	});
 
 	test('removes only the selected player managed image', async () => {

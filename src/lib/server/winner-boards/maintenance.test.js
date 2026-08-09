@@ -150,7 +150,8 @@ describe('winner-board destructive maintenance', () => {
 		await expect(
 			resetStateAndRun(database, {
 				target: { kind: 'player', id: 'player-one' },
-				operation: (transaction) => transaction.delete(players).where(eq(players.id, 'player-one'))
+				operation: (/** @type {any} */ transaction) =>
+					transaction.delete(players).where(eq(players.id, 'player-one'))
 			})
 		).resolves.toMatchObject({ kind: 'reset_complete' });
 
@@ -170,7 +171,7 @@ describe('winner-board destructive maintenance', () => {
 		await expect(
 			resetStateAndRun(database, {
 				target: { kind: 'player', id: 'player-one' },
-				operation: async (transaction) => {
+				operation: async (/** @type {any} */ transaction) => {
 					await transaction.delete(players).where(eq(players.id, 'player-one'));
 					throw new Error('destructive operation failed');
 				}
@@ -187,5 +188,39 @@ describe('winner-board destructive maintenance', () => {
 			{ id: 'publication-one' }
 		]);
 		expect(await database.select().from(players)).toHaveLength(1);
+	});
+
+	test('serializes destructive operations that can hide the live publication', async () => {
+		const { resetStateAndRun } = await maintenanceApi();
+		let releaseFirst = () => {};
+		const firstGate = new Promise((resolve) => {
+			releaseFirst = () => resolve(undefined);
+		});
+		let firstStarted = () => {};
+		const firstStartedGate = new Promise((resolve) => {
+			firstStarted = () => resolve(undefined);
+		});
+		let secondStarted = false;
+
+		const first = resetStateAndRun(database, {
+			target: { kind: 'player', id: 'player-one' },
+			operation: async () => {
+				firstStarted();
+				await firstGate;
+			}
+		});
+		await firstStartedGate;
+		const second = resetStateAndRun(database, {
+			target: { kind: 'player', id: 'player-one' },
+			operation: async () => {
+				secondStarted = true;
+			}
+		});
+		await new Promise((resolve) => setTimeout(resolve, 10));
+
+		expect(secondStarted).toBe(false);
+		releaseFirst();
+		await expect(Promise.all([first, second])).resolves.toHaveLength(2);
+		expect(secondStarted).toBe(true);
 	});
 });
