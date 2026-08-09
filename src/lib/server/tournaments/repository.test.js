@@ -48,6 +48,15 @@ const schemaStatements = [
 		version INTEGER DEFAULT 0 NOT NULL,
 		updated_at INTEGER NOT NULL
 	)`,
+	`CREATE TABLE player_import_previews (
+		token TEXT PRIMARY KEY NOT NULL,
+		staged_path TEXT NOT NULL,
+		sha256 TEXT NOT NULL,
+		preview_json TEXT NOT NULL,
+		status TEXT DEFAULT 'previewed' NOT NULL,
+		expires_at INTEGER NOT NULL,
+		created_at INTEGER NOT NULL
+	)`,
 	`CREATE TABLE winner_board_state (
 		id TEXT PRIMARY KEY NOT NULL,
 		tournament_id TEXT NOT NULL REFERENCES tournaments(id),
@@ -155,6 +164,63 @@ describe('tournaments repository', () => {
 	});
 
 	afterEach(() => client.close());
+
+	test('loads singleton live and import state without a legacy tournament drafts field', async () => {
+		const publicationId = '11111111-1111-4111-8111-111111111111';
+		const liveBoard = {
+			id: publicationId,
+			title: 'Live champion',
+			tournamentId: 'tournament-one',
+			winner: {
+				id: 'player-one',
+				displayName: 'Winner One',
+				riotId: null,
+				imagePath: null
+			},
+			champions: [
+				{
+					id: 'champion-one',
+					displayName: 'Champion One',
+					iconPath: null,
+					starLevel: null,
+					displayOrder: 0
+				}
+			],
+			augments: []
+		};
+		const importPreview = { rows: [{ displayName: 'Imported Player' }] };
+		const now = new Date('2026-08-09T00:00:00.000Z').getTime();
+		await client.execute({
+			sql: 'INSERT INTO winner_board_publications (id, source_state_updated_at, graphic_version, render_payload_json, media_directory, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+			args: [publicationId, now, 1, JSON.stringify(liveBoard), `publications/${publicationId}`, now]
+		});
+		await client.execute({
+			sql: 'INSERT INTO graphic_state (id, published_publication_id, version, updated_at) VALUES (?, ?, ?, ?)',
+			args: ['live', publicationId, 1, now]
+		});
+		await client.execute({
+			sql: 'INSERT INTO player_import_previews (token, staged_path, sha256, preview_json, status, expires_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+			args: [
+				'preview-token',
+				'staged.csv',
+				'sha256',
+				JSON.stringify(importPreview),
+				'previewed',
+				now,
+				now
+			]
+		});
+
+		const data = await tournamentRepository.loadTournamentAdminData(database, 'tournament-one');
+
+		expect(data).not.toHaveProperty('drafts');
+		expect(data.liveBoard).toEqual(liveBoard);
+		expect(data.importPreview).toMatchObject({
+			token: 'preview-token',
+			status: 'previewed',
+			preview: importPreview
+		});
+	});
 
 	test('creates a tournament with a slug derived from its name', async () => {
 		const created = await tournamentRepository.createTournament(database, {

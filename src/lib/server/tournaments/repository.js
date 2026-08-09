@@ -8,11 +8,7 @@ import {
 import { playerImportPreviews } from '$lib/server/db/schema/imports.js';
 import { players } from '$lib/server/db/schema/players.js';
 import { tournamentPlayers, tournaments } from '$lib/server/db/schema/tournaments.js';
-import { winnerBoards } from '$lib/server/db/schema/winner-boards.js';
-import {
-	getPublishedWinnerBoard,
-	getWinnerBoardView
-} from '$lib/server/winner-boards/repository.js';
+import { getPublishedWinnerBoard } from '$lib/server/winner-boards/repository.js';
 import { runDestructiveMaintenance } from '$lib/server/winner-boards/maintenance.js';
 
 /** @param {any} database */
@@ -88,19 +84,6 @@ async function getActiveCatalogAssets(database, activeCatalogSnapshotId) {
 	return { snapshot, champions, augments };
 }
 
-/** @param {any} database @param {string} tournamentId */
-async function getTournamentDrafts(database, tournamentId) {
-	const rows = await database
-		.select({ id: winnerBoards.id })
-		.from(winnerBoards)
-		.where(and(eq(winnerBoards.tournamentId, tournamentId), eq(winnerBoards.status, 'draft')))
-		.orderBy(desc(winnerBoards.updatedAt), asc(winnerBoards.id));
-	const views = await Promise.all(
-		rows.map((/** @type {{ id: string }} */ { id }) => getWinnerBoardView(database, id))
-	);
-	return views.filter(Boolean);
-}
-
 /** @param {any} database */
 async function getImportPreviewState(database) {
 	const [preview] = await database
@@ -147,18 +130,16 @@ export async function loadTournamentAdminData(database, tournamentId) {
 			roster: [],
 			players: [],
 			activeCatalog: { snapshot: null, champions: [], augments: [] },
-			drafts: [],
 			liveBoard: await getPublishedWinnerBoard(database),
 			importPreview: await getImportPreviewState(database)
 		};
 	}
 
-	const [liveBoard, importPreview, rosterData, activeCatalog, drafts] = await Promise.all([
+	const [liveBoard, importPreview, rosterData, activeCatalog] = await Promise.all([
 		getPublishedWinnerBoard(database),
 		getImportPreviewState(database),
 		getTournamentRosters(database, selectedTournament.id),
-		getActiveCatalogAssets(database, selectedTournament.activeCatalogSnapshotId),
-		getTournamentDrafts(database, selectedTournament.id)
+		getActiveCatalogAssets(database, selectedTournament.activeCatalogSnapshotId)
 	]);
 
 	return {
@@ -167,7 +148,6 @@ export async function loadTournamentAdminData(database, tournamentId) {
 		roster: rosterData.roster,
 		players: rosterData.playersForSelection,
 		activeCatalog,
-		drafts,
 		liveBoard,
 		importPreview
 	};

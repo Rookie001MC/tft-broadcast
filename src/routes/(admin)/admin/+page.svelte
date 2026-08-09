@@ -47,7 +47,7 @@
 		{
 			title: 'Broadcast',
 			value: data.liveBoard ? 'Live' : 'Hidden',
-			detail: data.liveBoard?.winner.displayName ?? `${data.drafts.length} drafts available`,
+			detail: data.liveBoard?.winner.displayName ?? 'Compose and publish from Graphics',
 			route: '/admin/graphics',
 			query: selectedQuery,
 			icon: MonitorPlayIcon
