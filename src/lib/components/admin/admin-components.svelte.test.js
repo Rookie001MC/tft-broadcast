@@ -172,6 +172,53 @@ describe('winner graphic components', () => {
 		}
 	});
 
+	test('renders UUID-scoped publication media without allowing arbitrary media paths', () => {
+		const requestedSources = new WeakMap();
+		const originalSetAttribute = Element.prototype.setAttribute;
+		const setAttribute = vi.spyOn(Element.prototype, 'setAttribute').mockImplementation(
+			/** @this {Element} */ function (name, value) {
+				if (this instanceof HTMLImageElement && name === 'src' && value.startsWith('/media/')) {
+					requestedSources.set(this, value);
+					return originalSetAttribute.call(
+						this,
+						name,
+						'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs='
+					);
+				}
+
+				return originalSetAttribute.call(this, name, value);
+			}
+		);
+
+		try {
+			render(WinnerBoardGraphic, {
+				board: {
+					...board,
+					winner: { ...board.winner, imagePath: null },
+					champions: [
+						{
+							...board.champions[0],
+							iconPath: '/media/publications/11111111-1111-4111-8111-111111111111/champion.png'
+						}
+					],
+					augments: [
+						{
+							...board.augments[0],
+							iconPath: '/media/private/operator-secret.png'
+						}
+					]
+				}
+			});
+
+			const images = [...document.querySelectorAll('img')];
+			expect(images.map((image) => requestedSources.get(image))).toEqual([
+				'/media/publications/11111111-1111-4111-8111-111111111111/champion.png'
+			]);
+		} finally {
+			setAttribute.mockRestore();
+		}
+	});
+
 	test('renders a transparent semantic empty state without winner content', async () => {
 		render(WinnerBoardGraphic, { board: null });
 

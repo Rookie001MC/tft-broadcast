@@ -7,9 +7,9 @@ The MVP does not query Riot match history. It uses pinned CommunityDragon or Dat
 ## What is included
 
 - One-time first-operator setup, email/password login, and authenticated admin actions.
-- Tournament creation, reusable players, safe ZIP import preview/confirm, and ordered rosters.
-- Fail-safe TFT catalog synchronization with locale/source fallback and pinned snapshots.
-- Tournament- and catalog-scoped winner drafts with ordered champions, optional star levels, and optional augments.
+- Tournament creation, maintainable reusable players, terminal ZIP import preview/confirm, and ordered rosters.
+- Fail-safe TFT catalog synchronization with locale/source fallback, pinned snapshots, and scoped manual corrections.
+- Tournament- and catalog-scoped saved winner boards with ordered champions, optional star levels, and optional augments.
 - An exact shared admin preview and public 1920×1080 `/gfx` renderer.
 - Transactional publish/hide state with one-second ETag polling for already-open broadcast clients.
 - Controlled local player and immutable catalog media delivery; arbitrary filesystem paths are not exposed.
@@ -62,13 +62,14 @@ Catalog synchronization streams newline-delimited progress from `/admin/game-res
 
 ## Operator workflow
 
-1. Select or create a tournament.
-2. Sync/pin its static TFT catalog.
-3. Create or ZIP-import players, then add and order the tournament roster.
-4. Pick the winner, champions/star levels, and optional augments.
-5. Save the draft and inspect the exact preview. Draft changes do not alter `/gfx`.
-6. Publish the selected draft. Open broadcast clients update within roughly two seconds.
-7. Hide the graphic to return `/gfx` to a transparent canvas.
+1. Select or create a tournament. Tournament names/slugs and reusable player identities remain maintainable.
+2. Sync/pin its static TFT catalog. Operators can add image-optional manual resources, override upstream details, and hide or restore resources; corrections retain their catalog scope and provenance.
+3. Create or ZIP-import players, then add and order the tournament roster. Import confirmation commits the exact preview once; the committed terminal summary remains visible after reload and cannot be confirmed again. Player images can be safely replaced or removed later.
+4. Pick the winner, champions/star levels, and optional augments, then inspect the exact preview.
+5. **Save is the deliberate gate.** Local changes can update the preview, but Live-on remains unavailable until they are saved. Saving while hidden replaces the single saved board without publishing it.
+6. Switch Live on to publish the saved data. Already-open broadcast clients update within roughly two seconds. Saving again while live creates and activates a new immutable publication; older publications are not rewritten by later player or catalog maintenance.
+7. Switch Live off to return `/gfx` to a transparent canvas without discarding the saved board.
+8. Reset deliberately clears the saved board and hides the graphic when necessary. Tournament changes and destructive player, tournament, or catalog operations can require an explicit Reset confirmation when the saved board depends on the target.
 
 ## Verification
 
@@ -80,7 +81,7 @@ $env:DATABASE_URL='file:local.db'; pnpm db:push
 pnpm test:e2e
 ```
 
-The Playwright workflow uses an isolated `test-e2e.db`, seeds deterministic catalog assets, and runs separate admin and broadcast pages to verify publish/hide polling without a `/gfx` refresh.
+The Playwright workflow uses an isolated `test-e2e.db`, isolated `media/e2e` assets, and one test-only operator. It seeds deterministic catalog assets and runs separate admin and broadcast pages to verify the full maintenance, Save/Live/Reset, immutable-publication, and publish/hide polling workflow without a `/gfx` refresh.
 
 ## Stack
 
