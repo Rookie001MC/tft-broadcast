@@ -3,10 +3,16 @@
 
 	/** @type {{ board: WinnerBoardView | null, scale?: number }} */
 	let { board, scale = 1 } = $props();
+	const PUBLICATION_IMAGE_PATH =
+		/^\/media\/publications\/[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\/[a-z0-9][a-z0-9._-]*$/;
 
 	/** @param {string | null} path */
 	function catalogImage(path) {
-		return path?.startsWith('https://') || path?.startsWith('/media/catalog-assets/') ? path : null;
+		return path?.startsWith('https://') ||
+			path?.startsWith('/media/catalog-assets/') ||
+			PUBLICATION_IMAGE_PATH.test(path ?? '')
+			? path
+			: null;
 	}
 
 	/** @param {string} name */

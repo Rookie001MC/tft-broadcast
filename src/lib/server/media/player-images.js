@@ -25,6 +25,26 @@ export function resolveContainedPath(root, relativePath) {
 	return target;
 }
 
+/** @param {string} relativePath */
+export function assertManagedPlayerImagePath(relativePath) {
+	if (typeof relativePath !== 'string') throw new Error('Invalid managed player image path');
+	const normalized = relativePath.replaceAll('\\', '/');
+	if (!normalized.startsWith('player-images/') || normalized === 'player-images/')
+		throw new Error('Invalid managed player image path');
+	resolveContainedPath('player-images', normalized.slice('player-images/'.length));
+	return normalized;
+}
+
+/**
+ * Read an app-owned relative media path after containing it to the configured
+ * media root. Callers remain responsible for validating their path namespace.
+ *
+ * @param {{ mediaRoot: string, relativePath: string }} input
+ */
+export async function readContainedManagedFile({ mediaRoot, relativePath }) {
+	return readFile(resolveContainedPath(mediaRoot, relativePath));
+}
+
 /**
  * @param {{ mediaRoot: string, playerId: string, bytes: Uint8Array, mime: string }} input
  */
@@ -56,11 +76,18 @@ export async function writeManagedPlayerImage({ mediaRoot, playerId, bytes, mime
 
 /** @param {{ mediaRoot: string, relativePath: string }} input */
 export async function readManagedPlayerImage({ mediaRoot, relativePath }) {
-	const normalized = relativePath.replaceAll('\\', '/');
-	if (!normalized.startsWith('player-images/'))
-		throw new Error('Invalid managed player image path');
+	const normalized = assertManagedPlayerImagePath(relativePath);
 	const imageRoot = resolveContainedPath(mediaRoot, 'player-images');
-	return readFile(resolveContainedPath(imageRoot, normalized.slice('player-images/'.length)));
+	return readContainedManagedFile({
+		mediaRoot: imageRoot,
+		relativePath: normalized.slice('player-images/'.length)
+	});
+}
+
+/** @param {{ mediaRoot: string, relativePath: string }} input */
+export async function deleteManagedPlayerImage({ mediaRoot, relativePath }) {
+	const normalized = assertManagedPlayerImagePath(relativePath);
+	await rm(resolveContainedPath(mediaRoot, normalized), { force: true });
 }
 
 /** @param {string} mediaRoot @param {string} relativePath */

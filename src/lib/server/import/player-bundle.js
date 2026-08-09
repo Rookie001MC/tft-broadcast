@@ -51,17 +51,75 @@ function openZip(zipBytes) {
 	});
 }
 
-/** @param {ZipFile} zip @param {ZipEntry} entry @returns {Promise<Buffer>} */
-function readEntry(zip, entry) {
+/** @param {ZipFile} zip @returns {() => void} */
+function closeZipOnce(zip) {
+	let closed = false;
+	return () => {
+		if (closed) return;
+		closed = true;
+		zip.close();
+	};
+}
+
+/**
+ * @param {ZipFile} zip
+ * @param {ZipEntry} entry
+ * @param {{ total: number }} counters
+ * @param {() => void} closeZip
+ * @returns {Promise<Buffer>}
+ */
+function readEntry(zip, entry, counters, closeZip) {
 	return new Promise((resolve, reject) => {
 		zip.openReadStream(entry, (/** @type {Error | null} */ openError, stream) => {
-			if (openError) return reject(openError);
-			if (!stream) return reject(new Error('Could not read ZIP entry'));
+			if (openError || !stream) {
+				closeZip();
+				reject(openError ?? new Error('Could not read ZIP entry'));
+				return;
+			}
 			/** @type {Buffer[]} */
 			const chunks = [];
-			stream.on('data', (/** @type {Buffer} */ chunk) => chunks.push(chunk));
-			stream.once('error', reject);
-			stream.once('end', () => resolve(Buffer.concat(chunks)));
+			let entryBytes = 0;
+			let settled = false;
+			/** @type {Error | null} */
+			let pendingError = null;
+
+			const cleanup = () => {
+				stream.removeListener('data', onData);
+				stream.removeListener('error', onError);
+				stream.removeListener('end', onEnd);
+				stream.removeListener('close', onClose);
+			};
+			/** @param {Error | null} error */
+			const settle = (error) => {
+				if (settled) return;
+				settled = true;
+				cleanup();
+				if (error) {
+					closeZip();
+					reject(error);
+				} else resolve(Buffer.concat(chunks));
+			};
+			/** @param {Buffer} chunk */
+			const onData = (chunk) => {
+				if (pendingError) return;
+				entryBytes += chunk.length;
+				counters.total += chunk.length;
+				if (entryBytes > MAX_EXPANDED_BYTES || counters.total > MAX_EXPANDED_BYTES) {
+					pendingError = new Error('ZIP expanded size is too large');
+					stream.destroy(pendingError);
+					return;
+				}
+				chunks.push(chunk);
+			};
+			/** @param {Error} error */
+			const onError = (error) => settle(error);
+			const onEnd = () => settle(null);
+			const onClose = () => settle(pendingError ?? new Error('Could not read ZIP entry'));
+
+			stream.on('data', onData);
+			stream.once('error', onError);
+			stream.once('end', onEnd);
+			stream.once('close', onClose);
 		});
 	});
 }
@@ -101,7 +159,7 @@ async function collectEntries(zipBytes) {
 	const zip = await openZip(zipBytes);
 	/** @type {BundleEntry[]} */
 	const entries = [];
-	let totalExpandedBytes = 0;
+	let declaredExpandedBytes = 0;
 
 	return new Promise((resolve, reject) => {
 		let settled = false;
@@ -128,8 +186,8 @@ async function collectEntries(zipBytes) {
 				assertSafeEntryName(name);
 
 				if (entries.length + 1 > MAX_ENTRIES) throw new Error('ZIP contains too many entries');
-				totalExpandedBytes += entry.uncompressedSize;
-				if (totalExpandedBytes > MAX_EXPANDED_BYTES)
+				declaredExpandedBytes += entry.uncompressedSize;
+				if (declaredExpandedBytes > MAX_EXPANDED_BYTES)
 					throw new Error('ZIP expanded size is too large');
 
 				entries.push({ entry, name });
@@ -159,12 +217,15 @@ export async function readPlayerBundleImages(zipBytes, imagePaths) {
 	if (selected.length !== requested.size) throw new Error('Previewed image is missing from bundle');
 
 	const zip = await openZip(zipBytes);
+	const closeZip = closeZipOnce(zip);
 	try {
 		const images = new Map();
-		for (const { entry, name } of selected) images.set(name, await readEntry(zip, entry));
+		const counters = { total: 0 };
+		for (const { entry, name } of selected)
+			images.set(name, await readEntry(zip, entry, counters, closeZip));
 		return images;
 	} finally {
-		zip.close();
+		closeZip();
 	}
 }
 
@@ -212,8 +273,10 @@ export async function inspectPlayerBundle(zipBytes, existingPlayers = []) {
 	if (csvEntries.length !== 1) throw new Error('ZIP must contain exactly one players.csv');
 
 	const zip = await openZip(zipBytes);
+	const closeZip = closeZipOnce(zip);
 	try {
-		const csvBytes = await readEntry(zip, csvEntries[0].entry);
+		const counters = { total: 0 };
+		const csvBytes = await readEntry(zip, csvEntries[0].entry, counters, closeZip);
 		const imageEntries = entries.filter(
 			({ name }) => name.startsWith('player_images/') && !name.endsWith('/')
 		);
@@ -232,7 +295,7 @@ export async function inspectPlayerBundle(zipBytes, existingPlayers = []) {
 				continue;
 			}
 
-			const bytes = await readEntry(zip, entry);
+			const bytes = await readEntry(zip, entry, counters, closeZip);
 			const type = await fileTypeFromBuffer(bytes);
 			if (!type || !IMAGE_TYPES.has(`.${type.ext}`) || type.mime !== expectedMime) {
 				errors.push({ code: 'image_type_mismatch', path: name });
@@ -425,6 +488,6 @@ export async function inspectPlayerBundle(zipBytes, existingPlayers = []) {
 			canCommit: errors.length === 0
 		};
 	} finally {
-		zip.close();
+		closeZip();
 	}
 }

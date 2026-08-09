@@ -1,6 +1,6 @@
 import { createClient } from '@libsql/client';
 import { drizzle } from 'drizzle-orm/libsql';
-import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createGzip } from 'node:zlib';
@@ -23,7 +23,13 @@ const PNG = Buffer.from(
 	'base64'
 );
 
-function cdragonFixture({ icon = true, augment = true, modernPaths = false } = {}) {
+function cdragonFixture({
+	icon = true,
+	augment = true,
+	modernPaths = false,
+	setNumber = 13,
+	setName = 'Into the Arcane'
+} = {}) {
 	const championIcon = modernPaths
 		? 'ASSETS/UX/TFT/Champions/Ahri_Mobile.tex'
 		: '/lol-game-data/assets/ASSETS/UX/TFT/Champions/Ahri.PNG';
@@ -33,12 +39,12 @@ function cdragonFixture({ icon = true, augment = true, modernPaths = false } = {
 	return {
 		setData: [
 			{
-				name: 'Into the Arcane',
-				number: 13,
-				mutator: 'TFTSet13',
+				name: setName,
+				number: setNumber,
+				mutator: `TFTSet${setNumber}`,
 				champions: [
 					{
-						apiName: 'TFT13_Ahri',
+						apiName: `TFT${setNumber}_Ahri`,
 						name: 'Ahri localized',
 						squareIcon: icon ? championIcon : null,
 						cost: 4,
@@ -153,6 +159,22 @@ function fixtureResponse(routes, calls = []) {
 	};
 }
 
+async function correctionApi() {
+	let api;
+	try {
+		api = await import('./catalog-corrections.js');
+	} catch (error) {
+		expect.fail(
+			`catalog correction maintenance must be exposed from catalog-corrections.js: ${error instanceof Error ? error.message : String(error)}`
+		);
+	}
+	expect(api.excludeCatalogResource).toBeTypeOf('function');
+	expect(api.restoreCatalogResource).toBeTypeOf('function');
+	return /** @type {{ excludeCatalogResource: (...args: any[]) => Promise<any>, restoreCatalogResource: (...args: any[]) => Promise<any> }} */ (
+		api
+	);
+}
+
 describe('catalog synchronization', () => {
 	/** @type {import('@libsql/client').Client} */
 	let client;
@@ -167,14 +189,28 @@ describe('catalog synchronization', () => {
 		database = drizzle(client);
 		await client.batch([
 			'PRAGMA foreign_keys = ON',
+			'DROP TABLE IF EXISTS winner_board_state_augments',
+			'DROP TABLE IF EXISTS winner_board_state_champions',
+			'DROP TABLE IF EXISTS winner_board_state',
+			'DROP TABLE IF EXISTS graphic_state',
+			'DROP TABLE IF EXISTS winner_board_publications',
+			'DROP TABLE IF EXISTS players',
 			'DROP TABLE IF EXISTS tournaments',
 			'DROP TABLE IF EXISTS catalog_augments',
 			'DROP TABLE IF EXISTS catalog_champions',
 			'DROP TABLE IF EXISTS catalog_snapshots',
-			`CREATE TABLE catalog_snapshots (id TEXT PRIMARY KEY NOT NULL, source TEXT NOT NULL, source_url TEXT NOT NULL, locale TEXT NOT NULL, patch_label TEXT NOT NULL, set_label TEXT, synced_at INTEGER NOT NULL, is_available INTEGER DEFAULT 0 NOT NULL, metadata_json TEXT NOT NULL)`,
-			`CREATE TABLE catalog_champions (id TEXT PRIMARY KEY NOT NULL, catalog_snapshot_id TEXT NOT NULL REFERENCES catalog_snapshots(id) ON DELETE CASCADE, external_id TEXT NOT NULL, display_name TEXT NOT NULL, icon_path TEXT, tier INTEGER, metadata_json TEXT NOT NULL, UNIQUE(catalog_snapshot_id, external_id))`,
-			`CREATE TABLE catalog_augments (id TEXT PRIMARY KEY NOT NULL, catalog_snapshot_id TEXT NOT NULL REFERENCES catalog_snapshots(id) ON DELETE CASCADE, external_id TEXT NOT NULL, display_name TEXT NOT NULL, icon_path TEXT, tier INTEGER, metadata_json TEXT NOT NULL, UNIQUE(catalog_snapshot_id, external_id))`,
-			`CREATE TABLE tournaments (id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, slug TEXT NOT NULL UNIQUE, active_catalog_snapshot_id TEXT REFERENCES catalog_snapshots(id) ON DELETE SET NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)`
+			'DROP TABLE IF EXISTS catalog_corrections',
+			`CREATE TABLE catalog_snapshots (id TEXT PRIMARY KEY NOT NULL, source TEXT NOT NULL, source_url TEXT NOT NULL, locale TEXT NOT NULL, patch_label TEXT NOT NULL, set_label TEXT, canonical_set_key TEXT, synced_at INTEGER NOT NULL, is_available INTEGER DEFAULT 0 NOT NULL, metadata_json TEXT NOT NULL)`,
+			`CREATE TABLE catalog_corrections (id TEXT PRIMARY KEY NOT NULL, canonical_set_key TEXT, patch_label TEXT NOT NULL, resource_kind TEXT NOT NULL, operation TEXT NOT NULL, target_external_id TEXT, manual_external_id TEXT, display_name_override TEXT, tier_override INTEGER, image_path_override TEXT, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)`,
+			`CREATE TABLE catalog_champions (id TEXT PRIMARY KEY NOT NULL, catalog_snapshot_id TEXT NOT NULL REFERENCES catalog_snapshots(id) ON DELETE CASCADE, external_id TEXT NOT NULL, display_name TEXT NOT NULL, icon_path TEXT, tier INTEGER, metadata_json TEXT NOT NULL, correction_id TEXT REFERENCES catalog_corrections(id) ON DELETE SET NULL, is_excluded INTEGER DEFAULT 0 NOT NULL, provenance_json TEXT DEFAULT '{"source":"upstream"}' NOT NULL, UNIQUE(catalog_snapshot_id, external_id))`,
+			`CREATE TABLE catalog_augments (id TEXT PRIMARY KEY NOT NULL, catalog_snapshot_id TEXT NOT NULL REFERENCES catalog_snapshots(id) ON DELETE CASCADE, external_id TEXT NOT NULL, display_name TEXT NOT NULL, icon_path TEXT, tier INTEGER, metadata_json TEXT NOT NULL, correction_id TEXT REFERENCES catalog_corrections(id) ON DELETE SET NULL, is_excluded INTEGER DEFAULT 0 NOT NULL, provenance_json TEXT DEFAULT '{"source":"upstream"}' NOT NULL, UNIQUE(catalog_snapshot_id, external_id))`,
+			`CREATE TABLE tournaments (id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, slug TEXT NOT NULL UNIQUE, active_catalog_snapshot_id TEXT REFERENCES catalog_snapshots(id) ON DELETE SET NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)`,
+			`CREATE TABLE players (id TEXT PRIMARY KEY NOT NULL, riot_id TEXT, riot_id_key TEXT UNIQUE, riot_game_name TEXT, riot_tagline TEXT, full_name TEXT NOT NULL, display_name TEXT NOT NULL, image_path TEXT, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)`,
+			`CREATE TABLE winner_board_publications (id TEXT PRIMARY KEY NOT NULL, source_state_updated_at INTEGER NOT NULL, graphic_version INTEGER NOT NULL UNIQUE, render_payload_json TEXT NOT NULL, media_directory TEXT NOT NULL UNIQUE, created_at INTEGER NOT NULL)`,
+			`CREATE TABLE graphic_state (id TEXT PRIMARY KEY NOT NULL, published_publication_id TEXT REFERENCES winner_board_publications(id) ON DELETE SET NULL, version INTEGER DEFAULT 0 NOT NULL, updated_at INTEGER NOT NULL)`,
+			`CREATE TABLE winner_board_state (id TEXT PRIMARY KEY NOT NULL, tournament_id TEXT NOT NULL REFERENCES tournaments(id), winner_player_id TEXT NOT NULL REFERENCES players(id), title TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)`,
+			`CREATE TABLE winner_board_state_champions (id TEXT PRIMARY KEY NOT NULL, winner_board_state_id TEXT NOT NULL REFERENCES winner_board_state(id) ON DELETE CASCADE, catalog_champion_id TEXT NOT NULL REFERENCES catalog_champions(id) ON DELETE RESTRICT, star_level INTEGER, display_order INTEGER NOT NULL)`,
+			`CREATE TABLE winner_board_state_augments (id TEXT PRIMARY KEY NOT NULL, winner_board_state_id TEXT NOT NULL REFERENCES winner_board_state(id) ON DELETE CASCADE, catalog_augment_id TEXT NOT NULL REFERENCES catalog_augments(id) ON DELETE RESTRICT, display_order INTEGER NOT NULL)`
 		]);
 		const now = new Date();
 		await database.insert(tournaments).values({
@@ -522,6 +558,428 @@ describe('catalog synchronization', () => {
 			})
 		).rejects.toThrow('Tournament not found');
 		expect(fetched).toBe(false);
+	});
+
+	test('materializes add, partial override, exclude, and restore corrections with optional images', async () => {
+		const now = Date.parse('2026-08-08T00:00:00.000Z');
+		const manualImagePath = 'catalog-corrections/add-manual-image.png';
+		await mkdir(path.join(mediaRoot, 'catalog-corrections'), { recursive: true });
+		await writeFile(path.join(mediaRoot, ...manualImagePath.split('/')), PNG);
+		await client.batch([
+			{
+				sql: `INSERT INTO catalog_corrections (id, canonical_set_key, patch_label, resource_kind, operation, manual_external_id, display_name_override, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				args: [
+					'add-manual',
+					'TFTSet13',
+					'14.10',
+					'champion',
+					'add',
+					'TFT13_ManualHero',
+					'Manual Hero',
+					now,
+					now
+				]
+			},
+			{
+				sql: `INSERT INTO catalog_corrections (id, canonical_set_key, patch_label, resource_kind, operation, manual_external_id, display_name_override, image_path_override, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				args: [
+					'add-manual-image',
+					'TFTSet13',
+					'14.10',
+					'champion',
+					'add',
+					'TFT13_ManualWithImage',
+					'Manual With Image',
+					manualImagePath,
+					now,
+					now
+				]
+			},
+			{
+				sql: `INSERT INTO catalog_corrections (id, canonical_set_key, patch_label, resource_kind, operation, target_external_id, display_name_override, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				args: [
+					'override-ahri',
+					'TFTSet13',
+					'14.10',
+					'champion',
+					'override',
+					'TFT13_Ahri',
+					'Ahri Corrected',
+					now,
+					now
+				]
+			},
+			{
+				sql: `INSERT INTO catalog_corrections (id, canonical_set_key, patch_label, resource_kind, operation, target_external_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+				args: [
+					'exclude-lotus',
+					'TFTSet13',
+					'14.10',
+					'augment',
+					'exclude',
+					'TFT_Augment_JeweledLotus',
+					now,
+					now
+				]
+			}
+		]);
+
+		for (const patch of ['14.10', '14.11']) {
+			const catalogUrl = `${CDRAGON_ROOT}/${patch}/cdragon/tft/en_us.json`;
+			const imageRoot = `${CDRAGON_ROOT}/${patch}/plugins/rcp-be-lol-game-data/global/default/`;
+			await syncAndActivateCatalog({
+				db: database,
+				tournamentId: 'tournament-1',
+				patch,
+				locale: 'en_us',
+				mediaRoot,
+				fetchJson: fixtureJson({ [catalogUrl]: cdragonFixture({ icon: false }) }, []),
+				fetchResponse: fixtureResponse({
+					[`${imageRoot}assets/maps/tft/icons/augments/lotus.png`]: new Response(PNG)
+				})
+			});
+
+			const [{ active_catalog_snapshot_id: snapshotId }] = /** @type {any[]} */ (
+				(await client.execute('SELECT active_catalog_snapshot_id FROM tournaments')).rows
+			);
+			const champions = /** @type {any[]} */ (
+				(
+					await client.execute({
+						sql: 'SELECT id, external_id, display_name, icon_path, tier, correction_id, is_excluded, provenance_json FROM catalog_champions WHERE catalog_snapshot_id = ? ORDER BY external_id',
+						args: [snapshotId]
+					})
+				).rows
+			);
+			const augments = /** @type {any[]} */ (
+				(
+					await client.execute({
+						sql: 'SELECT id, external_id, correction_id, is_excluded FROM catalog_augments WHERE catalog_snapshot_id = ?',
+						args: [snapshotId]
+					})
+				).rows
+			);
+
+			expect(champions).toEqual([
+				expect.objectContaining({
+					external_id: 'TFT13_Ahri',
+					display_name: 'Ahri Corrected',
+					tier: 4,
+					correction_id: 'override-ahri',
+					is_excluded: 0
+				}),
+				expect.objectContaining({
+					external_id: 'TFT13_ManualHero',
+					display_name: 'Manual Hero',
+					icon_path: null,
+					correction_id: 'add-manual',
+					is_excluded: 0
+				}),
+				expect.objectContaining({
+					external_id: 'TFT13_ManualWithImage',
+					display_name: 'Manual With Image',
+					icon_path: expect.stringMatching(/^\/media\/catalog-assets\/.+\.png$/),
+					correction_id: 'add-manual-image',
+					is_excluded: 0
+				})
+			]);
+			const manualWithImage = champions.find(
+				({ external_id }) => external_id === 'TFT13_ManualWithImage'
+			);
+			expect(
+				await readFile(
+					path.join(mediaRoot, ...manualWithImage.icon_path.replace('/media/', '').split('/'))
+				)
+			).toEqual(PNG);
+			expect(champions.every(({ provenance_json }) => JSON.parse(provenance_json))).toBe(true);
+			expect(augments).toEqual([
+				expect.objectContaining({
+					external_id: 'TFT_Augment_JeweledLotus',
+					correction_id: patch === '14.10' ? 'exclude-lotus' : null,
+					is_excluded: patch === '14.10' ? 1 : 0
+				})
+			]);
+
+			if (patch === '14.10') {
+				const { restoreCatalogResource } = await correctionApi();
+				await expect(
+					restoreCatalogResource(database, {
+						tournamentId: 'tournament-1',
+						resourceKind: 'augment',
+						resourceId: augments[0].id
+					})
+				).resolves.toMatchObject({ restored: true });
+				expect(
+					(
+						await client.execute({
+							sql: 'SELECT correction_id, is_excluded FROM catalog_augments WHERE catalog_snapshot_id = ? AND external_id = ?',
+							args: [snapshotId, 'TFT_Augment_JeweledLotus']
+						})
+					).rows
+				).toEqual([{ correction_id: null, is_excluded: 0 }]);
+			}
+		}
+	});
+
+	test('requires reset confirmation before excluding a resource selected by saved state', async () => {
+		const catalogUrl = `${CDRAGON_ROOT}/14.10/cdragon/tft/en_us.json`;
+		await syncAndActivateCatalog({
+			db: database,
+			tournamentId: 'tournament-1',
+			patch: '14.10',
+			locale: 'en_us',
+			mediaRoot,
+			fetchJson: fixtureJson({ [catalogUrl]: cdragonFixture({ icon: false, augment: false }) }, []),
+			fetchResponse: fixtureResponse({})
+		});
+		const [champion] = /** @type {any[]} */ (
+			(await client.execute("SELECT id FROM catalog_champions WHERE external_id = 'TFT13_Ahri'"))
+				.rows
+		);
+		const timestamp = Date.parse('2026-08-08T00:00:00.000Z');
+		await client.batch([
+			{
+				sql: 'INSERT INTO players (id, full_name, display_name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
+				args: ['player-one', 'Player One', 'Winner One', timestamp, timestamp]
+			},
+			{
+				sql: 'INSERT INTO winner_board_publications (id, source_state_updated_at, graphic_version, render_payload_json, media_directory, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+				args: [
+					'publication-one',
+					timestamp,
+					1,
+					'{"title":"Published winner"}',
+					'winner-publications/publication-one',
+					timestamp
+				]
+			},
+			{
+				sql: 'INSERT INTO graphic_state (id, published_publication_id, version, updated_at) VALUES (?, ?, ?, ?)',
+				args: ['live', 'publication-one', 1, timestamp]
+			},
+			{
+				sql: 'INSERT INTO winner_board_state (id, tournament_id, winner_player_id, title, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+				args: ['current', 'tournament-1', 'player-one', 'Winner', timestamp, timestamp]
+			},
+			{
+				sql: 'INSERT INTO winner_board_state_champions (id, winner_board_state_id, catalog_champion_id, star_level, display_order) VALUES (?, ?, ?, ?, ?)',
+				args: ['selected-champion', 'current', champion.id, 3, 0]
+			}
+		]);
+		const { excludeCatalogResource } = await correctionApi();
+
+		await expect(
+			excludeCatalogResource(database, {
+				tournamentId: 'tournament-1',
+				resourceKind: 'champion',
+				resourceId: champion.id,
+				confirmReset: false
+			})
+		).resolves.toMatchObject({ kind: 'reset_required', label: 'Ahri localized' });
+		expect((await client.execute('SELECT id FROM winner_board_state')).rows).toEqual([
+			{ id: 'current' }
+		]);
+		expect(
+			(
+				await client.execute({
+					sql: 'SELECT is_excluded FROM catalog_champions WHERE id = ?',
+					args: [champion.id]
+				})
+			).rows
+		).toEqual([{ is_excluded: 0 }]);
+
+		await expect(
+			excludeCatalogResource(database, {
+				tournamentId: 'tournament-1',
+				resourceKind: 'champion',
+				resourceId: champion.id,
+				confirmReset: true
+			})
+		).resolves.toMatchObject({ excluded: true, reset: true });
+		expect((await client.execute('SELECT * FROM winner_board_state')).rows).toEqual([]);
+		expect(
+			(await client.execute('SELECT published_publication_id FROM graphic_state')).rows
+		).toEqual([{ published_publication_id: null }]);
+		expect((await client.execute('SELECT id FROM winner_board_publications')).rows).toEqual([
+			{ id: 'publication-one' }
+		]);
+		expect(
+			(
+				await client.execute({
+					sql: 'SELECT correction_id, is_excluded FROM catalog_champions WHERE id = ?',
+					args: [champion.id]
+				})
+			).rows
+		).toEqual([{ correction_id: expect.any(String), is_excluded: 1 }]);
+	});
+
+	test('reapplies a correction to the same canonical set without leaking it to another set', async () => {
+		const now = Date.parse('2026-08-08T00:00:00.000Z');
+		await client.execute({
+			sql: `INSERT INTO catalog_corrections (id, canonical_set_key, patch_label, resource_kind, operation, target_external_id, display_name_override, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			args: [
+				'override-set-13',
+				'TFTSet13',
+				'14.10',
+				'champion',
+				'override',
+				'TFT13_Ahri',
+				'Set 13 Ahri',
+				now,
+				now
+			]
+		});
+
+		for (const fixture of [
+			{ patch: '14.10', setNumber: 13, expectedName: 'Set 13 Ahri' },
+			{ patch: '14.11', setNumber: 13, expectedName: 'Set 13 Ahri' },
+			{ patch: '14.12', setNumber: 14, expectedName: 'Ahri localized' }
+		]) {
+			const catalogUrl = `${CDRAGON_ROOT}/${fixture.patch}/cdragon/tft/en_us.json`;
+			const result = await syncAndActivateCatalog({
+				db: database,
+				tournamentId: 'tournament-1',
+				patch: fixture.patch,
+				locale: 'en_us',
+				mediaRoot,
+				fetchJson: fixtureJson(
+					{
+						[catalogUrl]: cdragonFixture({
+							icon: false,
+							augment: false,
+							setNumber: fixture.setNumber,
+							setName: `Set ${fixture.setNumber}`
+						})
+					},
+					[]
+				),
+				fetchResponse: fixtureResponse({})
+			});
+
+			expect(result.champions[0]).toMatchObject({ displayName: fixture.expectedName });
+		}
+
+		const snapshots = /** @type {any[]} */ (
+			(await client.execute('SELECT canonical_set_key FROM catalog_snapshots ORDER BY patch_label'))
+				.rows
+		);
+		expect(snapshots).toEqual([
+			{ canonical_set_key: 'TFTSet13' },
+			{ canonical_set_key: 'TFTSet13' },
+			{ canonical_set_key: 'TFTSet14' }
+		]);
+	});
+
+	test('preserves the active snapshot and removes staging when a manual image is missing', async () => {
+		const now = Date.parse('2026-08-08T00:00:00.000Z');
+		await client.batch([
+			{
+				sql: `INSERT INTO catalog_snapshots (id, source, source_url, locale, patch_label, set_label, canonical_set_key, synced_at, is_available, metadata_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				args: [
+					'prior-snapshot',
+					'communitydragon',
+					'https://example.test/prior.json',
+					'en_us',
+					'14.9',
+					'Set 13',
+					'TFTSet13',
+					now,
+					1,
+					'{}'
+				]
+			},
+			{
+				sql: `INSERT INTO catalog_corrections (id, canonical_set_key, patch_label, resource_kind, operation, manual_external_id, display_name_override, image_path_override, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				args: [
+					'missing-manual-image',
+					'TFTSet13',
+					'14.10',
+					'champion',
+					'add',
+					'TFT13_ManualMissing',
+					'Manual Missing',
+					'catalog-corrections/missing.png',
+					now,
+					now
+				]
+			}
+		]);
+		await client.execute(
+			"UPDATE tournaments SET active_catalog_snapshot_id = 'prior-snapshot' WHERE id = 'tournament-1'"
+		);
+		const catalogUrl = `${CDRAGON_ROOT}/14.10/cdragon/tft/en_us.json`;
+
+		await expect(
+			syncAndActivateCatalog({
+				db: database,
+				tournamentId: 'tournament-1',
+				patch: '14.10',
+				locale: 'en_us',
+				mediaRoot,
+				fetchJson: fixtureJson(
+					{ [catalogUrl]: cdragonFixture({ icon: false, augment: false }) },
+					[]
+				),
+				fetchResponse: fixtureResponse({})
+			})
+		).rejects.toThrow(/prior snapshot remains active/i);
+		expect(
+			(await client.execute('SELECT active_catalog_snapshot_id FROM tournaments')).rows
+		).toEqual([{ active_catalog_snapshot_id: 'prior-snapshot' }]);
+		expect((await client.execute('SELECT id FROM catalog_snapshots')).rows).toEqual([
+			{ id: 'prior-snapshot' }
+		]);
+		expect(await readdir(path.join(mediaRoot, 'catalog-staging'))).toEqual([]);
+		expect(
+			await readdir(path.join(mediaRoot, 'catalog-assets')).catch((error) => {
+				if (error instanceof Error && 'code' in error && error.code === 'ENOENT') return [];
+				throw error;
+			})
+		).toEqual([]);
+	});
+
+	test('preserves the active snapshot when applying a malformed correction fails', async () => {
+		const now = Date.parse('2026-08-08T00:00:00.000Z');
+		await client.execute({
+			sql: `INSERT INTO catalog_snapshots (id, source, source_url, locale, patch_label, set_label, canonical_set_key, synced_at, is_available, metadata_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			args: [
+				'prior-snapshot',
+				'communitydragon',
+				'https://example.test/prior.json',
+				'en_us',
+				'14.9',
+				'Set 13',
+				'TFTSet13',
+				now,
+				1,
+				'{}'
+			]
+		});
+		await client.execute(
+			"UPDATE tournaments SET active_catalog_snapshot_id = 'prior-snapshot' WHERE id = 'tournament-1'"
+		);
+		await client.execute({
+			sql: `INSERT INTO catalog_corrections (id, canonical_set_key, patch_label, resource_kind, operation, display_name_override, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+			args: ['invalid-add', 'TFTSet13', '14.10', 'champion', 'add', 'Missing identity', now, now]
+		});
+		const catalogUrl = `${CDRAGON_ROOT}/14.10/cdragon/tft/en_us.json`;
+
+		await expect(
+			syncAndActivateCatalog({
+				db: database,
+				tournamentId: 'tournament-1',
+				patch: '14.10',
+				locale: 'en_us',
+				mediaRoot,
+				fetchJson: fixtureJson(
+					{ [catalogUrl]: cdragonFixture({ icon: false, augment: false }) },
+					[]
+				),
+				fetchResponse: fixtureResponse({})
+			})
+		).rejects.toThrow(/correction|manual external/i);
+		expect(
+			(await client.execute('SELECT active_catalog_snapshot_id FROM tournaments')).rows
+		).toEqual([{ active_catalog_snapshot_id: 'prior-snapshot' }]);
 	});
 });
 

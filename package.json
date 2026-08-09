@@ -55,6 +55,7 @@
 		"tailwindcss": "^4.3.0",
 		"typescript": "^6.0.3",
 		"vite": "^8.0.16",
+		"vite-plugin-devtools-json": "^1.1.0",
 		"vitest": "^4.1.8",
 		"vitest-browser-svelte": "^2.1.1",
 		"zod": "^4.4.3"
@@ -64,6 +65,7 @@
 		"@lucide/svelte": "^1.28.0",
 		"csv-parse": "^7.0.1",
 		"file-type": "^22.0.1",
+		"fuse.js": "^7.5.0",
 		"tar-stream": "^3.2.0",
 		"twisted": "^1.82.0",
 		"yauzl": "^3.4.0"

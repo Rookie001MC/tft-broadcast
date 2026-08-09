@@ -8,6 +8,20 @@
       "when": 1785934215713,
       "tag": "0000_noisy_mesmero",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1786181067808,
+      "tag": "0001_integrity_foundation",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1786191259094,
+      "tag": "0002_catalog_corrections",
+      "breakpoints": true
     }
   ]
 }

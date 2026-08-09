@@ -16,7 +16,8 @@
 		<p class="text-sm font-semibold text-primary-600-400">Catalog management</p>
 		<h1 class="h1">Game Resources</h1>
 		<p class="mt-2 max-w-3xl text-surface-600-400">
-			Pin the champion and augment data used by a tournament's broadcast graphics.
+			Pin, search, and maintain the champion and augment data used by a tournament's broadcast
+			graphics.
 		</p>
 	</header>
 	<section class="card preset-outlined-surface-200-800 bg-surface-50-950 p-5">

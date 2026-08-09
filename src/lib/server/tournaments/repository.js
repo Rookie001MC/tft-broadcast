@@ -8,11 +8,8 @@ import {
 import { playerImportPreviews } from '$lib/server/db/schema/imports.js';
 import { players } from '$lib/server/db/schema/players.js';
 import { tournamentPlayers, tournaments } from '$lib/server/db/schema/tournaments.js';
-import { winnerBoards } from '$lib/server/db/schema/winner-boards.js';
-import {
-	getPublishedWinnerBoard,
-	getWinnerBoardView
-} from '$lib/server/winner-boards/repository.js';
+import { getPublishedWinnerBoard } from '$lib/server/winner-boards/repository.js';
+import { runDestructiveMaintenance } from '$lib/server/winner-boards/maintenance.js';
 
 /** @param {any} database */
 async function allTournaments(database) {
@@ -87,19 +84,6 @@ async function getActiveCatalogAssets(database, activeCatalogSnapshotId) {
 	return { snapshot, champions, augments };
 }
 
-/** @param {any} database @param {string} tournamentId */
-async function getTournamentDrafts(database, tournamentId) {
-	const rows = await database
-		.select({ id: winnerBoards.id })
-		.from(winnerBoards)
-		.where(and(eq(winnerBoards.tournamentId, tournamentId), eq(winnerBoards.status, 'draft')))
-		.orderBy(desc(winnerBoards.updatedAt), asc(winnerBoards.id));
-	const views = await Promise.all(
-		rows.map((/** @type {{ id: string }} */ { id }) => getWinnerBoardView(database, id))
-	);
-	return views.filter(Boolean);
-}
-
 /** @param {any} database */
 async function getImportPreviewState(database) {
 	const [preview] = await database
@@ -146,18 +130,16 @@ export async function loadTournamentAdminData(database, tournamentId) {
 			roster: [],
 			players: [],
 			activeCatalog: { snapshot: null, champions: [], augments: [] },
-			drafts: [],
 			liveBoard: await getPublishedWinnerBoard(database),
 			importPreview: await getImportPreviewState(database)
 		};
 	}
 
-	const [liveBoard, importPreview, rosterData, activeCatalog, drafts] = await Promise.all([
+	const [liveBoard, importPreview, rosterData, activeCatalog] = await Promise.all([
 		getPublishedWinnerBoard(database),
 		getImportPreviewState(database),
 		getTournamentRosters(database, selectedTournament.id),
-		getActiveCatalogAssets(database, selectedTournament.activeCatalogSnapshotId),
-		getTournamentDrafts(database, selectedTournament.id)
+		getActiveCatalogAssets(database, selectedTournament.activeCatalogSnapshotId)
 	]);
 
 	return {
@@ -166,7 +148,6 @@ export async function loadTournamentAdminData(database, tournamentId) {
 		roster: rosterData.roster,
 		players: rosterData.playersForSelection,
 		activeCatalog,
-		drafts,
 		liveBoard,
 		importPreview
 	};
@@ -174,14 +155,12 @@ export async function loadTournamentAdminData(database, tournamentId) {
 
 /** @param {string} value */
 function slugify(value) {
-	return (
-		value
-			.trim()
-			.toLocaleLowerCase('en-US')
-			.replace(/[^a-z0-9]+/g, '-')
-			.replace(/^-+|-+$/g, '')
-			.slice(0, 64) || randomUUID()
-	);
+	return value
+		.trim()
+		.toLocaleLowerCase('en-US')
+		.replace(/[^a-z0-9]+/g, '-')
+		.replace(/^-+|-+$/g, '')
+		.slice(0, 64);
 }
 
 /** @param {any} database @param {{ name: string }} input */
@@ -190,6 +169,7 @@ export async function createTournament(database, input) {
 	if (!name) throw new Error('Tournament name is required');
 	const now = new Date();
 	const slug = slugify(name);
+	if (!slug) throw new Error('Tournament slug is required');
 	const [created] = await database
 		.insert(tournaments)
 		.values({
@@ -202,6 +182,47 @@ export async function createTournament(database, input) {
 		})
 		.returning();
 	return created ?? null;
+}
+
+/**
+ * @param {any} database
+ * @param {{ tournamentId: string, name: string, slug: string }} input
+ */
+export async function updateTournament(database, input) {
+	const name = input.name.trim();
+	if (!name) throw new Error('Tournament name is required');
+	const slug = slugify(input.slug);
+	if (!slug) throw new Error('Tournament slug is required');
+	const [updated] = await database
+		.update(tournaments)
+		.set({ name, slug, updatedAt: new Date() })
+		.where(eq(tournaments.id, input.tournamentId))
+		.returning();
+	if (!updated) throw new Error('Tournament was not found');
+	return updated;
+}
+
+/**
+ * @param {any} database
+ * @param {{ tournamentId: string, confirmReset?: boolean }} input
+ */
+export async function deleteTournament(database, input) {
+	const outcome = await runDestructiveMaintenance(database, {
+		target: { kind: 'tournament', id: input.tournamentId },
+		confirmReset: input.confirmReset === true,
+		operation: async (transaction) => {
+			const [existing] = await transaction
+				.select({ id: tournaments.id })
+				.from(tournaments)
+				.where(eq(tournaments.id, input.tournamentId))
+				.limit(1);
+			if (!existing) throw new Error('Tournament was not found');
+			await transaction.delete(tournaments).where(eq(tournaments.id, input.tournamentId));
+			return existing;
+		}
+	});
+	if (outcome.kind === 'reset_required') return outcome;
+	return { deleted: true, reset: outcome.reset };
 }
 
 /** @param {any} database @param {{ tournamentId: string, playerIds: string[] }} input */
