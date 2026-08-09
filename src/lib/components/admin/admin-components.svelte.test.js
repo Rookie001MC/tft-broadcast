@@ -106,6 +106,66 @@ function composerProps(overrides = {}) {
 	};
 }
 
+function searchableComposerProps() {
+	return composerProps({
+		activeCatalog: {
+			snapshot: { id: 'snapshot-1' },
+			champions: [
+				{
+					id: 'champion-1',
+					externalId: 'TFT16_Champion_Irelia',
+					displayName: 'Irelia',
+					iconPath: null
+				},
+				{
+					id: 'champion-2',
+					externalId: 'TFT16_Champion_Ahri',
+					displayName: 'Ahri',
+					iconPath: null
+				},
+				{
+					id: 'champion-3',
+					externalId: 'TFT16_Champion_Leona',
+					displayName: 'Leona',
+					iconPath: null
+				},
+				{
+					id: 'champion-4',
+					externalId: 'TFT16_Champion_Viego',
+					displayName: 'Viego',
+					iconPath: null
+				}
+			],
+			augments: [
+				{
+					id: 'augment-1',
+					externalId: 'TFT16_Augment_JeweledLotus',
+					displayName: 'Jeweled Lotus',
+					iconPath: null
+				},
+				{
+					id: 'augment-2',
+					externalId: 'TFT16_Augment_CyberneticUplink',
+					displayName: 'Cybernetic Uplink',
+					iconPath: null
+				},
+				{
+					id: 'augment-3',
+					externalId: 'TFT16_Augment_PrismaticPipeline',
+					displayName: 'Prismatic Pipeline',
+					iconPath: null
+				},
+				{
+					id: 'augment-4',
+					externalId: 'TFT16_Augment_PandorasItems',
+					displayName: "Pandora's Items",
+					iconPath: null
+				}
+			]
+		}
+	});
+}
+
 function catalogProps() {
 	return {
 		tournament: { id: 'tournament-1', name: 'Unitour' },
@@ -311,6 +371,83 @@ describe('winner graphic components', () => {
 			)
 		).toBe(true);
 		expect(document.querySelector('input[name="boardId"]')).toBeNull();
+	});
+
+	test('switches candidate tabs by keyboard and retains independent, type-scoped searches', async () => {
+		render(WinnerBoardComposer, searchableComposerProps());
+
+		await expect
+			.element(page.getByRole('tablist', { name: 'Graphic asset candidates' }))
+			.toBeVisible();
+		await page.getByLabelText('Search champions').fill('ahri');
+		await expect.element(page.getByText('Ahri', { exact: true })).toBeVisible();
+		await expect.element(page.getByText('Jeweled Lotus', { exact: true })).not.toBeInTheDocument();
+
+		const championTab = document.querySelector('[role="tab"][data-value="champions"]');
+		expect(championTab).toBeTruthy();
+		/** @type {HTMLElement | null} */ (championTab)?.focus();
+		championTab?.dispatchEvent(
+			new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true })
+		);
+
+		await expect
+			.element(page.getByRole('tab', { name: 'Augments (0)' }))
+			.toHaveAttribute('aria-selected', 'true');
+		await expect.element(page.getByLabelText('Search augments')).toHaveValue('');
+		await page.getByLabelText('Search augments').fill('lotus');
+		await expect.element(page.getByText('Jeweled Lotus', { exact: true })).toBeVisible();
+		await expect.element(page.getByText('Ahri', { exact: true })).not.toBeInTheDocument();
+
+		await page.getByRole('tab', { name: 'Champions (1)' }).click();
+		await expect.element(page.getByLabelText('Search champions')).toHaveValue('ahri');
+		await expect.element(page.getByText('Ahri', { exact: true })).toBeVisible();
+	});
+
+	test('keeps selected champions in the summary and preview when filtering candidates', async () => {
+		render(WinnerBoardComposer, searchableComposerProps());
+
+		await page.getByLabelText('Select Ahri').click();
+		await page.getByLabelText('Search champions').fill('irelia');
+		await expect.element(page.getByLabelText('Select Ahri')).not.toBeInTheDocument();
+		await expect
+			.element(page.getByLabelText('Selected champions'))
+			.toHaveTextContent(/Irelia.*Ahri/);
+		expect(
+			[...document.querySelectorAll('input[name="championIds"]')].map(
+				(input) => /** @type {HTMLInputElement} */ (input).value
+			)
+		).toEqual(['champion-1', 'champion-2']);
+		expect(document.querySelector('[data-testid="winner-graphic-frame"]')?.textContent).toContain(
+			'Ahri'
+		);
+	});
+
+	test('allows unlimited champions and keeps selected augments removable at the three-choice limit', async () => {
+		render(WinnerBoardComposer, searchableComposerProps());
+
+		for (const champion of ['Ahri', 'Leona', 'Viego']) {
+			await page.getByLabelText(`Select ${champion}`).click();
+		}
+		await expect.element(page.getByLabelText('Select Viego')).toBeChecked();
+
+		await page.getByRole('tab', { name: 'Augments (0)' }).click();
+		for (const augment of ['Jeweled Lotus', 'Cybernetic Uplink', 'Prismatic Pipeline']) {
+			await page.getByLabelText(`Select ${augment}`).click();
+		}
+
+		const fourthAugment = /** @type {HTMLInputElement} */ (
+			document.querySelector('input[aria-label="Select Pandora\'s Items"]')
+		);
+		expect(fourthAugment.disabled).toBe(true);
+		const descriptionId = fourthAugment.getAttribute('aria-describedby');
+		expect(descriptionId).toBeTruthy();
+		expect(document.getElementById(/** @type {string} */ (descriptionId))?.textContent).toMatch(
+			/maximum of three augments/i
+		);
+		const selectedAugment = page.getByLabelText('Select Jeweled Lotus');
+		await expect.element(selectedAugment).not.toBeDisabled();
+		await selectedAugment.click();
+		await expect.element(selectedAugment).not.toBeChecked();
 	});
 
 	test('disables Live-on when local fields are dirty until Save succeeds', async () => {

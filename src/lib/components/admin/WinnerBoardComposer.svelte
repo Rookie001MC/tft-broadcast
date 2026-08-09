@@ -1,7 +1,10 @@
 <script>
 	import { enhance } from '$app/forms';
 	import { resolve } from '$app/paths';
+	import { searchCatalogResources } from '$lib/search/catalog-search.js';
+	import { Tabs } from '@skeletonlabs/skeleton-svelte';
 	import ExternalLinkIcon from '@lucide/svelte/icons/external-link';
+	import SearchIcon from '@lucide/svelte/icons/search';
 	import SaveIcon from '@lucide/svelte/icons/save';
 	import TrashIcon from '@lucide/svelte/icons/trash-2';
 	import { untrack } from 'svelte';
@@ -64,6 +67,10 @@
 	/** @type {string | null} */
 	let submittingAction = $state(null);
 	let resetOpen = $state(false);
+	/** @type {'champions' | 'augments'} */
+	let activeAssetTab = $state('champions');
+	let championQuery = $state('');
+	let augmentQuery = $state('');
 	/** @type {HTMLButtonElement | null} */
 	let resetInvoker = $state(null);
 	/** @type {any} */
@@ -88,6 +95,27 @@
 
 	const normalizedComposer = $derived(normalizedForm(composer));
 	const dirty = $derived(JSON.stringify(normalizedComposer) !== JSON.stringify(savedForm));
+	const championCandidates = $derived(
+		/** @type {CatalogAsset[]} */ (searchCatalogResources(activeCatalog.champions, championQuery))
+	);
+	const augmentCandidates = $derived(
+		/** @type {CatalogAsset[]} */ (searchCatalogResources(activeCatalog.augments, augmentQuery))
+	);
+	const selectedChampionIds = $derived(new Set(composer.championIds));
+	const selectedAugmentIds = $derived(new Set(composer.augmentIds));
+	const selectedChampions = $derived.by(() =>
+		composer.championIds.flatMap((id) => {
+			const champion = activeCatalog.champions.find((item) => item.id === id);
+			return champion ? [champion] : [];
+		})
+	);
+	const selectedAugments = $derived.by(() =>
+		composer.augmentIds.flatMap((id) => {
+			const augment = activeCatalog.augments.find((item) => item.id === id);
+			return augment ? [augment] : [];
+		})
+	);
+	const augmentLimitReached = $derived(composer.augmentIds.length >= 3);
 	const invalid = $derived(
 		!tournament ||
 			!activeCatalog.snapshot ||
@@ -179,6 +207,17 @@
 		composer.augmentIds = checked
 			? [...composer.augmentIds, id]
 			: composer.augmentIds.filter((value) => value !== id);
+	}
+
+	/** @param {{ value: string }} details */
+	function selectAssetType(details) {
+		if (details.value === 'champions' || details.value === 'augments')
+			activeAssetTab = details.value;
+	}
+
+	/** @param {string} id */
+	function disabledAugment(id) {
+		return augmentLimitReached && !selectedAugmentIds.has(id);
 	}
 
 	/** @param {MouseEvent & { currentTarget: HTMLButtonElement }} event */
@@ -290,66 +329,165 @@
 			</div>
 
 			<fieldset class="fieldset space-y-3" disabled={!activeCatalog.snapshot}>
-				<legend class="legend">Champions <span class="text-error-500">(at least one)</span></legend>
-				<div class="grid max-h-80 grid-cols-1 gap-2 overflow-auto pr-1 sm:grid-cols-2">
-					{#each activeCatalog.champions as champion (champion.id)}
-						{@const selected = composer.championIds.includes(champion.id)}
-						<div
-							class:selected-card={selected}
-							class="grid grid-cols-[auto_1fr_82px] items-center gap-2 rounded-base border border-surface-200-800 p-2"
-						>
-							<input
-								class="checkbox"
-								type="checkbox"
-								name="championIds"
-								value={champion.id}
-								checked={selected}
-								onchange={(event) => toggleChampion(champion.id, event.currentTarget.checked)}
-								aria-label={`Select ${champion.displayName}`}
-							/>
-							<span class="truncate text-sm font-medium" title={champion.displayName}
-								>{champion.displayName}</span
-							>
-							<select
-								class="select-sm select"
-								name={`starLevel:${champion.id}`}
-								value={composer.starLevels[champion.id] ?? ''}
-								onchange={(event) => (composer.starLevels[champion.id] = event.currentTarget.value)}
-								disabled={!selected}
-								aria-label={`${champion.displayName} star level`}
-							>
-								<option value="">Stars</option><option value="1">1 ★</option><option value="2"
-									>2 ★</option
-								><option value="3">3 ★</option>
-							</select>
-						</div>
-					{:else}<p class="text-sm text-surface-500">
-							Sync a catalog to load champion choices.
-						</p>{/each}
-				</div>
-			</fieldset>
+				<legend class="legend">Graphic resource candidates</legend>
+				{#each composer.championIds as championId (championId)}
+					<input type="hidden" name="championIds" value={championId} />
+					<input
+						type="hidden"
+						name={`starLevel:${championId}`}
+						value={composer.starLevels[championId] ?? ''}
+					/>
+				{/each}
+				{#each composer.augmentIds as augmentId (augmentId)}
+					<input type="hidden" name="augmentIds" value={augmentId} />
+				{/each}
 
-			<fieldset class="fieldset space-y-3" disabled={!activeCatalog.snapshot}>
-				<legend class="legend">Augments <span class="text-surface-500">(optional)</span></legend>
-				<div class="grid max-h-52 grid-cols-1 gap-1 overflow-auto pr-1 sm:grid-cols-2">
-					{#each activeCatalog.augments as augment (augment.id)}
-						<label
-							class="flex cursor-pointer items-center gap-2 rounded-base p-2 hover:preset-tonal-primary"
+				<Tabs value={activeAssetTab} onValueChange={selectAssetType}>
+					<Tabs.List
+						aria-label="Graphic asset candidates"
+						class="relative flex gap-2 border-b border-surface-200-800"
+					>
+						<Tabs.Trigger
+							value="champions"
+							class="btn rounded-b-none px-4 py-2"
+							aria-label={`Champions (${composer.championIds.length})`}
 						>
-							<input
-								class="checkbox"
-								type="checkbox"
-								name="augmentIds"
-								value={augment.id}
-								checked={composer.augmentIds.includes(augment.id)}
-								onchange={(event) => toggleAugment(augment.id, event.currentTarget.checked)}
-							/>
-							<span class="truncate text-sm" title={augment.displayName}>{augment.displayName}</span
+							Champions <span class="badge preset-tonal-surface">{composer.championIds.length}</span
 							>
-						</label>
-					{:else}<p class="text-sm text-surface-500">
-							No augments are available in this snapshot.
-						</p>{/each}
+						</Tabs.Trigger>
+						<Tabs.Trigger
+							value="augments"
+							class="btn rounded-b-none px-4 py-2"
+							aria-label={`Augments (${composer.augmentIds.length})`}
+						>
+							Augments <span class="badge preset-tonal-surface">{composer.augmentIds.length}</span>
+						</Tabs.Trigger>
+						<Tabs.Indicator class="absolute bottom-0 h-0.5 bg-primary-500" />
+					</Tabs.List>
+
+					<Tabs.Content value="champions">
+						{#if activeAssetTab === 'champions'}
+							<div class="mt-3 space-y-3">
+								<label class="label label-text" for="champion-candidate-search"
+									>Search champions</label
+								>
+								<div class="field-group grid-cols-[auto_1fr]">
+									<span class="label label-text preset-tonal-primary" aria-hidden="true">
+										<SearchIcon class="size-4" />
+									</span>
+									<input
+										class="input"
+										id="champion-candidate-search"
+										type="search"
+										bind:value={championQuery}
+										placeholder="Champion name or external ID"
+									/>
+								</div>
+								<div class="grid max-h-80 grid-cols-1 gap-2 overflow-auto pr-1 sm:grid-cols-2">
+									{#each championCandidates as champion (champion.id)}
+										{@const selected = selectedChampionIds.has(champion.id)}
+										<div
+											class:selected-card={selected}
+											class="grid grid-cols-[auto_1fr_82px] items-center gap-2 rounded-base border border-surface-200-800 p-2"
+										>
+											<input
+												class="checkbox"
+												type="checkbox"
+												checked={selected}
+												onchange={(event) =>
+													toggleChampion(champion.id, event.currentTarget.checked)}
+												aria-label={`Select ${champion.displayName}`}
+											/>
+											<span class="truncate text-sm font-medium" title={champion.displayName}
+												>{champion.displayName}</span
+											>
+											<select
+												class="select-sm select"
+												value={composer.starLevels[champion.id] ?? ''}
+												onchange={(event) =>
+													(composer.starLevels[champion.id] = event.currentTarget.value)}
+												disabled={!selected}
+												aria-label={`${champion.displayName} star level`}
+											>
+												<option value="">Stars</option><option value="1">1 ★</option><option
+													value="2">2 ★</option
+												><option value="3">3 ★</option>
+											</select>
+										</div>
+									{:else}<p class="text-sm text-surface-500">
+											No champions match this search.
+										</p>{/each}
+								</div>
+							</div>
+						{/if}
+					</Tabs.Content>
+
+					<Tabs.Content value="augments">
+						{#if activeAssetTab === 'augments'}
+							<div class="mt-3 space-y-3">
+								<label class="label label-text" for="augment-candidate-search"
+									>Search augments</label
+								>
+								<div class="field-group grid-cols-[auto_1fr]">
+									<span class="label label-text preset-tonal-primary" aria-hidden="true">
+										<SearchIcon class="size-4" />
+									</span>
+									<input
+										class="input"
+										id="augment-candidate-search"
+										type="search"
+										bind:value={augmentQuery}
+										placeholder="Augment name or external ID"
+									/>
+								</div>
+								<p id="augment-choice-limit" class="sr-only">
+									A maximum of three augments can be selected. Remove a selected augment to choose
+									another.
+								</p>
+								<div class="grid max-h-52 grid-cols-1 gap-1 overflow-auto pr-1 sm:grid-cols-2">
+									{#each augmentCandidates as augment (augment.id)}
+										{@const selected = selectedAugmentIds.has(augment.id)}
+										{@const disabled = disabledAugment(augment.id)}
+										<label
+											class="flex items-center gap-2 rounded-base p-2 hover:preset-tonal-primary"
+											class:cursor-not-allowed={disabled}
+											class:cursor-pointer={!disabled}
+										>
+											<input
+												class="checkbox"
+												type="checkbox"
+												checked={selected}
+												{disabled}
+												onchange={(event) => toggleAugment(augment.id, event.currentTarget.checked)}
+												aria-describedby={disabled ? 'augment-choice-limit' : undefined}
+												aria-label={`Select ${augment.displayName}`}
+											/>
+											<span class="truncate text-sm" title={augment.displayName}
+												>{augment.displayName}</span
+											>
+										</label>
+									{:else}<p class="text-sm text-surface-500">
+											No augments match this search.
+										</p>{/each}
+								</div>
+							</div>
+						{/if}
+					</Tabs.Content>
+				</Tabs>
+
+				<div class="grid gap-3 rounded-container bg-surface-100-900 p-3 sm:grid-cols-2">
+					<div aria-label="Selected champions">
+						<strong class="text-sm">Selected champions</strong>
+						<p class="mt-1 text-sm text-surface-600-400">
+							{selectedChampions.map((champion) => champion.displayName).join(', ') || 'None'}
+						</p>
+					</div>
+					<div aria-label="Selected augments">
+						<strong class="text-sm">Selected augments</strong>
+						<p class="mt-1 text-sm text-surface-600-400">
+							{selectedAugments.map((augment) => augment.displayName).join(', ') || 'None'}
+						</p>
+					</div>
 				</div>
 			</fieldset>
 
