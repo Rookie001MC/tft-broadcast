@@ -510,12 +510,12 @@
 		<div>
 			<div class="mb-2 flex items-center justify-between">
 				<h3 class="h4">Exact 16:9 preview</h3>
-				<span class="text-xs text-surface-500">Same 1920×1080 renderer as /gfx</span>
+				<span class="text-xs text-surface-500">Same 1920x1080 renderer as /gfx</span>
 			</div>
 			<div
-				class="preview-viewport flex min-h-72 items-center justify-center overflow-auto rounded-container border border-surface-200-800 bg-surface-950 p-3"
+				class="preview-viewport flex items-center justify-center overflow-auto rounded-container border border-surface-200-800 bg-surface-950"
 			>
-				<WinnerBoardGraphic board={previewBoard} scale={0.42} />
+				<WinnerBoardGraphic board={previewBoard} scale={.55} />
 			</div>
 			{#if !previewBoard}<p class="mt-2 text-sm text-surface-500">
 					Choose a winner and at least one champion to render the preview.
