@@ -1,6 +1,6 @@
 # TFT Production Graphics Status
 
-The production MVP is manual-first. Riot match-history automation remains outside the critical path until its reliability can be evaluated separately.
+The production MVP remains manual-safe, but TFT-MATCH-V1 is now the immediate priority. The scene-based Broadcast Graphics work begins after the API produces validated, persisted match snapshots; no scene may depend on a live Riot response to remain on-air.
 
 ## Completed
 
@@ -13,8 +13,29 @@ The production MVP is manual-first. Riot match-history automation remains outsid
 - [x] Server, browser-component, and multi-page end-to-end workflow coverage.
 - [x] Standalone Node build and trusted LAN/VLAN deployment runbook.
 
-## Follow-up
+## Immediate Priority — TFT-MATCH-V1
+
+- [ ] Design and implement the secure TFT-MATCH-V1 discovery, fetch, normalization, validation, and persisted-snapshot pipeline.
+- [ ] Integrate validated match snapshots into Winner while retaining an explicit **Set up manually** path and the existing manual composer.
+- [ ] Define the immutable eight-player snapshot contract consumed later by the read-only Post-Match scene.
+- [ ] Ensure fetch, mapping, validation, and freshness failures preserve the last valid snapshot and every currently published graphic.
+
+## After TFT-MATCH-V1 — Broadcast Graphics Scenes
+
+Detailed design: `docs/superpowers/specs/2026-08-11-broadcast-graphics-scenes-design.md`.
+
+- [ ] Extract Tournament Selection into a reusable, route-agnostic `TournamentSelector` component for every current and future GFX control page.
+- [ ] Add one persisted broadcast context for the selected tournament, free-form Match Name, and free-form Game Name; expose it through a typed Svelte `createContext` provider.
+- [ ] Split the operator surface into `/admin/graphics/global`, `/admin/graphics/hud`, `/admin/graphics/winner`, and `/admin/graphics/post-match`, with isolated scene contexts and commands.
+- [ ] Build Global controls for tournament selection, Match Name, and Game Name with draft/save behavior and guarded tournament switching.
+- [ ] Move the existing Winner workflow to its dedicated route without changing its preview/save/publish/hide safety model or its API/manual fallback.
+- [ ] Build the HUD control and transparent 1920×1080 GFX overlay showing tournament, match, and game names with preview/save/publish/hide controls.
+- [ ] Build a read-only Post-Match control and GFX scene for all eight players' placements, augments, and champions from validated match snapshots; do not permit operator edits to API match data.
+- [ ] Separate OBS outputs into `/gfx/hud`, `/gfx/winner`, and `/gfx/post-match`, with independent immutable publications and ETag/version polling channels.
+- [ ] Keep `/gfx` and `/gfx/version` as backward-compatible aliases for Winner.
+- [ ] Verify that an API or scene failure never clears another scene or replaces its last successful live publication.
+
+## Later
 
 - [x] Rehearse the deployment on the final production VLAN and firewall rule before the first show.
-- [ ] Experiment with TFT-MATCH-V1 separately; do not couple it to manual publishing until reliability is proven.
-- [ ] Consider motion and additional graphic layouts after the static workflow has operated successfully in production.
+- [ ] Consider motion only after the static HUD, Winner, and Post-Match workflows have operated successfully in production.
