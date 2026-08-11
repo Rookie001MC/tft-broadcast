@@ -15,6 +15,6 @@ The production MVP is manual-first. Riot match-history automation remains outsid
 
 ## Follow-up
 
-- [ ] Rehearse the deployment on the final production VLAN and firewall rule before the first show.
+- [x] Rehearse the deployment on the final production VLAN and firewall rule before the first show.
 - [ ] Experiment with TFT-MATCH-V1 separately; do not couple it to manual publishing until reliability is proven.
 - [ ] Consider motion and additional graphic layouts after the static workflow has operated successfully in production.
