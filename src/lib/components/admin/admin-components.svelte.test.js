@@ -422,6 +422,34 @@ describe('winner graphic components', () => {
 		);
 	});
 
+	test('lists selected assets first and includes each champion star level in the summary', async () => {
+		render(WinnerBoardComposer, searchableComposerProps());
+
+		await page.getByLabelText('Select Viego').click();
+		await page.getByLabelText('Irelia star level').selectOptions('3');
+		await expect
+			.element(page.getByLabelText('Selected champions'))
+			.toHaveTextContent('Irelia (3), Viego (???)');
+		expect(
+			[...document.querySelectorAll('input[aria-label^="Select "]')].map((input) =>
+				input.getAttribute('aria-label')
+			)
+		).toEqual(['Select Irelia', 'Select Viego', 'Select Ahri', 'Select Leona']);
+
+		await page.getByRole('tab', { name: 'Augments (0)' }).click();
+		await page.getByLabelText("Select Pandora's Items").click();
+		expect(
+			[...document.querySelectorAll('input[aria-label^="Select "]')].map((input) =>
+				input.getAttribute('aria-label')
+			)
+		).toEqual([
+			"Select Pandora's Items",
+			'Select Jeweled Lotus',
+			'Select Cybernetic Uplink',
+			'Select Prismatic Pipeline'
+		]);
+	});
+
 	test('allows unlimited champions and keeps selected augments removable at the three-choice limit', async () => {
 		render(WinnerBoardComposer, searchableComposerProps());
 

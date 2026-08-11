@@ -103,6 +103,14 @@
 	);
 	const selectedChampionIds = $derived(new Set(composer.championIds));
 	const selectedAugmentIds = $derived(new Set(composer.augmentIds));
+	const displayedChampionCandidates = $derived.by(() => [
+		...championCandidates.filter((champion) => selectedChampionIds.has(champion.id)),
+		...championCandidates.filter((champion) => !selectedChampionIds.has(champion.id))
+	]);
+	const displayedAugmentCandidates = $derived.by(() => [
+		...augmentCandidates.filter((augment) => selectedAugmentIds.has(augment.id)),
+		...augmentCandidates.filter((augment) => !selectedAugmentIds.has(augment.id))
+	]);
 	const selectedChampions = $derived.by(() =>
 		composer.championIds.flatMap((id) => {
 			const champion = activeCatalog.champions.find((item) => item.id === id);
@@ -240,7 +248,7 @@
 			</p>
 			<h2 class="h3">Winner board composer</h2>
 			<p class="mt-1 text-sm text-surface-600-400">
-				Save one canonical board, inspect the exact canvas, then deliberately control publication.
+				Set the player's winning a game and their board, inspect the preview, then publish.
 			</p>
 		</div>
 		<div class="flex flex-wrap items-center justify-end gap-2">
@@ -281,15 +289,15 @@
 			<TrashIcon class="size-4" /> Reset
 		</button>
 		{#if dirty}
-			<p class="text-sm font-medium text-warning-700-300">
+			<p class="text-sm font-medium text-error-700-300">
 				Save changes before taking the board live.
 			</p>
 		{:else if invalid || !previewBoard}
-			<p class="text-sm text-surface-600-400">
+			<p class="text-sm text-warning-600-400">
 				Complete the required board fields before going live.
 			</p>
 		{:else}
-			<p class="text-sm text-surface-600-400">Publication state comes from the server.</p>
+			<p class="text-sm text-surface-600-400">This graphic is ready to go live.</p>
 		{/if}
 	</div>
 
@@ -384,7 +392,7 @@
 									/>
 								</div>
 								<div class="grid max-h-80 grid-cols-1 gap-2 overflow-auto pr-1 sm:grid-cols-2">
-									{#each championCandidates as champion (champion.id)}
+									{#each displayedChampionCandidates as champion (champion.id)}
 										{@const selected = selectedChampionIds.has(champion.id)}
 										<div
 											class:selected-card={selected}
@@ -408,14 +416,14 @@
 												disabled={!selected}
 												aria-label={`${champion.displayName} star level`}
 											>
-												<option value="" selected={composer.starLevels[champion.id] === ''}>Stars</option>
-												<option value="1" selected={composer.starLevels[champion.id] === '1' || composer.starLevels[champion.id] === 1}>
+											<option value="" selected={composer.starLevels[champion.id] === ''}>Stars</option>
+											<option value="1" selected={composer.starLevels[champion.id] === '1' || composer.starLevels[champion.id] === 1}>
 													1 ★
 												</option>
-												<option value="2" selected={composer.starLevels[champion.id] === '2' || composer.starLevels[champion.id] === 2}>
+											<option value="2" selected={composer.starLevels[champion.id] === '2' || composer.starLevels[champion.id] === 2}>
 													2 ★
 												</option>
-												<option value="3" selected={composer.starLevels[champion.id] === '3' || composer.starLevels[champion.id] === 3}>
+											<option value="3" selected={composer.starLevels[champion.id] === '3' || composer.starLevels[champion.id] === 3}>
 													3 ★
 												</option>
 											</select>
@@ -451,7 +459,7 @@
 									another.
 								</p>
 								<div class="grid max-h-52 grid-cols-1 gap-1 overflow-auto pr-1 sm:grid-cols-2">
-									{#each augmentCandidates as augment (augment.id)}
+									{#each displayedAugmentCandidates as augment (augment.id)}
 										{@const selected = selectedAugmentIds.has(augment.id)}
 										{@const disabled = disabledAugment(augment.id)}
 										<label
@@ -485,7 +493,12 @@
 					<div aria-label="Selected champions">
 						<strong class="text-sm">Selected champions</strong>
 						<p class="mt-1 text-sm text-surface-600-400">
-							{selectedChampions.map((champion) => champion.displayName).join(', ') || 'None'}
+							{selectedChampions
+								.map(
+									(champion) =>
+										`${champion.displayName} (${composer.starLevels[champion.id] ?? '???'})`
+								)
+								.join(', ') || 'None'}
 						</p>
 					</div>
 					<div aria-label="Selected augments">
