@@ -1,6 +1,7 @@
 /**
  * Installation-wide editable winner-board state. Its identifiers continue to
  * resolve against the current tournament roster and active catalog snapshot.
+ * Champion entries are ordered slots and may repeat a catalog ID.
  *
  * @typedef {{
  *   id: string,
@@ -16,6 +17,7 @@
 /**
  * Immutable rendering payload captured when the singleton is published. Image
  * fields contain only publication-scoped URLs (or null), never mutable sources.
+ * Champion entries are ordered slots and may repeat a catalog ID.
  *
  * @typedef {{
  *   id: string,

@@ -594,9 +594,10 @@ describe('admin action results', () => {
 		form.set('tournamentId', 'tournament-1');
 		form.set('winnerPlayerId', 'player-1');
 		form.set('title', 'TFT Champion');
-		form.append('championIds', 'champion-2');
-		form.append('championIds', 'champion-1');
-		form.set('starLevel:champion-2', '3');
+		form.append('championCatalogId', 'champion-2');
+		form.append('championStarLevel', '3');
+		form.append('championCatalogId', 'champion-2');
+		form.append('championStarLevel', '1');
 		form.append('augmentIds', 'augment-2');
 		const request = new Request('https://broadcast.example/admin/graphics', {
 			method: 'POST',
@@ -619,7 +620,7 @@ describe('admin action results', () => {
 				title: 'TFT Champion',
 				champions: [
 					{ catalogChampionId: 'champion-2', starLevel: 3 },
-					{ catalogChampionId: 'champion-1', starLevel: null }
+					{ catalogChampionId: 'champion-2', starLevel: 1 }
 				],
 				augmentIds: ['augment-2']
 			}
@@ -628,6 +629,34 @@ describe('admin action results', () => {
 		expect(result).toEqual({
 			action: 'saveBoard',
 			board: { id: 'current', title: 'TFT Champion' }
+		});
+	});
+
+	test('rejects mismatched indexed champion fields before saving', async () => {
+		const form = new FormData();
+		form.set('tournamentId', 'tournament-1');
+		form.set('winnerPlayerId', 'player-1');
+		form.set('title', 'TFT Champion');
+		form.append('championCatalogId', 'champion-2');
+		form.append('championCatalogId', 'champion-1');
+		form.append('championStarLevel', '3');
+		const request = new Request('https://broadcast.example/admin/graphics', {
+			method: 'POST',
+			body: form
+		});
+
+		const result = await graphicActions.saveBoard(
+			asEvent({
+				locals: { user: { id: 'operator-1' } },
+				request,
+				url: new URL(request.url)
+			})
+		);
+
+		expect(mocks.saveWinnerBoardState).not.toHaveBeenCalled();
+		expect(result).toMatchObject({
+			status: 422,
+			data: { action: 'saveBoard', message: 'Winner board details are invalid.' }
 		});
 	});
 

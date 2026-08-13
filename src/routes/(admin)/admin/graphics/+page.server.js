@@ -16,6 +16,12 @@ import {
 	setWinnerBoardLive
 } from '$lib/server/winner-boards/repository.js';
 
+/** @param {string} value */
+function parseStarLevel(value) {
+	const starLevel = value ? Number(value) : Number.NaN;
+	return Number.isInteger(starLevel) ? starLevel : null;
+}
+
 /** @type {import('./$types').PageServerLoad} */
 export async function load(event) {
 	const [adminData, savedBoard] = await Promise.all([
@@ -38,14 +44,12 @@ export const actions = {
 		requireAdmin(event);
 		try {
 			const { form, tournamentId } = await requireTournamentId(event);
-			const championIds = toStringValues(form.getAll('championIds'));
-			const champions = championIds.map((catalogChampionId) => ({
+			const championIds = toStringValues(form.getAll('championCatalogId'));
+			const starLevels = toStringValues(form.getAll('championStarLevel'));
+			if (championIds.length !== starLevels.length) throw new Error('Invalid champion slots');
+			const champions = championIds.map((catalogChampionId, displayOrder) => ({
 				catalogChampionId,
-				starLevel: (() => {
-					const value = form.get(`starLevel:${catalogChampionId}`);
-					const starLevel = typeof value === 'string' && value ? Number(value) : Number.NaN;
-					return Number.isInteger(starLevel) ? starLevel : null;
-				})()
+				starLevel: parseStarLevel(starLevels[displayOrder])
 			}));
 			const board = await saveWinnerBoardState(db, {
 				tournamentId,

@@ -356,6 +356,48 @@ describe('winner board singleton repository', () => {
 		expect(state.augments).toHaveLength(3);
 	});
 
+	it('persists repeated champion slots with independent stars and source links', async () => {
+		const state = await repository.saveWinnerBoardState(database, {
+			...validInput(),
+			champions: [
+				{ catalogChampionId: 'champion-2', starLevel: 2 },
+				{ catalogChampionId: 'champion-2', starLevel: 1 }
+			]
+		});
+
+		expect(state.champions).toEqual([
+			expect.objectContaining({
+				id: 'champion-2',
+				displayName: 'Champion 2',
+				starLevel: 2,
+				displayOrder: 0
+			}),
+			expect.objectContaining({
+				id: 'champion-2',
+				displayName: 'Champion 2',
+				starLevel: 1,
+				displayOrder: 1
+			})
+		]);
+	});
+
+	it('publishes repeated champion slots independently', async () => {
+		await repository.saveWinnerBoardState(database, {
+			...validInput(),
+			champions: [
+				{ catalogChampionId: 'champion-2', starLevel: 2 },
+				{ catalogChampionId: 'champion-2', starLevel: 1 }
+			]
+		});
+		await repository.setWinnerBoardLive(database, true);
+
+		const publication = await repository.getPublishedWinnerBoard(database);
+		expect(publication?.champions).toEqual([
+			expect.objectContaining({ id: 'champion-2', starLevel: 2, displayOrder: 0 }),
+			expect.objectContaining({ id: 'champion-2', starLevel: 1, displayOrder: 1 })
+		]);
+	});
+
 	it('rejects duplicate augment IDs with the stable repository error', async () => {
 		await expect(
 			repository.saveWinnerBoardState(database, {
