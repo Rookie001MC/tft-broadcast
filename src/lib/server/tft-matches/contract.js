@@ -2,8 +2,6 @@ import { z } from 'zod';
 
 export const CANONICAL_TFT_MATCH_CONTRACT_VERSION = 1;
 
-const EXCLUDED_EXTERNAL_IDS = new Set(['TFT17_IvernMinion', 'TFT17_Summon']);
-
 const rawMatchSchema = z
 	.object({
 		metadata: z
@@ -58,7 +56,8 @@ const snapshotSchema = z
 				.object({
 					puuid: z.string().min(1),
 					placement: z.number().int().min(1).max(8),
-					champions: z.array(championSchema)
+					champions: z.array(championSchema),
+					omittedUnitCount: z.number().int().nonnegative()
 				})
 				.strict()
 		)
@@ -107,29 +106,22 @@ function deepFreeze(value) {
 	return value;
 }
 
-/** @param {Array<{ id: unknown, externalId: unknown, displayName: unknown, iconPath?: unknown, isExcluded?: unknown }>} catalogChampions */
+/** @param {Array<{ id: unknown, externalId: unknown, displayName: unknown, iconPath?: unknown }>} catalogChampions */
 function catalogByExternalId(catalogChampions) {
 	const catalog = new Map();
-	const excludedExternalIds = new Set(EXCLUDED_EXTERNAL_IDS);
-	const retainedCatalogIds = new Set();
 	for (const row of catalogChampions) {
 		const externalId = requiredText(row?.externalId);
-		if (row?.isExcluded || EXCLUDED_EXTERNAL_IDS.has(externalId)) {
-			excludedExternalIds.add(externalId);
-			continue;
-		}
 		const champion = {
 			catalogChampionId: requiredText(row?.id),
 			externalId,
 			displayName: requiredText(row?.displayName),
 			iconPath: typeof row?.iconPath === 'string' ? row.iconPath : null
 		};
-		if (catalog.has(externalId) || retainedCatalogIds.has(champion.catalogChampionId))
+		if (catalog.has(externalId))
 			throw new TftMatchContractError('Catalog champion mappings are invalid.');
 		catalog.set(externalId, champion);
-		retainedCatalogIds.add(champion.catalogChampionId);
 	}
-	return { catalog, excludedExternalIds };
+	return catalog;
 }
 
 /** @param {unknown} value @returns {import('$lib/tft-match.js').CanonicalTftMatchSnapshot} */
@@ -147,18 +139,9 @@ export function parseCanonicalTftMatchSnapshot(value) {
 	)
 		throw new TftMatchContractError('TFT match snapshot is invalid.');
 	for (const participant of parsed.data.participants) {
-		const catalogChampionIds = new Set();
-		const externalIds = new Set();
 		if (
 			participant.champions.some((champion, index) => {
 				if (champion.displayOrder !== index) return true;
-				if (
-					catalogChampionIds.has(champion.catalogChampionId) ||
-					externalIds.has(champion.externalId)
-				)
-					return true;
-				catalogChampionIds.add(champion.catalogChampionId);
-				externalIds.add(champion.externalId);
 				return false;
 			})
 		)
@@ -197,35 +180,30 @@ export function normalizeTftMatch(input) {
 		throw new TftMatchContractError('TFT match placements are incomplete.');
 	if (!participantPuuids.includes(selectedPuuid))
 		throw new TftMatchContractError('Selected player was not found in the match.');
-	const { catalog, excludedExternalIds } = catalogByExternalId(
+	const catalog = catalogByExternalId(
 		Array.isArray(input?.catalogChampions) ? input.catalogChampions : []
 	);
-	const unresolvedExternalIds = new Set();
 	const normalizedParticipants = participants.map((participant) => {
-		const seenCatalogChampionIds = new Set();
 		const champions = [];
+		let omittedUnitCount = 0;
 		for (const unit of participant.units) {
 			const externalId = requiredText(unit.character_id);
 			if (unit.tier < 1 || unit.tier > 3)
 				throw new TftMatchContractError('TFT champion tier is invalid.');
-			if (excludedExternalIds.has(externalId)) continue;
 			const mapped = catalog.get(externalId);
 			if (!mapped) {
-				unresolvedExternalIds.add(externalId);
+				omittedUnitCount += 1;
 				continue;
 			}
-			if (seenCatalogChampionIds.has(mapped.catalogChampionId))
-				throw new TftMatchContractError('TFT match champions are invalid.');
-			seenCatalogChampionIds.add(mapped.catalogChampionId);
 			champions.push({ ...mapped, starLevel: unit.tier, displayOrder: champions.length });
 		}
-		return { puuid: participant.puuid.trim(), placement: participant.placement, champions };
+		return {
+			puuid: participant.puuid.trim(),
+			placement: participant.placement,
+			champions,
+			omittedUnitCount
+		};
 	});
-	if (unresolvedExternalIds.size > 0)
-		throw new TftMatchContractError(
-			'Some TFT champions could not be mapped to the active catalog.',
-			[...unresolvedExternalIds]
-		);
 	return parseCanonicalTftMatchSnapshot({
 		contractVersion: CANONICAL_TFT_MATCH_CONTRACT_VERSION,
 		matchId: raw.metadata.match_id,
@@ -252,6 +230,7 @@ export function previewRowFromSnapshot(snapshot, selectedPuuid) {
 		fetchedAt: parsed.fetchedAt,
 		selectedPuuid: selected.puuid,
 		placement: selected.placement,
-		champions: structuredClone(selected.champions)
+		champions: structuredClone(selected.champions),
+		omittedUnitCount: selected.omittedUnitCount
 	});
 }

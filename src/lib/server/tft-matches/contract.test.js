@@ -13,8 +13,6 @@ const fixtureText = await readFile(
 	'utf8'
 );
 const fixture = JSON.parse(fixtureText.replace(/^\/\/.*\r?\n/gm, ''));
-const excludedExternalIds = new Set(['TFT17_IvernMinion', 'TFT17_Summon']);
-const fixtureHelperExternalIds = new Set([...excludedExternalIds, 'TFT17_Zed', 'TFT17_Kindred']);
 const catalogChampions = [
 	...new Set(
 		fixture.info.participants.flatMap((player) => player.units.map((unit) => unit.character_id))
@@ -24,12 +22,9 @@ const catalogChampions = [
 	externalId,
 	displayName: externalId.replace('TFT17_', ''),
 	iconPath: `/icons/${externalId}.png`,
-	isExcluded: fixtureHelperExternalIds.has(externalId)
+	isExcluded: false
 }));
-const retainedCatalogChampions = catalogChampions.filter((champion) => !champion.isExcluded);
-const retainedExternalIds = new Set(
-	retainedCatalogChampions.map((champion) => champion.externalId)
-);
+const catalogExternalIds = new Set(catalogChampions.map((champion) => champion.externalId));
 const selectedPuuid = fixture.info.participants.find((player) => player.placement === 4).puuid;
 
 function cloneFixture() {
@@ -77,7 +72,7 @@ describe('normalizeTftMatch', () => {
 		expect(Object.isFrozen(snapshot)).toBe(true);
 	});
 
-	test('uses placement rather than win and maps the selected board with contiguous order and tiers', () => {
+	test('uses placement rather than win and maps every selected unit with contiguous order and tiers', () => {
 		const payload = cloneFixture();
 		const selected = payload.info.participants.find(
 			(participant) => participant.puuid === selectedPuuid
@@ -92,19 +87,60 @@ describe('normalizeTftMatch', () => {
 			snapshot.participants.find((participant) => participant.puuid === selectedPuuid).placement
 		).toBe(4);
 		expect(board.map((champion) => champion.displayOrder)).toEqual(board.map((_, index) => index));
-		const firstUnitsByExternalId = new Map();
-		for (const unit of selected.units) {
-			if (
-				retainedExternalIds.has(unit.character_id) &&
-				!firstUnitsByExternalId.has(unit.character_id)
-			)
-				firstUnitsByExternalId.set(unit.character_id, unit);
-		}
 		expect(board.map((champion) => champion.starLevel)).toEqual(
-			[...firstUnitsByExternalId.values()].map((unit) => unit.tier)
+			selected.units
+				.filter((unit) => catalogExternalIds.has(unit.character_id))
+				.map((unit) => unit.tier)
 		);
-		expect(board.every((champion) => !fixtureHelperExternalIds.has(champion.externalId))).toBe(
-			true
+		expect(board.map((champion) => champion.externalId)).toEqual(
+			selected.units
+				.filter((unit) => catalogExternalIds.has(unit.character_id))
+				.map((unit) => unit.character_id)
+		);
+	});
+
+	test('keeps duplicate mapped units as independent ordered slots', () => {
+		const payload = cloneFixture();
+		const board = payload.info.participants.find(
+			(participant) => participant.puuid === selectedPuuid
+		).units;
+		const duplicate = { ...board[0] };
+		board.splice(1, 0, duplicate);
+
+		const champions = normalize(payload).participants.find(
+			(participant) => participant.puuid === selectedPuuid
+		).champions;
+		expect(champions.slice(0, 2)).toEqual([
+			expect.objectContaining({
+				catalogChampionId: catalogChampions.find(
+					(champion) => champion.externalId === duplicate.character_id
+				).id,
+				starLevel: duplicate.tier,
+				displayOrder: 0
+			}),
+			expect.objectContaining({
+				catalogChampionId: catalogChampions.find(
+					(champion) => champion.externalId === duplicate.character_id
+				).id,
+				starLevel: duplicate.tier,
+				displayOrder: 1
+			})
+		]);
+	});
+
+	test('omits a unit absent from the eligible catalog and counts it', () => {
+		const payload = cloneFixture();
+		const board = payload.info.participants.find(
+			(participant) => participant.puuid === selectedPuuid
+		).units;
+		board.splice(1, 0, { character_id: 'TFT17_Unknown', tier: 2 });
+
+		const participant = normalize(payload).participants.find(
+			({ puuid }) => puuid === selectedPuuid
+		);
+		expect(participant.omittedUnitCount).toBe(1);
+		expect(participant.champions.map((champion) => champion.displayOrder)).toEqual(
+			participant.champions.map((_, index) => index)
 		);
 	});
 
@@ -129,6 +165,7 @@ describe('normalizeTftMatch', () => {
 			selectedPuuid
 		});
 		expect(preview).toHaveProperty('champions');
+		expect(preview).toHaveProperty('omittedUnitCount');
 		expect(preview).not.toHaveProperty('participants');
 		expect(preview).not.toHaveProperty('payload');
 		expect(preview).not.toHaveProperty('augments');
@@ -179,14 +216,7 @@ describe('normalizeTftMatch', () => {
 		expectContractError(() => normalize(malformedInfo));
 	});
 
-	test('aggregates sorted unknown external IDs and rejects empty character IDs', () => {
-		const unknown = cloneFixture();
-		const board = unknown.info.participants.find(
-			(participant) => participant.puuid === selectedPuuid
-		).units;
-		board[0].character_id = 'ZZZ';
-		board[1].character_id = 'AAA';
-		expectContractError(() => normalize(unknown), ['AAA', 'ZZZ']);
+	test('rejects empty character IDs', () => {
 		const emptyId = cloneFixture();
 		emptyId.info.participants.find(
 			(participant) => participant.puuid === selectedPuuid
@@ -194,37 +224,18 @@ describe('normalizeTftMatch', () => {
 		expectContractError(() => normalize(emptyId));
 	});
 
-	test('allows an all-excluded selected board and rejects duplicate retained catalog mappings', () => {
-		const allExcluded = cloneFixture();
-		allExcluded.info.participants.find((participant) => participant.puuid === selectedPuuid).units =
-			[
-				{ character_id: 'TFT17_IvernMinion', tier: 1 },
-				{ character_id: 'TFT17_Summon', tier: 1 }
-			];
+	test('uses catalog membership rather than isExcluded to determine eligible units', () => {
+		const champion = catalogChampions[0];
+		const snapshot = normalize(cloneFixture(), {
+			catalogChampions: catalogChampions.map((row) =>
+				row.externalId === champion.externalId ? { ...row, isExcluded: true } : row
+			)
+		});
 		expect(
-			normalize(allExcluded).participants.find((participant) => participant.puuid === selectedPuuid)
-				.champions
-		).toEqual([]);
-		expectContractError(() =>
-			normalize(cloneFixture(), {
-				catalogChampions: [
-					...catalogChampions,
-					{ ...retainedCatalogChampions[1], id: retainedCatalogChampions[0].id }
-				]
-			})
-		);
-	});
-
-	test('rejects duplicate retained catalog champions on every participant board', () => {
-		for (const participant of cloneFixture().info.participants.slice(0, 2)) {
-			const payload = cloneFixture();
-			const board = payload.info.participants.find(
-				({ puuid }) => puuid === participant.puuid
-			).units;
-			const retainedUnit = board.find((unit) => retainedExternalIds.has(unit.character_id));
-			board.push({ ...retainedUnit });
-			expectContractError(() => normalize(payload));
-		}
+			snapshot.participants.some((participant) =>
+				participant.champions.some((slot) => slot.externalId === champion.externalId)
+			)
+		).toBe(true);
 	});
 
 	test('rejects mutated canonical snapshots', () => {
@@ -232,13 +243,9 @@ describe('normalizeTftMatch', () => {
 		version.contractVersion = 2;
 		expect(() => parseCanonicalTftMatchSnapshot(version)).toThrow(TftMatchContractError);
 
-		for (const field of ['catalogChampionId', 'externalId']) {
-			const snapshot = structuredClone(normalize());
-			const board = snapshot.participants.find(
-				(participant) => participant.puuid === selectedPuuid
-			).champions;
-			board[1][field] = board[0][field];
-			expect(() => parseCanonicalTftMatchSnapshot(snapshot)).toThrow(TftMatchContractError);
-		}
+		const snapshot = structuredClone(normalize());
+		const participant = snapshot.participants.find(({ puuid }) => puuid === selectedPuuid);
+		participant.omittedUnitCount = -1;
+		expect(() => parseCanonicalTftMatchSnapshot(snapshot)).toThrow(TftMatchContractError);
 	});
 });
