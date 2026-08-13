@@ -4,6 +4,7 @@ import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import { catalogAugments, catalogChampions, catalogSnapshots } from '../db/schema/catalog.js';
 import { players } from '../db/schema/players.js';
 import { tournamentPlayers, tournaments } from '../db/schema/tournaments.js';
+import { insertTftMatchSnapshot } from '../tft-matches/repository.js';
 import {
 	graphicState,
 	winnerBoardPublications,
@@ -38,7 +39,8 @@ let writeTail = Promise.resolve();
  *   winnerPlayerId: string,
  *   title: string,
  *   champions: Array<{ catalogChampionId: string, starLevel: number | null }>,
- *   augmentIds: string[]
+ *   augmentIds: string[],
+ *   sourceSnapshot?: import('$lib/tft-match.js').CanonicalTftMatchSnapshot
  * }} SaveWinnerBoardStateInput
  */
 
@@ -278,12 +280,19 @@ function inputFromState(state) {
  */
 async function replaceState(transaction, input) {
 	const now = new Date();
+	const sourceTftMatchSnapshotId = input.sourceSnapshot
+		? await insertTftMatchSnapshot(transaction, {
+				tournamentId: input.tournamentId,
+				snapshot: input.sourceSnapshot
+			})
+		: null;
 	await validateTournamentScope(transaction, validationScope(input));
 	await transaction.delete(winnerBoardState).where(eq(winnerBoardState.id, CURRENT_STATE_ID));
 	await transaction.insert(winnerBoardState).values({
 		id: CURRENT_STATE_ID,
 		tournamentId: input.tournamentId,
 		winnerPlayerId: input.winnerPlayerId,
+		sourceTftMatchSnapshotId,
 		title: input.title,
 		createdAt: now,
 		updatedAt: now
