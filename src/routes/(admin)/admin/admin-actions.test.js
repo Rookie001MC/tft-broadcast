@@ -28,6 +28,10 @@ const mocks = vi.hoisted(() => ({
 	saveWinnerBoardState: vi.fn(),
 	setWinnerBoardLive: vi.fn(),
 	resetWinnerBoardState: vi.fn(),
+	getTftMatchApiAvailability: vi.fn(),
+	requireTftMatchApiConfig: vi.fn(),
+	resolveTftMatchPreviewForSave: vi.fn(),
+	deleteTftMatchPreviewBatch: vi.fn(),
 	signOut: vi.fn(),
 	mkdir: vi.fn(),
 	writeFile: vi.fn(),
@@ -86,6 +90,17 @@ vi.mock('$lib/server/winner-boards/repository.js', () => ({
 	resetWinnerBoardState: mocks.resetWinnerBoardState,
 	saveWinnerBoardState: mocks.saveWinnerBoardState,
 	setWinnerBoardLive: mocks.setWinnerBoardLive
+}));
+vi.mock('$lib/server/tft-matches/config.js', () => ({
+	getTftMatchApiAvailability: mocks.getTftMatchApiAvailability,
+	requireTftMatchApiConfig: mocks.requireTftMatchApiConfig
+}));
+vi.mock('$lib/server/tft-matches/discovery.js', () => ({
+	resolveTftMatchPreviewForSave: mocks.resolveTftMatchPreviewForSave,
+	TftMatchPreviewConflictError: class TftMatchPreviewConflictError extends Error {}
+}));
+vi.mock('$lib/server/tft-matches/cache.js', () => ({
+	deleteTftMatchPreviewBatch: mocks.deleteTftMatchPreviewBatch
 }));
 
 import { load } from './+page.server.js';
@@ -885,5 +900,47 @@ describe('admin action results', () => {
 			resourceId: 'augment-exact',
 			result: { kind: 'reset_required', label: 'Shared Label' }
 		});
+	});
+
+	test('resolves a cached TFT match source only after both opaque fields are supplied, then deletes it after a successful save', async () => {
+		const config = { apiKey: 'private-key', region: 'VN2' };
+		const sourceSnapshot = { contractVersion: 1, matchId: 'VN2_1', participants: [] };
+		mocks.requireTftMatchApiConfig.mockReturnValue(config);
+		mocks.resolveTftMatchPreviewForSave.mockResolvedValue(sourceSnapshot);
+		mocks.saveWinnerBoardState.mockResolvedValue({ id: 'board-1' });
+		const form = new FormData();
+		form.set('tournamentId', 'tournament-1');
+		form.set('winnerPlayerId', 'player-1');
+		form.set('title', 'Final board');
+		form.append('championCatalogId', 'champion-1');
+		form.append('championStarLevel', '2');
+		form.set('tftPreviewToken', 'opaque-token');
+		form.set('tftMatchId', 'VN2_1');
+		const request = new Request('https://broadcast.example/admin/graphics', {
+			method: 'POST',
+			body: form
+		});
+
+		const result = await graphicActions.saveBoard(
+			asEvent({
+				locals: { user: { id: 'operator-1' } },
+				request,
+				url: new URL(request.url)
+			})
+		);
+
+		expect(mocks.resolveTftMatchPreviewForSave).toHaveBeenCalledWith({
+			database: {},
+			token: 'opaque-token',
+			matchId: 'VN2_1',
+			tournamentId: 'tournament-1',
+			config
+		});
+		expect(mocks.saveWinnerBoardState).toHaveBeenCalledWith(
+			{},
+			expect.objectContaining({ sourceSnapshot })
+		);
+		expect(mocks.deleteTftMatchPreviewBatch).toHaveBeenCalledWith('opaque-token');
+		expect(result).toMatchObject({ action: 'saveBoard', board: { id: 'board-1' } });
 	});
 });

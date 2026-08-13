@@ -5,9 +5,19 @@ import {
 	toStringValues
 } from '$lib/server/admin/form-helpers.js';
 import { redirect } from '@sveltejs/kit';
+import { env } from '$env/dynamic/private';
 import { loadAdminData } from '$lib/server/admin/load.js';
 import { requireAdmin } from '$lib/server/auth/guards.js';
 import { db } from '$lib/server/db';
+import {
+	getTftMatchApiAvailability,
+	requireTftMatchApiConfig
+} from '$lib/server/tft-matches/config.js';
+import {
+	resolveTftMatchPreviewForSave,
+	TftMatchPreviewConflictError
+} from '$lib/server/tft-matches/discovery.js';
+import { deleteTftMatchPreviewBatch } from '$lib/server/tft-matches/cache.js';
 import { loadTournamentAdminData } from '$lib/server/tournaments/repository.js';
 import {
 	getWinnerBoardState,
@@ -34,7 +44,8 @@ export async function load(event) {
 		roster: adminData.roster,
 		activeCatalog: adminData.activeCatalog,
 		savedBoard,
-		livePublicationId: adminData.liveBoard?.id ?? null
+		livePublicationId: adminData.liveBoard?.id ?? null,
+		tftMatchApi: getTftMatchApiAvailability(env)
 	};
 }
 
@@ -44,6 +55,10 @@ export const actions = {
 		requireAdmin(event);
 		try {
 			const { form, tournamentId } = await requireTournamentId(event);
+			const tftPreviewToken = text(form.get('tftPreviewToken'));
+			const tftMatchId = text(form.get('tftMatchId'));
+			if (Boolean(tftPreviewToken) !== Boolean(tftMatchId))
+				throw new TftMatchPreviewConflictError();
 			const championIds = toStringValues(form.getAll('championCatalogId'));
 			const starLevels = toStringValues(form.getAll('championStarLevel'));
 			if (championIds.length !== starLevels.length) throw new Error('Invalid champion slots');
@@ -51,15 +66,33 @@ export const actions = {
 				catalogChampionId,
 				starLevel: parseStarLevel(starLevels[displayOrder])
 			}));
+			const sourceSnapshot =
+				tftPreviewToken && tftMatchId
+					? await resolveTftMatchPreviewForSave({
+							database: db,
+							token: tftPreviewToken,
+							matchId: tftMatchId,
+							tournamentId,
+							config: requireTftMatchApiConfig(env)
+						})
+					: null;
 			const board = await saveWinnerBoardState(db, {
 				tournamentId,
 				winnerPlayerId: text(form.get('winnerPlayerId')),
 				title: text(form.get('title')),
 				champions,
-				augmentIds: toStringValues(form.getAll('augmentIds'))
+				augmentIds: toStringValues(form.getAll('augmentIds')),
+				...(sourceSnapshot ? { sourceSnapshot } : {})
 			});
+			if (tftPreviewToken) deleteTftMatchPreviewBatch(tftPreviewToken);
 			return { action: 'saveBoard', board };
-		} catch {
+		} catch (error) {
+			if (error instanceof TftMatchPreviewConflictError)
+				return actionFailure(
+					'saveBoard',
+					new Error('This API preview is no longer available. Fetch it again.'),
+					409
+				);
 			return actionFailure('saveBoard', new Error('Winner board details are invalid.'), 422);
 		}
 	},
