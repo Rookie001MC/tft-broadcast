@@ -14,19 +14,22 @@ const fixtureText = await readFile(
 );
 const fixture = JSON.parse(fixtureText.replace(/^\/\/.*\r?\n/gm, ''));
 const excludedExternalIds = new Set(['TFT17_IvernMinion', 'TFT17_Summon']);
+const fixtureHelperExternalIds = new Set([...excludedExternalIds, 'TFT17_Zed', 'TFT17_Kindred']);
 const catalogChampions = [
 	...new Set(
 		fixture.info.participants.flatMap((player) => player.units.map((unit) => unit.character_id))
 	)
-]
-	.filter((externalId) => !excludedExternalIds.has(externalId))
-	.map((externalId, index) => ({
-		id: `catalog-${index + 1}`,
-		externalId,
-		displayName: externalId.replace('TFT17_', ''),
-		iconPath: `/icons/${externalId}.png`,
-		isExcluded: false
-	}));
+].map((externalId, index) => ({
+	id: `catalog-${index + 1}`,
+	externalId,
+	displayName: externalId.replace('TFT17_', ''),
+	iconPath: `/icons/${externalId}.png`,
+	isExcluded: fixtureHelperExternalIds.has(externalId)
+}));
+const retainedCatalogChampions = catalogChampions.filter((champion) => !champion.isExcluded);
+const retainedExternalIds = new Set(
+	retainedCatalogChampions.map((champion) => champion.externalId)
+);
 const selectedPuuid = fixture.info.participants.find((player) => player.placement === 4).puuid;
 
 function cloneFixture() {
@@ -92,7 +95,7 @@ describe('normalizeTftMatch', () => {
 		const firstUnitsByExternalId = new Map();
 		for (const unit of selected.units) {
 			if (
-				!excludedExternalIds.has(unit.character_id) &&
+				retainedExternalIds.has(unit.character_id) &&
 				!firstUnitsByExternalId.has(unit.character_id)
 			)
 				firstUnitsByExternalId.set(unit.character_id, unit);
@@ -100,12 +103,9 @@ describe('normalizeTftMatch', () => {
 		expect(board.map((champion) => champion.starLevel)).toEqual(
 			[...firstUnitsByExternalId.values()].map((unit) => unit.tier)
 		);
-		expect(
-			board.every(
-				(champion) =>
-					champion.externalId !== 'TFT17_IvernMinion' && champion.externalId !== 'TFT17_Summon'
-			)
-		).toBe(true);
+		expect(board.every((champion) => !fixtureHelperExternalIds.has(champion.externalId))).toBe(
+			true
+		);
 	});
 
 	test('accepts raw unknown fields, absent augments, either queue spelling, absent completion marker, and partial Riot IDs', () => {
@@ -142,6 +142,18 @@ describe('normalizeTftMatch', () => {
 		for (const value of ['', fixture.info.participants[1].puuid]) {
 			const payload = cloneFixture();
 			payload.info.participants[0].puuid = value;
+			expectContractError(() => normalize(payload));
+		}
+	});
+
+	test('requires metadata participants to exactly match the eight info participant PUUIDs', () => {
+		for (const metadataParticipants of [
+			fixture.metadata.participants.slice(1),
+			[...fixture.metadata.participants, 'extra-puuid'],
+			['replaced-puuid', ...fixture.metadata.participants.slice(1)]
+		]) {
+			const payload = cloneFixture();
+			payload.metadata.participants = metadataParticipants;
 			expectContractError(() => normalize(payload));
 		}
 	});
@@ -197,15 +209,36 @@ describe('normalizeTftMatch', () => {
 			normalize(cloneFixture(), {
 				catalogChampions: [
 					...catalogChampions,
-					{ ...catalogChampions[1], id: catalogChampions[0].id }
+					{ ...retainedCatalogChampions[1], id: retainedCatalogChampions[0].id }
 				]
 			})
 		);
 	});
 
+	test('rejects duplicate retained catalog champions on every participant board', () => {
+		for (const participant of cloneFixture().info.participants.slice(0, 2)) {
+			const payload = cloneFixture();
+			const board = payload.info.participants.find(
+				({ puuid }) => puuid === participant.puuid
+			).units;
+			const retainedUnit = board.find((unit) => retainedExternalIds.has(unit.character_id));
+			board.push({ ...retainedUnit });
+			expectContractError(() => normalize(payload));
+		}
+	});
+
 	test('rejects mutated canonical snapshots', () => {
-		const snapshot = structuredClone(normalize());
-		snapshot.contractVersion = 2;
-		expect(() => parseCanonicalTftMatchSnapshot(snapshot)).toThrow(TftMatchContractError);
+		const version = structuredClone(normalize());
+		version.contractVersion = 2;
+		expect(() => parseCanonicalTftMatchSnapshot(version)).toThrow(TftMatchContractError);
+
+		for (const field of ['catalogChampionId', 'externalId']) {
+			const snapshot = structuredClone(normalize());
+			const board = snapshot.participants.find(
+				(participant) => participant.puuid === selectedPuuid
+			).champions;
+			board[1][field] = board[0][field];
+			expect(() => parseCanonicalTftMatchSnapshot(snapshot)).toThrow(TftMatchContractError);
+		}
 	});
 });

@@ -110,10 +110,14 @@ function deepFreeze(value) {
 /** @param {Array<{ id: unknown, externalId: unknown, displayName: unknown, iconPath?: unknown, isExcluded?: unknown }>} catalogChampions */
 function catalogByExternalId(catalogChampions) {
 	const catalog = new Map();
+	const excludedExternalIds = new Set(EXCLUDED_EXTERNAL_IDS);
 	const retainedCatalogIds = new Set();
 	for (const row of catalogChampions) {
 		const externalId = requiredText(row?.externalId);
-		if (row?.isExcluded || EXCLUDED_EXTERNAL_IDS.has(externalId)) continue;
+		if (row?.isExcluded || EXCLUDED_EXTERNAL_IDS.has(externalId)) {
+			excludedExternalIds.add(externalId);
+			continue;
+		}
 		const champion = {
 			catalogChampionId: requiredText(row?.id),
 			externalId,
@@ -125,7 +129,7 @@ function catalogByExternalId(catalogChampions) {
 		catalog.set(externalId, champion);
 		retainedCatalogIds.add(champion.catalogChampionId);
 	}
-	return catalog;
+	return { catalog, excludedExternalIds };
 }
 
 /** @param {unknown} value @returns {import('$lib/tft-match.js').CanonicalTftMatchSnapshot} */
@@ -143,7 +147,21 @@ export function parseCanonicalTftMatchSnapshot(value) {
 	)
 		throw new TftMatchContractError('TFT match snapshot is invalid.');
 	for (const participant of parsed.data.participants) {
-		if (participant.champions.some((champion, index) => champion.displayOrder !== index))
+		const catalogChampionIds = new Set();
+		const externalIds = new Set();
+		if (
+			participant.champions.some((champion, index) => {
+				if (champion.displayOrder !== index) return true;
+				if (
+					catalogChampionIds.has(champion.catalogChampionId) ||
+					externalIds.has(champion.externalId)
+				)
+					return true;
+				catalogChampionIds.add(champion.catalogChampionId);
+				externalIds.add(champion.externalId);
+				return false;
+			})
+		)
 			throw new TftMatchContractError('TFT match snapshot is invalid.');
 	}
 	return /** @type {import('$lib/tft-match.js').CanonicalTftMatchSnapshot} */ (
@@ -164,12 +182,14 @@ export function normalizeTftMatch(input) {
 		throw new TftMatchContractError('Fetched match ID does not match the requested match.');
 	const queueId = raw.info.queueId ?? raw.info.queue_id;
 	if (!Number.isInteger(queueId)) throw new TftMatchContractError('TFT match queue is invalid.');
-	const metadataPuuids = raw.metadata.participants;
+	const metadataPuuids = raw.metadata.participants.map(requiredText);
 	const participants = raw.info.participants;
 	const participantPuuids = participants.map((participant) => requiredText(participant.puuid));
 	if (
+		metadataPuuids.length !== 8 ||
 		new Set(metadataPuuids).size !== metadataPuuids.length ||
-		new Set(participantPuuids).size !== participantPuuids.length
+		new Set(participantPuuids).size !== participantPuuids.length ||
+		metadataPuuids.some((puuid) => !participantPuuids.includes(puuid))
 	)
 		throw new TftMatchContractError('TFT match participants are invalid.');
 	const placements = participants.map((participant) => participant.placement).sort((a, b) => a - b);
@@ -177,25 +197,25 @@ export function normalizeTftMatch(input) {
 		throw new TftMatchContractError('TFT match placements are incomplete.');
 	if (!participantPuuids.includes(selectedPuuid))
 		throw new TftMatchContractError('Selected player was not found in the match.');
-	const catalog = catalogByExternalId(
+	const { catalog, excludedExternalIds } = catalogByExternalId(
 		Array.isArray(input?.catalogChampions) ? input.catalogChampions : []
 	);
 	const unresolvedExternalIds = new Set();
 	const normalizedParticipants = participants.map((participant) => {
-		const isSelected = participant.puuid === selectedPuuid;
 		const seenCatalogChampionIds = new Set();
 		const champions = [];
 		for (const unit of participant.units) {
 			const externalId = requiredText(unit.character_id);
 			if (unit.tier < 1 || unit.tier > 3)
 				throw new TftMatchContractError('TFT champion tier is invalid.');
-			if (EXCLUDED_EXTERNAL_IDS.has(externalId)) continue;
+			if (excludedExternalIds.has(externalId)) continue;
 			const mapped = catalog.get(externalId);
 			if (!mapped) {
 				unresolvedExternalIds.add(externalId);
 				continue;
 			}
-			if (isSelected && seenCatalogChampionIds.has(mapped.catalogChampionId)) continue;
+			if (seenCatalogChampionIds.has(mapped.catalogChampionId))
+				throw new TftMatchContractError('TFT match champions are invalid.');
 			seenCatalogChampionIds.add(mapped.catalogChampionId);
 			champions.push({ ...mapped, starLevel: unit.tier, displayOrder: champions.length });
 		}
