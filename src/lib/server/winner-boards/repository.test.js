@@ -259,6 +259,19 @@ async function readPublishedAsset(mediaApi, url) {
 	});
 }
 
+/** @param {any} database */
+async function requirePublishedWinnerBoard(database) {
+	const published = await repository.getPublishedWinnerBoard(database);
+	if (!published) throw new Error('Expected a published winner board');
+	return published;
+}
+
+/** @param {string | null | undefined} url */
+function requirePublicationUrl(url) {
+	if (!url) throw new Error('Expected a publication media URL');
+	return url;
+}
+
 /** @param {ReturnType<typeof createClient>} client */
 async function graphicRow(client) {
 	return (await client.execute("SELECT * FROM graphic_state WHERE id = 'live'")).rows[0] ?? null;
@@ -369,7 +382,7 @@ describe('winner board singleton repository', () => {
 		await repository.saveWinnerBoardState(database, validInput());
 		await repository.setWinnerBoardLive(database, true);
 
-		const published = await repository.getPublishedWinnerBoard(database);
+		const published = await requirePublishedWinnerBoard(database);
 		expect(published).toMatchObject({ title: 'TFT Champion', winner: { id: 'player-one' } });
 		expect((await graphicRow(client))?.published_publication_id).toBe(published.id);
 		expect(await repository.getGraphicVersion(database)).toBe(1);
@@ -404,7 +417,7 @@ describe('winner board singleton repository', () => {
 
 		await repository.saveWinnerBoardState(database, validInput());
 		await repository.setWinnerBoardLive(database, true);
-		const first = await repository.getPublishedWinnerBoard(database);
+		const first = await requirePublishedWinnerBoard(database);
 		expect(first).toMatchObject({
 			winner: { imagePath: expect.stringContaining(`/publications/${first.id}/`) },
 			champions: expect.arrayContaining([
@@ -421,9 +434,9 @@ describe('winner board singleton repository', () => {
 			])
 		});
 		const firstUrls = [
-			first.winner.imagePath,
-			first.champions[0].iconPath,
-			first.augments[0].iconPath
+			requirePublicationUrl(first.winner.imagePath),
+			requirePublicationUrl(first.champions[0]?.iconPath),
+			requirePublicationUrl(first.augments[0]?.iconPath)
 		];
 		const mediaApi = await import('./publication-media.js');
 		for (const url of firstUrls) {
@@ -460,7 +473,7 @@ describe('winner board singleton repository', () => {
 		}
 
 		await repository.saveWinnerBoardState(database, { ...validInput(), title: 'Next champion' });
-		const second = await repository.getPublishedWinnerBoard(database);
+		const second = await requirePublishedWinnerBoard(database);
 		expect(second.id).not.toBe(first.id);
 		expect(second).toMatchObject({
 			title: 'Next champion',
@@ -482,9 +495,9 @@ describe('winner board singleton repository', () => {
 			])
 		});
 		const secondUrls = [
-			second.winner.imagePath,
-			second.champions[0].iconPath,
-			second.augments[0].iconPath
+			requirePublicationUrl(second.winner.imagePath),
+			requirePublicationUrl(second.champions[0]?.iconPath),
+			requirePublicationUrl(second.augments[0]?.iconPath)
 		];
 		expect(secondUrls).not.toEqual(firstUrls);
 		for (const url of secondUrls) {
@@ -524,7 +537,7 @@ describe('winner board singleton repository', () => {
 	it('rejects stored JSON whose payload ID does not match the referenced publication row', async () => {
 		await repository.saveWinnerBoardState(database, validInput());
 		await repository.setWinnerBoardLive(database, true);
-		const publication = await repository.getPublishedWinnerBoard(database);
+		const publication = await requirePublishedWinnerBoard(database);
 		const stored = JSON.parse(
 			/** @type {string} */ (
 				(
