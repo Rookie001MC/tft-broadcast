@@ -369,6 +369,32 @@ describe('winner board singleton repository', () => {
 		expect(state.augments).toHaveLength(3);
 	});
 
+	it('persists and publishes duplicate champion instances with independent stars', async () => {
+		const input = {
+			...validInput(),
+			champions: [
+				{ catalogChampionId: 'champion-2', starLevel: 1 },
+				{ catalogChampionId: 'champion-2', starLevel: 3 },
+				{ catalogChampionId: 'champion-1', starLevel: null }
+			]
+		};
+
+		const saved = await repository.saveWinnerBoardState(database, input);
+		expect(saved.champions).toEqual([
+			expect.objectContaining({ id: 'champion-2', starLevel: 1, displayOrder: 0 }),
+			expect.objectContaining({ id: 'champion-2', starLevel: 3, displayOrder: 1 }),
+			expect.objectContaining({ id: 'champion-1', starLevel: null, displayOrder: 2 })
+		]);
+
+		await repository.setWinnerBoardLive(database, true);
+		const published = await requirePublishedWinnerBoard(database);
+		expect(published.champions).toEqual([
+			expect.objectContaining({ id: 'champion-2', starLevel: 1, displayOrder: 0 }),
+			expect.objectContaining({ id: 'champion-2', starLevel: 3, displayOrder: 1 }),
+			expect.objectContaining({ id: 'champion-1', starLevel: null, displayOrder: 2 })
+		]);
+	});
+
 	it('rejects duplicate augment IDs with the stable repository error', async () => {
 		await expect(
 			repository.saveWinnerBoardState(database, {
