@@ -595,8 +595,11 @@ describe('admin action results', () => {
 		form.set('winnerPlayerId', 'player-1');
 		form.set('title', 'TFT Champion');
 		form.append('championIds', 'champion-2');
+		form.append('championStarLevels', '1');
+		form.append('championIds', 'champion-2');
+		form.append('championStarLevels', '3');
 		form.append('championIds', 'champion-1');
-		form.set('starLevel:champion-2', '3');
+		form.append('championStarLevels', '');
 		form.append('augmentIds', 'augment-2');
 		const request = new Request('https://broadcast.example/admin/graphics', {
 			method: 'POST',
@@ -618,6 +621,7 @@ describe('admin action results', () => {
 				winnerPlayerId: 'player-1',
 				title: 'TFT Champion',
 				champions: [
+					{ catalogChampionId: 'champion-2', starLevel: 1 },
 					{ catalogChampionId: 'champion-2', starLevel: 3 },
 					{ catalogChampionId: 'champion-1', starLevel: null }
 				],
@@ -629,6 +633,39 @@ describe('admin action results', () => {
 			action: 'saveBoard',
 			board: { id: 'current', title: 'TFT Champion' }
 		});
+	});
+
+	test.each([
+		['missing star value', ['champion-1'], []],
+		['extra star value', ['champion-1'], ['1', '2']],
+		['zero stars', ['champion-1'], ['0']],
+		['four stars', ['champion-1'], ['4']],
+		['non-integer stars', ['champion-1'], ['two']]
+	])('rejects %s in ordered champion instance fields', async (_label, championIds, starLevels) => {
+		const form = new FormData();
+		form.set('tournamentId', 'tournament-1');
+		form.set('winnerPlayerId', 'player-1');
+		form.set('title', 'TFT Champion');
+		for (const championId of championIds) form.append('championIds', championId);
+		for (const starLevel of starLevels) form.append('championStarLevels', starLevel);
+		const request = new Request('https://broadcast.example/admin/graphics', {
+			method: 'POST',
+			body: form
+		});
+
+		const result = await graphicActions.saveBoard(
+			asEvent({
+				locals: { user: { id: 'operator-1' } },
+				request,
+				url: new URL(request.url)
+			})
+		);
+
+		expect(result).toMatchObject({
+			status: 422,
+			data: { action: 'saveBoard', message: 'Winner board details are invalid.' }
+		});
+		expect(mocks.saveWinnerBoardState).not.toHaveBeenCalled();
 	});
 
 	test.each([
