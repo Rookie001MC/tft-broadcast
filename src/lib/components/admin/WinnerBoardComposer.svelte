@@ -13,7 +13,7 @@
 	/** @import { WinnerBoardView } from '$lib/winner-board.js' */
 	/** @typedef {{ id: string, displayName: string, fullName: string, riotId: string | null, imagePath: string | null }} Player */
 	/** @typedef {{ id: string, displayName: string, iconPath: string | null }} CatalogAsset */
-	/** @typedef {{ instanceId: string, catalogChampionId: string, starLevel: '' | number }} ChampionInstance */
+	/** @typedef {{ instanceId: string, catalogChampionId: string, starLevel: string }} ChampionInstance */
 
 	/** @type {{ tournament: { id: string } | null, roster: Player[], activeCatalog: { snapshot: any, champions: CatalogAsset[], augments: CatalogAsset[] }, savedBoard: import('$lib/winner-board.js').WinnerBoardStateView | null, livePublicationId?: string | null, form?: any }} */
 	let {
@@ -33,7 +33,7 @@
 		return {
 			instanceId: `unit-${nextChampionInstanceId}`,
 			catalogChampionId,
-			starLevel: starLevel ?? ''
+			starLevel: starLevel == null ? '' : String(starLevel)
 		};
 	}
 

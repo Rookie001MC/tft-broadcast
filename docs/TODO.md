@@ -14,15 +14,16 @@ The production MVP remains manual-safe, but TFT-MATCH-V1 is now the immediate pr
 - [x] Standalone Node build and trusted LAN/VLAN deployment runbook.
 
 ## MUST FIX - Winner Composer
+
 As of right now, this implementation does not allow any duplicates in the player's board. However, in normal TFT, any player can have a multiple of the same champions
 on the playing field, either for strategy, or simply because they don't have enough champions, and the game auto fills the first 2 units in the queue.
 
 These blockers must be fixed BEFORE any of the TFT-Match-V1 APIs are implemented:
 
-- [ ] Allow the board to have multiple instance of the same champion in the API.
-- [ ] Redesign the UI to have 2 different sections of the champion/augment select: one for the list of available units, and one for Selected Units. 
-- [ ] For instances where there would be helper champions, or minion units/units that belong to a champion, do not disallow the user to select them.
-    - Maintaining a whitelist will take too long, and is inconsistent, the API does not return what champions are what type, and only the operator, who plays the game more, can determine if it's a valid unit.
+- [x] Allow the board to have multiple instance of the same champion in the API.
+- [x] Redesign the UI to have 2 different sections of the champion/augment select: one for the list of available units, and one for Selected Units.
+- [x] For instances where there would be helper champions, or minion units/units that belong to a champion, do not disallow the user to select them.
+  - Maintaining a whitelist will take too long, and is inconsistent, the API does not return what champions are what type, and only the operator, who plays the game more, can determine if it's a valid unit.
 
 ## Immediate Priority — TFT-MATCH-V1
 

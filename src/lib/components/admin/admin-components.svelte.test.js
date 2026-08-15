@@ -436,6 +436,7 @@ describe('winner graphic components', () => {
 		await expect
 			.element(page.getByRole('region', { name: 'Selected units' }))
 			.toHaveTextContent('Irelia');
+		await expect.element(page.getByLabelText('Irelia unit 1 star level')).toHaveValue('3');
 		await expect.element(page.getByRole('button', { name: 'Add Irelia' })).toBeEnabled();
 		await page.getByRole('button', { name: 'Add Viego' }).click();
 		await expect.element(page.getByRole('button', { name: 'Remove Viego unit 2' })).toBeVisible();
