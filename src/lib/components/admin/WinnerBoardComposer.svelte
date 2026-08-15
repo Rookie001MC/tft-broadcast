@@ -13,6 +13,7 @@
 	/** @import { WinnerBoardView } from '$lib/winner-board.js' */
 	/** @typedef {{ id: string, displayName: string, fullName: string, riotId: string | null, imagePath: string | null }} Player */
 	/** @typedef {{ id: string, displayName: string, iconPath: string | null }} CatalogAsset */
+	/** @typedef {{ instanceId: string, catalogChampionId: string, starLevel: '' | number }} ChampionInstance */
 
 	/** @type {{ tournament: { id: string } | null, roster: Player[], activeCatalog: { snapshot: any, champions: CatalogAsset[], augments: CatalogAsset[] }, savedBoard: import('$lib/winner-board.js').WinnerBoardStateView | null, livePublicationId?: string | null, form?: any }} */
 	let {
@@ -24,17 +25,29 @@
 		form = null
 	} = $props();
 
+	let nextChampionInstanceId = 0;
+
+	/** @param {string} catalogChampionId @param {number | '' | null} [starLevel] */
+	function createChampionInstance(catalogChampionId, starLevel = '') {
+		nextChampionInstanceId += 1;
+		return {
+			instanceId: `unit-${nextChampionInstanceId}`,
+			catalogChampionId,
+			starLevel: starLevel ?? ''
+		};
+	}
+
 	/** @param {import('$lib/winner-board.js').WinnerBoardStateView | null} board */
 	function formState(board) {
 		return {
 			title: board?.title ?? 'Match winner',
 			winnerPlayerId: board?.winner.id ?? roster[0]?.id ?? '',
-			championIds: board?.champions.map((champion) => champion.id) ?? [],
-			augmentIds: board?.augments.map((augment) => augment.id) ?? [],
-			/** @type {Record<string, string | number>} */
-			starLevels: Object.fromEntries(
-				(board?.champions ?? []).map((champion) => [champion.id, champion.starLevel ?? ''])
-			)
+			/** @type {ChampionInstance[]} */
+			champions:
+				board?.champions.map((champion) =>
+					createChampionInstance(champion.id, champion.starLevel)
+				) ?? [],
+			augmentIds: board?.augments.map((augment) => augment.id) ?? []
 		};
 	}
 
@@ -43,11 +56,11 @@
 		return {
 			title: value.title.trim(),
 			winnerPlayerId: value.winnerPlayerId,
-			championIds: [...value.championIds],
-			augmentIds: [...value.augmentIds],
-			starLevels: Object.fromEntries(
-				value.championIds.map((id) => [id, String(value.starLevels[id] ?? '')])
-			)
+			champions: value.champions.map((unit) => ({
+				catalogChampionId: unit.catalogChampionId,
+				starLevel: String(unit.starLevel ?? '')
+			})),
+			augmentIds: [...value.augmentIds]
 		};
 	}
 
@@ -61,8 +74,9 @@
 		return `?tournament=${encodeURIComponent(tournament?.id ?? '')}&/${name}`;
 	}
 
-	let composer = $state(untrack(() => formState(savedBoard)));
-	let savedForm = $state.raw(untrack(() => normalizedForm(formState(savedBoard))));
+	const initialForm = untrack(() => formState(savedBoard));
+	let composer = $state(initialForm);
+	let savedForm = $state.raw(untrack(() => normalizedForm(initialForm)));
 	let lastBaselineKey = untrack(() => boardKey(savedBoard));
 	/** @type {string | null} */
 	let submittingAction = $state(null);
@@ -101,20 +115,11 @@
 	const augmentCandidates = $derived(
 		/** @type {CatalogAsset[]} */ (searchCatalogResources(activeCatalog.augments, augmentQuery))
 	);
-	const selectedChampionIds = $derived(new Set(composer.championIds));
 	const selectedAugmentIds = $derived(new Set(composer.augmentIds));
-	const displayedChampionCandidates = $derived.by(() => [
-		...championCandidates.filter((champion) => selectedChampionIds.has(champion.id)),
-		...championCandidates.filter((champion) => !selectedChampionIds.has(champion.id))
-	]);
-	const displayedAugmentCandidates = $derived.by(() => [
-		...augmentCandidates.filter((augment) => selectedAugmentIds.has(augment.id)),
-		...augmentCandidates.filter((augment) => !selectedAugmentIds.has(augment.id))
-	]);
 	const selectedChampions = $derived.by(() =>
-		composer.championIds.flatMap((id) => {
-			const champion = activeCatalog.champions.find((item) => item.id === id);
-			return champion ? [champion] : [];
+		composer.champions.flatMap((unit) => {
+			const champion = activeCatalog.champions.find((item) => item.id === unit.catalogChampionId);
+			return champion ? [{ unit, champion }] : [];
 		})
 	);
 	const selectedAugments = $derived.by(() =>
@@ -129,29 +134,29 @@
 			!activeCatalog.snapshot ||
 			!composer.title.trim() ||
 			!roster.some((player) => player.id === composer.winnerPlayerId) ||
-			composer.championIds.length === 0
+			composer.champions.length === 0
 	);
 	const isLive = $derived(Boolean(livePublicationId));
 
 	/** @type {WinnerBoardView | null} */
 	const previewBoard = $derived.by(() => {
 		const winner = roster.find((player) => player.id === composer.winnerPlayerId);
-		if (!winner || !composer.title.trim() || composer.championIds.length === 0) return null;
-		const champions = composer.championIds.flatMap((id, displayOrder) => {
-			const champion = activeCatalog.champions.find((item) => item.id === id);
+		if (!winner || !composer.title.trim() || composer.champions.length === 0) return null;
+		const champions = composer.champions.flatMap((unit, displayOrder) => {
+			const champion = activeCatalog.champions.find((item) => item.id === unit.catalogChampionId);
 			return champion
 				? [
 						{
 							id: champion.id,
 							displayName: champion.displayName,
 							iconPath: champion.iconPath,
-							starLevel: Number(composer.starLevels[id]) || null,
+							starLevel: Number(unit.starLevel) || null,
 							displayOrder
 						}
 					]
 				: [];
 		});
-		if (champions.length !== composer.championIds.length) return null;
+		if (champions.length !== composer.champions.length) return null;
 		const augments = composer.augmentIds.flatMap((id, displayOrder) => {
 			const augment = activeCatalog.augments.find((item) => item.id === id);
 			return augment
@@ -198,23 +203,25 @@
 		};
 	}
 
-	/** @param {string} id @param {boolean} checked */
-	function toggleChampion(id, checked) {
-		composer.championIds = checked
-			? [...composer.championIds, id]
-			: composer.championIds.filter((value) => value !== id);
-		if (!checked) {
-			composer.starLevels = Object.fromEntries(
-				Object.entries(composer.starLevels).filter(([championId]) => championId !== id)
-			);
-		}
+	/** @param {string} catalogChampionId */
+	function addChampion(catalogChampionId) {
+		composer.champions = [...composer.champions, createChampionInstance(catalogChampionId)];
 	}
 
-	/** @param {string} id @param {boolean} checked */
-	function toggleAugment(id, checked) {
-		composer.augmentIds = checked
-			? [...composer.augmentIds, id]
-			: composer.augmentIds.filter((value) => value !== id);
+	/** @param {string} instanceId */
+	function removeChampion(instanceId) {
+		composer.champions = composer.champions.filter((unit) => unit.instanceId !== instanceId);
+	}
+
+	/** @param {string} id */
+	function addAugment(id) {
+		if (selectedAugmentIds.has(id) || augmentLimitReached) return;
+		composer.augmentIds = [...composer.augmentIds, id];
+	}
+
+	/** @param {string} id */
+	function removeAugment(id) {
+		composer.augmentIds = composer.augmentIds.filter((value) => value !== id);
 	}
 
 	/** @param {{ value: string }} details */
@@ -225,7 +232,7 @@
 
 	/** @param {string} id */
 	function disabledAugment(id) {
-		return augmentLimitReached && !selectedAugmentIds.has(id);
+		return selectedAugmentIds.has(id) || augmentLimitReached;
 	}
 
 	/** @param {MouseEvent & { currentTarget: HTMLButtonElement }} event */
@@ -338,13 +345,9 @@
 
 			<fieldset class="fieldset space-y-3" disabled={!activeCatalog.snapshot}>
 				<legend class="legend">Graphic resource candidates</legend>
-				{#each composer.championIds as championId (championId)}
-					<input type="hidden" name="championIds" value={championId} />
-					<input
-						type="hidden"
-						name={`starLevel:${championId}`}
-						value={composer.starLevels[championId] ?? ''}
-					/>
+				{#each composer.champions as unit (unit.instanceId)}
+					<input type="hidden" name="championIds" value={unit.catalogChampionId} />
+					<input type="hidden" name="championStarLevels" value={unit.starLevel} />
 				{/each}
 				{#each composer.augmentIds as augmentId (augmentId)}
 					<input type="hidden" name="augmentIds" value={augmentId} />
@@ -358,10 +361,9 @@
 						<Tabs.Trigger
 							value="champions"
 							class="btn rounded-b-none px-4 py-2"
-							aria-label={`Champions (${composer.championIds.length})`}
+							aria-label={`Champions (${composer.champions.length})`}
 						>
-							Champions <span class="badge preset-tonal-surface">{composer.championIds.length}</span
-							>
+							Champions <span class="badge preset-tonal-surface">{composer.champions.length}</span>
 						</Tabs.Trigger>
 						<Tabs.Trigger
 							value="augments"
@@ -391,47 +393,65 @@
 										placeholder="Champion name or external ID"
 									/>
 								</div>
-								<div class="grid max-h-80 grid-cols-1 gap-2 overflow-auto pr-1 sm:grid-cols-2">
-									{#each displayedChampionCandidates as champion (champion.id)}
-										{@const selected = selectedChampionIds.has(champion.id)}
-										<div
-											class:selected-card={selected}
-											class="grid grid-cols-[auto_1fr_82px] items-center gap-2 rounded-base border border-surface-200-800 p-2"
-										>
-											<input
-												class="checkbox"
-												type="checkbox"
-												checked={selected}
-												onchange={(event) =>
-													toggleChampion(champion.id, event.currentTarget.checked)}
-												aria-label={`Select ${champion.displayName}`}
-											/>
-											<span class="truncate text-sm font-medium" title={champion.displayName}
-												>{champion.displayName}</span
+								<section aria-labelledby="available-champions-heading" class="space-y-2">
+									<h3 id="available-champions-heading" class="font-bold">Available champions</h3>
+									<div class="grid max-h-80 grid-cols-1 gap-2 overflow-auto pr-1 sm:grid-cols-2">
+										{#each championCandidates as champion (champion.id)}
+											<div
+												class="grid grid-cols-[1fr_auto] items-center gap-2 rounded-base border border-surface-200-800 p-2"
 											>
-											<select
-												class="select-sm select"
-												onchange={(event) =>
-													(composer.starLevels[champion.id] = event.currentTarget.value)}
-												disabled={!selected}
-												aria-label={`${champion.displayName} star level`}
+												<span class="truncate text-sm font-medium" title={champion.displayName}
+													>{champion.displayName}</span
+												>
+												<button
+													class="btn preset-tonal-primary btn-sm"
+													type="button"
+													onclick={() => addChampion(champion.id)}
+													aria-label={`Add ${champion.displayName}`}
+												>
+													Add
+												</button>
+											</div>
+										{:else}<p class="text-sm text-surface-500">
+												No champions match this search.
+											</p>{/each}
+									</div>
+								</section>
+
+								<section aria-labelledby="selected-units-heading" class="space-y-2">
+									<h3 id="selected-units-heading" class="font-bold">Selected units</h3>
+									<div class="grid gap-2">
+										{#each selectedChampions as selection, displayOrder (selection.unit.instanceId)}
+											<div
+												class="grid grid-cols-[1fr_92px_auto] items-center gap-2 rounded-base border border-primary-500 bg-primary-500/10 p-2"
 											>
-											<option value="" selected={composer.starLevels[champion.id] === ''}>Stars</option>
-											<option value="1" selected={composer.starLevels[champion.id] === '1' || composer.starLevels[champion.id] === 1}>
-													1 ★
-												</option>
-											<option value="2" selected={composer.starLevels[champion.id] === '2' || composer.starLevels[champion.id] === 2}>
-													2 ★
-												</option>
-											<option value="3" selected={composer.starLevels[champion.id] === '3' || composer.starLevels[champion.id] === 3}>
-													3 ★
-												</option>
-											</select>
-										</div>
-									{:else}<p class="text-sm text-surface-500">
-											No champions match this search.
-										</p>{/each}
-								</div>
+												<span
+													class="truncate text-sm font-medium"
+													title={selection.champion.displayName}
+													>{selection.champion.displayName}</span
+												>
+												<select
+													class="select-sm select"
+													bind:value={selection.unit.starLevel}
+													aria-label={`${selection.champion.displayName} unit ${displayOrder + 1} star level`}
+												>
+													<option value="">Stars</option>
+													<option value="1">1 ★</option>
+													<option value="2">2 ★</option>
+													<option value="3">3 ★</option>
+												</select>
+												<button
+													class="btn preset-tonal-error btn-sm"
+													type="button"
+													onclick={() => removeChampion(selection.unit.instanceId)}
+													aria-label={`Remove ${selection.champion.displayName} unit ${displayOrder + 1}`}
+												>
+													Remove
+												</button>
+											</div>
+										{:else}<p class="text-sm text-surface-500">None selected.</p>{/each}
+									</div>
+								</section>
 							</div>
 						{/if}
 					</Tabs.Content>
@@ -458,56 +478,60 @@
 									A maximum of three augments can be selected. Remove a selected augment to choose
 									another.
 								</p>
-								<div class="grid max-h-52 grid-cols-1 gap-1 overflow-auto pr-1 sm:grid-cols-2">
-									{#each displayedAugmentCandidates as augment (augment.id)}
-										{@const selected = selectedAugmentIds.has(augment.id)}
-										{@const disabled = disabledAugment(augment.id)}
-										<label
-											class="flex items-center gap-2 rounded-base p-2 hover:preset-tonal-primary"
-											class:cursor-not-allowed={disabled}
-											class:cursor-pointer={!disabled}
-										>
-											<input
-												class="checkbox"
-												type="checkbox"
-												checked={selected}
-												{disabled}
-												onchange={(event) => toggleAugment(augment.id, event.currentTarget.checked)}
-												aria-describedby={disabled ? 'augment-choice-limit' : undefined}
-												aria-label={`Select ${augment.displayName}`}
-											/>
-											<span class="truncate text-sm" title={augment.displayName}
-												>{augment.displayName}</span
+								<section aria-labelledby="available-augments-heading" class="space-y-2">
+									<h3 id="available-augments-heading" class="font-bold">Available augments</h3>
+									<div class="grid max-h-52 grid-cols-1 gap-1 overflow-auto pr-1 sm:grid-cols-2">
+										{#each augmentCandidates as augment (augment.id)}
+											{@const disabled = disabledAugment(augment.id)}
+											<div
+												class="grid grid-cols-[1fr_auto] items-center gap-2 rounded-base p-2 hover:preset-tonal-primary"
 											>
-										</label>
-									{:else}<p class="text-sm text-surface-500">
-											No augments match this search.
-										</p>{/each}
-								</div>
+												<span class="truncate text-sm" title={augment.displayName}
+													>{augment.displayName}</span
+												>
+												<button
+													class="btn preset-tonal-primary btn-sm"
+													type="button"
+													{disabled}
+													onclick={() => addAugment(augment.id)}
+													aria-describedby={disabled ? 'augment-choice-limit' : undefined}
+													aria-label={`Add ${augment.displayName}`}
+												>
+													Add
+												</button>
+											</div>
+										{:else}<p class="text-sm text-surface-500">
+												No augments match this search.
+											</p>{/each}
+									</div>
+								</section>
+
+								<section aria-labelledby="selected-augments-heading" class="space-y-2">
+									<h3 id="selected-augments-heading" class="font-bold">Selected augments</h3>
+									<div class="grid gap-2 sm:grid-cols-2">
+										{#each selectedAugments as augment (augment.id)}
+											<div
+												class="grid grid-cols-[1fr_auto] items-center gap-2 rounded-base border border-primary-500 bg-primary-500/10 p-2"
+											>
+												<span class="truncate text-sm font-medium" title={augment.displayName}
+													>{augment.displayName}</span
+												>
+												<button
+													class="btn preset-tonal-error btn-sm"
+													type="button"
+													onclick={() => removeAugment(augment.id)}
+													aria-label={`Remove ${augment.displayName}`}
+												>
+													Remove
+												</button>
+											</div>
+										{:else}<p class="text-sm text-surface-500">None selected.</p>{/each}
+									</div>
+								</section>
 							</div>
 						{/if}
 					</Tabs.Content>
 				</Tabs>
-
-				<div class="grid gap-3 rounded-container bg-surface-100-900 p-3 sm:grid-cols-2">
-					<div aria-label="Selected champions">
-						<strong class="text-sm">Selected champions</strong>
-						<p class="mt-1 text-sm text-surface-600-400">
-							{selectedChampions
-								.map(
-									(champion) =>
-										`${champion.displayName} (${composer.starLevels[champion.id] ?? '???'})`
-								)
-								.join(', ') || 'None'}
-						</p>
-					</div>
-					<div aria-label="Selected augments">
-						<strong class="text-sm">Selected augments</strong>
-						<p class="mt-1 text-sm text-surface-600-400">
-							{selectedAugments.map((augment) => augment.displayName).join(', ') || 'None'}
-						</p>
-					</div>
-				</div>
 			</fieldset>
 
 			<button
@@ -528,7 +552,7 @@
 			<div
 				class="preview-viewport flex items-center justify-center overflow-auto rounded-container border border-surface-200-800 bg-surface-950"
 			>
-				<WinnerBoardGraphic board={previewBoard} scale={.55} />
+				<WinnerBoardGraphic board={previewBoard} scale={0.55} />
 			</div>
 			{#if !previewBoard}<p class="mt-2 text-sm text-surface-500">
 					Choose a winner and at least one champion to render the preview.
@@ -553,10 +577,3 @@
 	invokingControl={resetInvoker}
 	onclose={() => (resetOpen = false)}
 />
-
-<style>
-	.selected-card {
-		border-color: var(--color-primary-500);
-		background: color-mix(in oklab, var(--color-primary-500) 12%, transparent);
-	}
-</style>

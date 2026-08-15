@@ -64,7 +64,7 @@
 						<span>{board.champions.length} units</span>
 					</div>
 					<div class="champion-list">
-						{#each board.champions as champion (champion.id)}
+						{#each board.champions as champion (champion.displayOrder)}
 							<article class="champion-card">
 								<div class="champion-art">
 									{#if catalogImage(champion.iconPath)}
