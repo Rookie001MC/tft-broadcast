@@ -28,6 +28,9 @@ const mocks = vi.hoisted(() => ({
 	saveWinnerBoardState: vi.fn(),
 	setWinnerBoardLive: vi.fn(),
 	resetWinnerBoardState: vi.fn(),
+	getTftMatchSettings: vi.fn(),
+	getTftPlatformRegionOptions: vi.fn(),
+	saveTftMatchRegion: vi.fn(),
 	signOut: vi.fn(),
 	mkdir: vi.fn(),
 	writeFile: vi.fn(),
@@ -87,13 +90,20 @@ vi.mock('$lib/server/winner-boards/repository.js', () => ({
 	saveWinnerBoardState: mocks.saveWinnerBoardState,
 	setWinnerBoardLive: mocks.setWinnerBoardLive
 }));
+vi.mock('$lib/server/tft-matches/regions.js', () => ({
+	getTftPlatformRegionOptions: mocks.getTftPlatformRegionOptions
+}));
+vi.mock('$lib/server/tft-matches/settings-repository.js', () => ({
+	getTftMatchSettings: mocks.getTftMatchSettings,
+	saveTftMatchRegion: mocks.saveTftMatchRegion
+}));
 
 import { load } from './+page.server.js';
 import { actions as playerActions } from './players/+page.server.js';
 import { actions as tournamentActions } from './tournaments/+page.server.js';
 import { actions as catalogActions } from './game-resources/+page.server.js';
 import { actions as graphicActions } from './graphics/+page.server.js';
-import { actions as settingsActions } from './settings/+page.server.js';
+import { actions as settingsActions, load as settingsLoad } from './settings/+page.server.js';
 
 const VALID_PNG = Uint8Array.from([
 	137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0,
@@ -147,7 +157,7 @@ const actionRoutes = [
 		graphicActions,
 		['saveBoard', 'setLive', 'resetBoard', 'resetAndSelectTournament']
 	],
-	['/admin/settings', settingsActions, ['logout']]
+	['/admin/settings', settingsActions, ['logout', 'saveTftRegion']]
 ];
 
 /** @param {string} url */
@@ -215,6 +225,76 @@ describe('admin action results', () => {
 
 		expect(result.importPreview).toEqual(committedPreview);
 		expect(mocks.reconcileCatalogCorrectionImages).toHaveBeenCalledWith({}, 'media');
+	});
+
+	test('loads persisted TFT settings and safe server-derived region options', async () => {
+		mocks.getTftMatchSettings.mockResolvedValue({ region: 'VN2' });
+		mocks.getTftPlatformRegionOptions.mockReturnValue([{ value: 'VN2', label: 'Vietnam (VN2)' }]);
+
+		const result = await settingsLoad(
+			asEvent({
+				locals: { user: { id: 'operator-1', name: 'Operator' } },
+				url: new URL('https://broadcast.example/admin/settings')
+			})
+		);
+
+		expect(result).toEqual({
+			user: { id: 'operator-1', name: 'Operator' },
+			tftMatchSettings: { region: 'VN2' },
+			tftPlatformRegionOptions: [{ value: 'VN2', label: 'Vietnam (VN2)' }]
+		});
+		expect(result).not.toHaveProperty('env');
+		expect(result).not.toHaveProperty('apiKey');
+	});
+
+	test('saves a validated TFT region with action-scoped data', async () => {
+		mocks.saveTftMatchRegion.mockResolvedValue({ region: 'VN2' });
+		const form = new FormData();
+		form.set('region', 'VN2');
+		const request = new Request('https://broadcast.example/admin/settings', {
+			method: 'POST',
+			body: form
+		});
+
+		const result = await settingsActions.saveTftRegion(
+			asEvent({
+				locals: { user: { id: 'operator-1' } },
+				request,
+				url: new URL(request.url)
+			})
+		);
+
+		expect(mocks.saveTftMatchRegion).toHaveBeenCalledWith({}, 'VN2');
+		expect(result).toEqual({
+			action: 'saveTftRegion',
+			tftMatchSettings: { region: 'VN2' }
+		});
+	});
+
+	test('returns a safe 422 result when a TFT region is invalid', async () => {
+		mocks.saveTftMatchRegion.mockRejectedValue(new Error('internal region detail'));
+		const form = new FormData();
+		form.set('region', 'vn2');
+		const request = new Request('https://broadcast.example/admin/settings', {
+			method: 'POST',
+			body: form
+		});
+
+		const result = await settingsActions.saveTftRegion(
+			asEvent({
+				locals: { user: { id: 'operator-1' } },
+				request,
+				url: new URL(request.url)
+			})
+		);
+
+		expect(result).toMatchObject({
+			status: 422,
+			data: {
+				action: 'saveTftRegion',
+				message: 'Choose a supported TFT platform region.'
+			}
+		});
 	});
 
 	test('maps a player uniqueness conflict to a safe 409 response', async () => {
