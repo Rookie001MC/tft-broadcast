@@ -27,10 +27,10 @@ These blockers must be fixed BEFORE any of the TFT-Match-V1 APIs are implemented
 
 ## Immediate Priority — TFT-MATCH-V1
 
-- [ ] Design and implement the secure TFT-MATCH-V1 discovery, fetch, normalization, validation, and persisted-snapshot pipeline.
-- [ ] Integrate validated match snapshots into Winner while retaining an explicit **Set up manually** path and the existing manual composer.
-- [ ] Define the immutable eight-player snapshot contract consumed later by the read-only Post-Match scene.
-- [ ] Ensure fetch, mapping, validation, and freshness failures preserve the last valid snapshot and every currently published graphic.
+- [x] Design and implement the secure TFT-MATCH-V1 discovery, fetch, normalization, validation, and persisted-snapshot pipeline.
+- [x] Integrate validated match snapshots into Winner while retaining an explicit **Set up manually** path and the existing manual composer.
+- [x] Define the immutable eight-player snapshot contract consumed later by the read-only Post-Match scene.
+- [x] Ensure fetch, mapping, validation, and freshness failures preserve the last valid snapshot and every currently published graphic.
 
 ## After TFT-MATCH-V1 — Broadcast Graphics Scenes
 
@@ -42,7 +42,7 @@ Detailed design: `docs/superpowers/specs/2026-08-11-broadcast-graphics-scenes-de
 - [ ] Build Global controls for tournament selection, Match Name, and Game Name with draft/save behavior and guarded tournament switching.
 - [ ] Move the existing Winner workflow to its dedicated route without changing its preview/save/publish/hide safety model or its API/manual fallback.
 - [ ] Build the HUD control and transparent 1920×1080 GFX overlay showing tournament, match, and game names with preview/save/publish/hide controls.
-- [ ] Build a read-only Post-Match control and GFX scene for all eight players' placements, augments, and champions from validated match snapshots; do not permit operator edits to API match data.
+- [ ] Build a read-only Post-Match control and GFX scene for all eight players' placements and champions from this validated snapshot; do not permit operator edits to API match data. Any future augment source requires a separate design because current match responses omit augments.
 - [ ] Separate OBS outputs into `/gfx/hud`, `/gfx/winner`, and `/gfx/post-match`, with independent immutable publications and ETag/version polling channels.
 - [ ] Keep `/gfx` and `/gfx/version` as backward-compatible aliases for Winner.
 - [ ] Verify that an API or scene failure never clears another scene or replaces its last successful live publication.
