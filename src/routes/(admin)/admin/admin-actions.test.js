@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
+import { TftMatchConfigurationError } from '$lib/server/tft-matches/config.js';
+import { TftMatchPreviewConflictError } from '$lib/server/tft-matches/service.js';
 
 const mocks = vi.hoisted(() => ({
 	loadTournamentAdminData: vi.fn(),
@@ -26,9 +28,14 @@ const mocks = vi.hoisted(() => ({
 	publishWinnerBoard: vi.fn(),
 	hidePublishedBoard: vi.fn(),
 	saveWinnerBoardState: vi.fn(),
+	getWinnerBoardState: vi.fn(),
 	setWinnerBoardLive: vi.fn(),
 	resetWinnerBoardState: vi.fn(),
 	getTftMatchSettings: vi.fn(),
+	getTftMatchApiAvailability: vi.fn(),
+	requireTftMatchApiConfig: vi.fn(),
+	resolveTftMatchPreviewForSave: vi.fn(),
+	deleteTftMatchPreviewBatch: vi.fn(),
 	getTftPlatformRegionOptions: vi.fn(),
 	saveTftMatchRegion: vi.fn(),
 	signOut: vi.fn(),
@@ -86,9 +93,22 @@ vi.mock('$lib/server/winner-boards/repository.js', () => ({
 	hidePublishedBoard: mocks.hidePublishedBoard,
 	publishWinnerBoard: mocks.publishWinnerBoard,
 	saveDraftWinnerBoard: mocks.saveDraftWinnerBoard,
+	getWinnerBoardState: mocks.getWinnerBoardState,
 	resetWinnerBoardState: mocks.resetWinnerBoardState,
 	saveWinnerBoardState: mocks.saveWinnerBoardState,
 	setWinnerBoardLive: mocks.setWinnerBoardLive
+}));
+vi.mock('$lib/server/tft-matches/config.js', async (importOriginal) => ({
+	...(await importOriginal()),
+	getTftMatchApiAvailability: mocks.getTftMatchApiAvailability,
+	requireTftMatchApiConfig: mocks.requireTftMatchApiConfig
+}));
+vi.mock('$lib/server/tft-matches/service.js', () => ({
+	TftMatchPreviewConflictError: class TftMatchPreviewConflictError extends Error {},
+	resolveTftMatchPreviewForSave: mocks.resolveTftMatchPreviewForSave
+}));
+vi.mock('$lib/server/tft-matches/preview-cache.js', () => ({
+	deleteTftMatchPreviewBatch: mocks.deleteTftMatchPreviewBatch
 }));
 vi.mock('$lib/server/tft-matches/regions.js', () => ({
 	getTftPlatformRegionOptions: mocks.getTftPlatformRegionOptions
@@ -102,7 +122,7 @@ import { load } from './+page.server.js';
 import { actions as playerActions } from './players/+page.server.js';
 import { actions as tournamentActions } from './tournaments/+page.server.js';
 import { actions as catalogActions } from './game-resources/+page.server.js';
-import { actions as graphicActions } from './graphics/+page.server.js';
+import { actions as graphicActions, load as graphicsLoad } from './graphics/+page.server.js';
 import { actions as settingsActions, load as settingsLoad } from './settings/+page.server.js';
 
 const VALID_PNG = Uint8Array.from([
@@ -713,6 +733,163 @@ describe('admin action results', () => {
 			action: 'saveBoard',
 			board: { id: 'current', title: 'TFT Champion' }
 		});
+		expect(mocks.getTftMatchSettings).not.toHaveBeenCalled();
+		expect(mocks.resolveTftMatchPreviewForSave).not.toHaveBeenCalled();
+		expect(mocks.deleteTftMatchPreviewBatch).not.toHaveBeenCalled();
+	});
+
+	test.each([
+		['token only', 'preview-token', ''],
+		['match only', '', 'VN2_match-1']
+	])('rejects an incomplete TFT preview binding with %s', async (_label, token, matchId) => {
+		const form = new FormData();
+		form.set('tournamentId', 'tournament-1');
+		form.set('tftPreviewToken', token);
+		form.set('tftMatchId', matchId);
+		const request = new Request('https://broadcast.example/admin/graphics', {
+			method: 'POST',
+			body: form
+		});
+
+		const result = await graphicActions.saveBoard(
+			asEvent({ locals: { user: { id: 'operator-1' } }, request, url: new URL(request.url) })
+		);
+
+		expect(result).toMatchObject({
+			status: 409,
+			data: {
+				action: 'saveBoard',
+				message: 'This TFT match preview expired. Fetch the match again.'
+			}
+		});
+		expect(mocks.saveWinnerBoardState).not.toHaveBeenCalled();
+	});
+
+	test('resolves and consumes a TFT preview only after the board saves', async () => {
+		const sourceSnapshot = { snapshot: { source: { matchId: 'VN2_match-1' } } };
+		mocks.getTftMatchSettings.mockResolvedValue({ region: 'VN2' });
+		mocks.requireTftMatchApiConfig.mockReturnValue({ region: 'VN2' });
+		mocks.resolveTftMatchPreviewForSave.mockResolvedValue(sourceSnapshot);
+		mocks.saveWinnerBoardState.mockResolvedValue({ id: 'current' });
+		const form = new FormData();
+		form.set('tournamentId', 'tournament-1');
+		form.set('winnerPlayerId', 'player-1');
+		form.set('tftPreviewToken', 'preview-token');
+		form.set('tftMatchId', 'VN2_match-1');
+		const request = new Request('https://broadcast.example/admin/graphics', {
+			method: 'POST',
+			body: form
+		});
+
+		const result = await graphicActions.saveBoard(
+			asEvent({ locals: { user: { id: 'operator-1' } }, request, url: new URL(request.url) })
+		);
+
+		expect(mocks.resolveTftMatchPreviewForSave).toHaveBeenCalledWith({
+			database: {},
+			token: 'preview-token',
+			matchId: 'VN2_match-1',
+			tournamentId: 'tournament-1',
+			config: { region: 'VN2' }
+		});
+		expect(mocks.saveWinnerBoardState).toHaveBeenCalledWith(
+			{},
+			expect.objectContaining({ sourceSnapshot })
+		);
+		expect(mocks.deleteTftMatchPreviewBatch).toHaveBeenCalledWith('preview-token');
+		expect(mocks.saveWinnerBoardState.mock.invocationCallOrder[0]).toBeLessThan(
+			mocks.deleteTftMatchPreviewBatch.mock.invocationCallOrder[0]
+		);
+		expect(result).toEqual({ action: 'saveBoard', board: { id: 'current' } });
+	});
+
+	test.each([
+		['changed configuration', 'configuration'],
+		['stale preview', 'preview']
+	])('retains a TFT preview after %s', async (_label, failureAt) => {
+		mocks.getTftMatchSettings.mockResolvedValue({ region: 'VN2' });
+		mocks.requireTftMatchApiConfig.mockReturnValue({ region: 'VN2' });
+		if (failureAt === 'configuration') {
+			mocks.requireTftMatchApiConfig.mockImplementation(() => {
+				throw new TftMatchConfigurationError('key changed');
+			});
+		} else {
+			mocks.resolveTftMatchPreviewForSave.mockRejectedValue(new TftMatchPreviewConflictError());
+		}
+		const form = new FormData();
+		form.set('tournamentId', 'tournament-1');
+		form.set('tftPreviewToken', 'preview-token');
+		form.set('tftMatchId', 'VN2_match-1');
+		const request = new Request('https://broadcast.example/admin/graphics', {
+			method: 'POST',
+			body: form
+		});
+
+		const result = await graphicActions.saveBoard(
+			asEvent({ locals: { user: { id: 'operator-1' } }, request, url: new URL(request.url) })
+		);
+
+		expect(result).toMatchObject({ status: 409, data: { action: 'saveBoard' } });
+		expect(mocks.deleteTftMatchPreviewBatch).not.toHaveBeenCalled();
+	});
+
+	test('retains a TFT preview when repository persistence fails', async () => {
+		mocks.getTftMatchSettings.mockResolvedValue({ region: 'VN2' });
+		mocks.requireTftMatchApiConfig.mockReturnValue({ region: 'VN2' });
+		mocks.resolveTftMatchPreviewForSave.mockResolvedValue({ snapshot: {} });
+		mocks.saveWinnerBoardState.mockRejectedValue(new Error('database details'));
+		const form = new FormData();
+		form.set('tournamentId', 'tournament-1');
+		form.set('tftPreviewToken', 'preview-token');
+		form.set('tftMatchId', 'VN2_match-1');
+		const request = new Request('https://broadcast.example/admin/graphics', {
+			method: 'POST',
+			body: form
+		});
+
+		const result = await graphicActions.saveBoard(
+			asEvent({ locals: { user: { id: 'operator-1' } }, request, url: new URL(request.url) })
+		);
+
+		expect(result).toMatchObject({ status: 422, data: { action: 'saveBoard' } });
+		expect(mocks.deleteTftMatchPreviewBatch).not.toHaveBeenCalled();
+	});
+
+	test('loads only safe TFT match API availability with the graphics data', async () => {
+		mocks.loadTournamentAdminData.mockResolvedValue({
+			tournaments: [],
+			selectedTournament: null,
+			roster: [],
+			activeCatalog: null,
+			liveBoard: null
+		});
+		mocks.loadLatestPlayerImportPreview.mockResolvedValue(null);
+		mocks.getWinnerBoardState.mockResolvedValue(null);
+		mocks.getTftMatchSettings.mockResolvedValue({ region: 'VN2' });
+		mocks.getTftMatchApiAvailability.mockReturnValue({
+			enabled: false,
+			region: 'VN2',
+			reason: 'A Riot API key is required to fetch TFT matches.'
+		});
+
+		const result = /** @type {any} */ (
+			await graphicsLoad(
+				asEvent({
+					locals: { user: { id: 'operator-1' } },
+					url: new URL('https://broadcast.example/admin/graphics')
+				})
+			)
+		);
+
+		expect(result.tftMatchApi).toEqual({
+			enabled: false,
+			region: 'VN2',
+			reason: 'A Riot API key is required to fetch TFT matches.'
+		});
+		expect(result).not.toHaveProperty('apiKey');
+		expect(result).not.toHaveProperty('environment');
+		expect(result.tftMatchApi).not.toHaveProperty('accountRegionGroup');
+		expect(result.tftMatchApi).not.toHaveProperty('matchRegionGroup');
 	});
 
 	test.each([
