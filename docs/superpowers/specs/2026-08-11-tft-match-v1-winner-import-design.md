@@ -40,16 +40,20 @@ A signed client payload and a refetch-on-save workflow were rejected. Signed pay
 
 ## Runtime Configuration and Riot Routing
 
-The API feature uses two private runtime values:
+The API feature uses two configuration values with different ownership:
 
-- `RIOT_API_KEY`: the Riot Developer API key already represented in `.env.example`.
-- `RIOT_REGION`: one Twisted `Constants.Regions` platform code, such as `VN2`.
+- `RIOT_API_KEY` remains a private server environment value already represented in `.env.example`.
+- The active TFT platform region is an application setting selected by an authenticated operator under `/admin/settings` and persisted in SQLite.
 
-Both values are required for **Fetch API Data**, but neither is required for the application to boot or for the manual Winner workflow to operate. Missing or invalid configuration disables only the API control and exposes its reason in a hover/focus popover.
+The Settings page renders one **TFT platform region** dropdown containing every entry from Twisted's `Constants.Regions` enum. The server derives the safe `{ value, label }` options from that enum; the Svelte component must not maintain a second hard-coded region list. The stored value is the enum's platform code, such as `VN2`. Saving requires an exact supported value and takes effect for the next API request without restarting the process.
 
-The server validates `RIOT_REGION` against Twisted's platform enum. It derives the TFT match routing group with `Constants.regionToRegionGroup` and the Account API routing group with `Constants.regionToRegionGroupForAccountAPI`. Operators configure one platform region; they do not configure separate routing groups.
+The selected region is not secret and may be included in authenticated page data and availability DTOs. The API key remains server-only and must never be serialized into page data, action data, logs, cache tokens, or error messages.
 
-The key remains server-only and must never be serialized into page data, action data, logs, cache tokens, or error messages.
+Both the private key and one persisted region selection are required for **Fetch API Data**, but neither is required for the application to boot or for the manual Winner workflow to operate. Missing or invalid configuration disables only the API control and exposes its reason in a hover/focus popover.
+
+The server revalidates the persisted region against Twisted's platform enum whenever it builds API configuration. It derives the TFT match routing group with `Constants.regionToRegionGroup` and the Account API routing group with `Constants.regionToRegionGroupForAccountAPI`. Operators configure one active platform region; they do not configure separate routing groups.
+
+The region setting uses a dedicated singleton `tft_match_settings` table. No row means no region is selected. Changing the row invalidates pending previews through the existing region cache binding, but does not delete immutable snapshots, change saved Winner state, or affect any published graphic.
 
 ## Twisted Request Boundary
 
@@ -264,6 +268,7 @@ No API-related failure resets the composer, deletes an older snapshot, changes t
 
 Implementation is divided by responsibility:
 
+- Region settings: Twisted-derived safe choices, singleton persistence, and the authenticated Settings form.
 - Riot gateway: Twisted clients, region derivation, account lookup, match IDs, and match details.
 - Match contract: response validation, canonical normalization, and catalog mapping.
 - Preview cache: token lifecycle, bounded process-local entries, and lookup binding.
@@ -288,6 +293,7 @@ The gateway receives its Twisted clients as dependencies so tests never contact 
 
 ### Gateway and cache tests
 
+- Region option generation exposes every `Constants.Regions` entry exactly once, settings persistence rejects arbitrary values, and no API key reaches Settings page data or action results.
 - Region helpers receive the configured platform region.
 - Account lookup, `count: 10`, newest-first summaries, and sequential detail requests use Twisted only.
 - No backfill time parameters are sent.
@@ -307,6 +313,7 @@ The gateway receives its Twisted clients as dependencies so tests never contact 
 
 ### Component tests
 
+- The Settings dropdown contains the server-derived Twisted region choices, displays the persisted selection, and reports save validation failures without losing the current value.
 - **Fetch API Data** appears beside Live and Reset.
 - Ineligible players and invalid matches are greyed out and cannot be activated.
 - Their reasons appear on hover and keyboard focus.
@@ -328,7 +335,7 @@ The gateway receives its Twisted clients as dependencies so tests never contact 
 
 ## Documentation Updates
 
-Implementation updates `.env.example` and the deployment runbook with `RIOT_REGION`, documents that `RIOT_API_KEY` and `RIOT_REGION` enable an optional server-only feature, and records the ten-match/no-backfill policy.
+Implementation documents `RIOT_API_KEY` as the only private environment value for this feature, describes region selection under `/admin/settings`, and records the ten-match/no-backfill policy. `.env.example` must not contain `RIOT_REGION`.
 
 After verification, `docs/TODO.md` marks the TFT-MATCH-V1 discovery, validation, persistence, and Winner integration items complete. It also removes augment expectations from the immediate snapshot contract and defers any future augment source to a separate design.
 
@@ -336,6 +343,7 @@ After verification, `docs/TODO.md` marks the TFT-MATCH-V1 discovery, validation,
 
 - The API button and full-screen review dialog implement the approved four-stage workflow.
 - Riot access goes exclusively through Twisted using one configured platform region.
+- An authenticated operator can select any Twisted platform region under Settings without restarting the process.
 - Only ten fresh matches are requested and no historical backfill occurs.
 - Current responses without augments validate and import champion boards correctly.
 - Any unmapped unit blocks only the affected match with a hover/focus reason; duplicate and mapped helper/minion instances remain intact.
