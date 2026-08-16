@@ -10,17 +10,19 @@
 	import { untrack } from 'svelte';
 	import WinnerBoardGraphic from '$lib/components/WinnerBoardGraphic.svelte';
 	import ResetRequiredDialog from './ResetRequiredDialog.svelte';
+	import TftMatchImportDialog from './TftMatchImportDialog.svelte';
 	/** @import { WinnerBoardView } from '$lib/winner-board.js' */
-	/** @typedef {{ id: string, displayName: string, fullName: string, riotId: string | null, imagePath: string | null }} Player */
+	/** @typedef {{ id: string, displayName: string, fullName: string, riotId: string | null, riotGameName?: string | null, riotTagline?: string | null, imagePath: string | null }} Player */
 	/** @typedef {{ id: string, displayName: string, iconPath: string | null }} CatalogAsset */
 	/** @typedef {{ instanceId: string, catalogChampionId: string, starLevel: string }} ChampionInstance */
 
-	/** @type {{ tournament: { id: string } | null, roster: Player[], activeCatalog: { snapshot: any, champions: CatalogAsset[], augments: CatalogAsset[] }, savedBoard: import('$lib/winner-board.js').WinnerBoardStateView | null, livePublicationId?: string | null, form?: any }} */
+	/** @type {{ tournament: { id: string } | null, roster: Player[], activeCatalog: { snapshot: any, champions: CatalogAsset[], augments: CatalogAsset[] }, savedBoard: import('$lib/winner-board.js').WinnerBoardStateView | null, tftMatchApi: import('$lib/tft-match.js').TftMatchApiAvailability, livePublicationId?: string | null, form?: any }} */
 	let {
 		tournament,
 		roster,
 		activeCatalog,
 		savedBoard,
+		tftMatchApi,
 		livePublicationId = null,
 		form = null
 	} = $props();
@@ -78,6 +80,8 @@
 	let composer = $state(initialForm);
 	let savedForm = $state.raw(untrack(() => normalizedForm(initialForm)));
 	let lastBaselineKey = untrack(() => boardKey(savedBoard));
+	/** @type {{ previewToken: string, matchId: string } | null} */
+	let apiSource = $state(null);
 	/** @type {string | null} */
 	let submittingAction = $state(null);
 	let resetOpen = $state(false);
@@ -89,6 +93,8 @@
 	let resetInvoker = $state(null);
 	/** @type {any} */
 	let resetDialog;
+	/** @type {HTMLElement | null} */
+	let reviewRegion = null;
 
 	const canonicalBoard = $derived(
 		form?.action === 'saveBoard' && form.board ? form.board : savedBoard
@@ -102,13 +108,16 @@
 				const next = formState(canonicalBoard);
 				composer = next;
 				savedForm = normalizedForm(next);
+				apiSource = null;
 				lastBaselineKey = key;
 			}
 		};
 	}
 
 	const normalizedComposer = $derived(normalizedForm(composer));
-	const dirty = $derived(JSON.stringify(normalizedComposer) !== JSON.stringify(savedForm));
+	const dirty = $derived(
+		Boolean(apiSource) || JSON.stringify(normalizedComposer) !== JSON.stringify(savedForm)
+	);
 	const championCandidates = $derived(
 		/** @type {CatalogAsset[]} */ (searchCatalogResources(activeCatalog.champions, championQuery))
 	);
@@ -241,6 +250,26 @@
 		resetOpen = true;
 		resetDialog?.showModal();
 	}
+
+	/** @returns {import('svelte/attachments').Attachment<HTMLElement>} */
+	function captureReviewRegion() {
+		return (node) => {
+			reviewRegion = node;
+			return () => {
+				if (reviewRegion === node) reviewRegion = null;
+			};
+		};
+	}
+
+	/** @param {import('$lib/tft-match.js').TftMatchComposerDraft} draft */
+	function useApiBoard(draft) {
+		composer.winnerPlayerId = draft.winnerPlayerId;
+		composer.champions = draft.champions.map((champion) =>
+			createChampionInstance(champion.catalogChampionId, champion.starLevel)
+		);
+		apiSource = { previewToken: draft.previewToken, matchId: draft.matchId };
+		queueMicrotask(() => reviewRegion?.focus());
+	}
 </script>
 
 <section
@@ -272,7 +301,10 @@
 		</div>
 	</header>
 
-	<div class="mb-5 flex flex-wrap items-center gap-3 rounded-container bg-surface-100-900 p-3">
+	<div
+		data-winner-control-row
+		class="mb-5 flex flex-wrap items-center gap-3 rounded-container bg-surface-100-900 p-3"
+	>
 		<form method="POST" action={actionUrl('setLive')} use:enhance={trackSubmission('setLive')}>
 			<input type="hidden" name="enabled" value={isLive ? 'false' : 'true'} />
 			<button
@@ -287,6 +319,13 @@
 				{isLive ? 'Live on' : 'Live off'}
 			</button>
 		</form>
+		<TftMatchImportDialog
+			{tournament}
+			{roster}
+			apiAvailability={tftMatchApi}
+			hasActiveCatalog={Boolean(activeCatalog.snapshot)}
+			onuseboard={useApiBoard}
+		/>
 		<button
 			class="btn preset-tonal-error"
 			type="button"
@@ -295,7 +334,11 @@
 		>
 			<TrashIcon class="size-4" /> Reset
 		</button>
-		{#if dirty}
+		{#if apiSource}
+			<p class="text-sm font-medium text-primary-700-300">
+				API board loaded. Review it, then Save.
+			</p>
+		{:else if dirty}
 			<p class="text-sm font-medium text-error-700-300">
 				Save changes before taking the board live.
 			</p>
@@ -310,12 +353,20 @@
 
 	<div class="grid gap-6 2xl:grid-cols-[minmax(380px,0.75fr)_minmax(0,1.25fr)]">
 		<form
+			data-composer-review
+			tabindex="-1"
+			aria-label="Winner board review and save"
+			{@attach captureReviewRegion()}
 			method="POST"
 			action={actionUrl('saveBoard')}
 			use:enhance={trackSubmission('saveBoard')}
 			class="space-y-5"
 		>
 			<input type="hidden" name="tournamentId" value={tournament?.id ?? ''} />
+			{#if apiSource}
+				<input type="hidden" name="tftPreviewToken" value={apiSource.previewToken} />
+				<input type="hidden" name="tftMatchId" value={apiSource.matchId} />
+			{/if}
 
 			<div class="grid gap-3 sm:grid-cols-2">
 				<label class="label"

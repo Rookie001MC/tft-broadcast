@@ -65,6 +65,8 @@ const graphicsPageData = {
 			displayName: 'EarlGreyTeemo',
 			fullName: 'Earl Grey Teemo',
 			riotId: 'EarlGreyTeemo#sip',
+			riotGameName: 'EarlGreyTeemo',
+			riotTagline: 'sip',
 			imagePath: null
 		}
 	],
@@ -74,7 +76,8 @@ const graphicsPageData = {
 		augments: []
 	},
 	savedBoard: composerBoard,
-	livePublicationId: 'publication-1'
+	livePublicationId: 'publication-1',
+	tftMatchApi: { enabled: true, region: 'VN2', reason: null }
 };
 
 function composerProps(overrides = {}) {
@@ -86,6 +89,8 @@ function composerProps(overrides = {}) {
 				displayName: 'EarlGreyTeemo',
 				fullName: 'Earl Grey Teemo',
 				riotId: 'EarlGreyTeemo#sip',
+				riotGameName: 'EarlGreyTeemo',
+				riotTagline: 'sip',
 				imagePath: 'player-images/managed.png'
 			}
 		],
@@ -102,6 +107,7 @@ function composerProps(overrides = {}) {
 		},
 		savedBoard: composerBoard,
 		livePublicationId: null,
+		tftMatchApi: { enabled: true, region: 'VN2', reason: null },
 		...overrides
 	};
 }
@@ -378,6 +384,156 @@ describe('winner graphic components', () => {
 			)
 		).toBe(true);
 		expect(document.querySelector('input[name="boardId"]')).toBeNull();
+	});
+
+	test('imports an API board into the existing save form without replacing title or augments', async () => {
+		const apiBoard = {
+			available: true,
+			matchId: 'VN2_match-import',
+			completedAt: '2026-08-16T01:00:00.000Z',
+			placement: 2,
+			gameType: 'Ranked',
+			setNumber: 15,
+			setCoreName: 'K.O. Coliseum',
+			champions: [
+				{
+					catalogChampionId: 'champion-1',
+					externalId: 'TFT15_Irelia',
+					displayName: 'Irelia',
+					iconPath: null,
+					starLevel: 1,
+					displayOrder: 0
+				},
+				{
+					catalogChampionId: 'champion-1',
+					externalId: 'TFT15_Irelia',
+					displayName: 'Irelia',
+					iconPath: null,
+					starLevel: 3,
+					displayOrder: 1
+				}
+			]
+		};
+		vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+			new Response(
+				JSON.stringify({
+					token: 'preview-token',
+					selectedPlayer: {
+						id: 'player-2',
+						displayName: 'Second Player',
+						riotId: 'Second#VN2'
+					},
+					matches: [apiBoard]
+				}),
+				{ status: 200, headers: { 'Content-Type': 'application/json' } }
+			)
+		);
+		const existingAugment = {
+			id: 'augment-1',
+			displayName: 'Jeweled Lotus',
+			iconPath: null,
+			displayOrder: 0
+		};
+		const importedProps = composerProps({
+			roster: [
+				...composerProps().roster,
+				{
+					id: 'player-2',
+					displayName: 'Second Player',
+					fullName: 'Second Player',
+					riotId: 'Second#VN2',
+					riotGameName: 'Second',
+					riotTagline: 'VN2',
+					imagePath: null
+				}
+			],
+			activeCatalog: {
+				...composerProps().activeCatalog,
+				augments: [existingAugment]
+			},
+			savedBoard: { ...composerBoard, augments: [existingAugment] }
+		});
+		const rendered = render(WinnerBoardComposer, importedProps);
+
+		const fetchControl = page.getByRole('button', { name: 'Fetch API Data' });
+		const controlRow = document.querySelector('[data-winner-control-row]');
+		expect(controlRow?.contains(requiredButton(/^Fetch API Data$/))).toBe(true);
+		await fetchControl.click();
+		await page.getByRole('button', { name: /Second Player/ }).click();
+		await page.getByRole('button', { name: /VN2_match-import/ }).click();
+		await page.getByRole('button', { name: 'Use this board' }).click();
+
+		await expect.element(page.getByLabelText('Graphic title')).toHaveValue('Grand Final Winner');
+		expect(
+			/** @type {HTMLSelectElement} */ (document.querySelector('select[name="winnerPlayerId"]'))
+				.value
+		).toBe('player-2');
+		expect(
+			[...document.querySelectorAll('input[name="championIds"]')].map(
+				(input) => /** @type {HTMLInputElement} */ (input).value
+			)
+		).toEqual(['champion-1', 'champion-1']);
+		expect(
+			[...document.querySelectorAll('input[name="championStarLevels"]')].map(
+				(input) => /** @type {HTMLInputElement} */ (input).value
+			)
+		).toEqual(['1', '3']);
+		expect(
+			/** @type {HTMLInputElement} */ (document.querySelector('input[name="augmentIds"]')).value
+		).toBe('augment-1');
+		expect(document.querySelectorAll('input[name="tftPreviewToken"]')).toHaveLength(1);
+		expect(document.querySelectorAll('input[name="tftMatchId"]')).toHaveLength(1);
+		await expect.element(page.getByText('API board loaded. Review it, then Save.')).toBeVisible();
+		await expect.element(page.getByRole('button', { name: 'Save board' })).toBeEnabled();
+		await expect.element(page.getByRole('switch', { name: 'Live graphic' })).toBeDisabled();
+		expect(document.activeElement).toBe(document.querySelector('[data-composer-review]'));
+
+		await rendered.rerender({
+			...importedProps,
+			form: {
+				action: 'saveBoard',
+				message: 'This TFT match preview expired. Fetch the match again.'
+			}
+		});
+		await expect
+			.element(page.getByText('This TFT match preview expired. Fetch the match again.'))
+			.toBeVisible();
+		expect(document.querySelectorAll('input[name="tftPreviewToken"]')).toHaveLength(1);
+		await rendered.rerender({
+			...importedProps,
+			form: { action: 'saveBoard', message: 'Winner board details are invalid.' }
+		});
+		expect(document.querySelectorAll('input[name="tftPreviewToken"]')).toHaveLength(1);
+
+		const savedApiBoard = {
+			...composerBoard,
+			updatedAt: new Date('2026-08-16T02:00:00.000Z'),
+			winner: {
+				id: 'player-2',
+				displayName: 'Second Player',
+				riotId: 'Second#VN2',
+				imagePath: null
+			},
+			champions: apiBoard.champions.map((champion) => ({
+				id: champion.catalogChampionId,
+				displayName: champion.displayName,
+				iconPath: null,
+				starLevel: champion.starLevel,
+				displayOrder: champion.displayOrder
+			})),
+			augments: [existingAugment]
+		};
+		await rendered.rerender({
+			...importedProps,
+			savedBoard: savedApiBoard,
+			form: { action: 'saveBoard', board: savedApiBoard }
+		});
+		expect(document.querySelectorAll('input[name="tftPreviewToken"]')).toHaveLength(0);
+		await expect
+			.element(page.getByText('API board loaded. Review it, then Save.'))
+			.not.toBeInTheDocument();
+		await page.getByLabelText('Graphic title').fill('Manual follow-up');
+		expect(document.querySelectorAll('input[name="tftPreviewToken"]')).toHaveLength(0);
 	});
 
 	test('switches candidate tabs by keyboard and retains independent, type-scoped searches', async () => {
