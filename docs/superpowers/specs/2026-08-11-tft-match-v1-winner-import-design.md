@@ -2,7 +2,7 @@
 
 ## Status
 
-Approved design for fetching recent TFT matches through Twisted, reviewing one participant's champion board, and importing it into the existing Winner composer without changing the database during browsing.
+Approved design for fetching recent TFT matches through Twisted, reviewing one participant's champion board, and importing it into the existing Winner composer without changing the database during browsing. This revision incorporates the completed ordered-unit-instance and helper-unit requirements from `2026-08-15-winner-composer-unit-instances-design.md`.
 
 This design is the authoritative TFT-MATCH-V1 contract for the immediate API work. It supersedes provisional assumptions in the later Broadcast Graphics Scenes design that Winner must select the first-place participant, that API data is non-editable, or that match history supplies augments. The later Post-Match design must consume the champion-only snapshot contract defined here.
 
@@ -13,6 +13,7 @@ This design is the authoritative TFT-MATCH-V1 contract for the immediate API wor
 - Fetch only that player's ten newest TFT matches through Twisted.
 - Let the operator choose any returned match regardless of placement.
 - Preview the selected participant's champions and star levels before changing the composer.
+- Preserve Riot's ordered unit instances, including repeated champion IDs and helper, summon, or minion units.
 - Populate the existing editable composer without saving, publishing, or otherwise writing during browsing.
 - Persist an immutable, normalized eight-player snapshot only when the operator uses the existing composer Save action.
 - Preserve the existing manual title, augment editing, Save, Live, and Reset workflow.
@@ -126,7 +127,7 @@ Successful normalization produces a versioned immutable JSON value with this log
 }
 ```
 
-Valid snapshots contain exactly eight participants sorted by placement. The embedded champion identity and presentation metadata make the contract stable for later read-only consumers without another Riot request. Augments are not present in the contract.
+Valid snapshots contain exactly eight participants sorted by placement. Each participant's champions preserve Riot's unit order and remain separate instances even when multiple entries share one champion identity. The embedded champion identity and presentation metadata make the contract stable for later read-only consumers without another Riot request. Augments are not present in the contract.
 
 ## Validation and Catalog Mapping
 
@@ -139,11 +140,10 @@ A match is eligible only when all of these conditions hold:
 - Placements are unique integers covering 1 through 8.
 - The chosen player's resolved PUUID appears exactly once.
 - Required match timestamps, duration, version, queue, and set fields have valid primitive values.
-- Every retained unit has a non-empty `character_id` and an integer tier from 1 through 3.
-- A participant does not contain duplicate retained champion IDs, because the current composer requires unique champions.
-- Every retained unit maps to a non-excluded champion in the tournament's active catalog snapshot.
+- Every unit has a non-empty `character_id` and an integer tier from 1 through 3.
+- Every unit maps to a champion row in the tournament's active catalog snapshot.
 
-Catalog mapping uses exact `character_id` to `catalog_champions.external_id` matching inside the active snapshot. Units explicitly excluded through the existing catalog-correction workflow are treated as known non-playable helpers and omitted. Any other missing or excluded ambiguity blocks that match instead of constructing a partial board. The disabled match popover lists the unresolved external IDs so the operator can correct the catalog deliberately.
+Catalog mapping uses exact `character_id` to `catalog_champions.external_id` matching inside the active snapshot. It preserves every mapped unit as a separate ordered instance, including repeated champion IDs and rows marked `isExcluded`; that catalog flag remains a maintenance/operator concern and is not evidence that Riot's match unit should be discarded. The normalizer must not maintain or infer a whitelist of playable units. Any missing mapping blocks that match instead of constructing a partial snapshot. The disabled match popover lists the unresolved external IDs so the operator can correct the catalog deliberately.
 
 The normalizer ignores `win`, augments, traits, items, companion data, and missions. It never guesses a champion by display name.
 
@@ -282,8 +282,9 @@ The gateway receives its Twisted clients as dependencies so tests never contact 
 - The selected participant is found by resolved PUUID, not display name or `win`.
 - Multiple `win: true` values do not affect placement or eligibility.
 - `character_id` maps exactly and `tier` becomes star level.
-- Explicitly excluded summons/helpers are omitted.
-- Unknown champions, duplicate retained champions, invalid tiers, missing selected PUUID, invalid placement sets, incomplete matches, and malformed primitives are rejected.
+- Duplicate champion IDs remain distinct ordered instances.
+- Mapped helpers, summons, minions, and `isExcluded` catalog rows are preserved without a unit-type whitelist.
+- Unknown champions, invalid tiers, missing selected PUUID, invalid placement sets, incomplete matches, and malformed primitives are rejected.
 
 ### Gateway and cache tests
 
@@ -312,6 +313,7 @@ The gateway receives its Twisted clients as dependencies so tests never contact 
 - Loading and failure statuses are announced.
 - Match history renders no more than ten rows newest first.
 - Verification renders the selected participant's champions in a flex column.
+- Repeated champion IDs render as separate rows and populate separate composer instances in Riot order.
 - **Use this board** replaces winner, champions, and star levels while preserving title and augments.
 - Dismissing the dialog makes no composer or database change and restores focus.
 - An imported draft is visibly unsaved and the original Save remains the only persistence control.
@@ -336,7 +338,7 @@ After verification, `docs/TODO.md` marks the TFT-MATCH-V1 discovery, validation,
 - Riot access goes exclusively through Twisted using one configured platform region.
 - Only ten fresh matches are requested and no historical backfill occurs.
 - Current responses without augments validate and import champion boards correctly.
-- Unmapped non-excluded champions block an affected match with a hover/focus reason.
+- Any unmapped unit blocks only the affected match with a hover/focus reason; duplicate and mapped helper/minion instances remain intact.
 - Browsing and **Use this board** write nothing to SQLite.
 - The original Save atomically stores the eight-player champion snapshot and Winner state.
 - The existing manual composer and Save/Live/Reset behavior remain intact.
