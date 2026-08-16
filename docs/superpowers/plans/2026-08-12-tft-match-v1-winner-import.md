@@ -4,7 +4,7 @@
 
 **Goal:** Add an authenticated, Twisted-only workflow that loads one roster player's ten newest TFT matches, previews a champion-only board, populates the existing editable Winner composer without writing during browsing, and atomically persists the exact eight-player Riot snapshot only through the original Save action.
 
-**Architecture:** Keep Riot access, response normalization, transient preview storage, and durable snapshot persistence in separate server modules. The browser receives safe projections behind an opaque 15-minute process-local token; it never supplies a Riot ID, PUUID, arbitrary match ID, or API key. The existing Winner repository remains the transaction and live-publication boundary, with an optional validated snapshot source inserted in the same transaction as the editable board.
+**Architecture:** Keep operator-managed region settings, Riot access, response normalization, transient preview storage, and durable snapshot persistence in separate server modules. The browser receives safe projections behind an opaque 15-minute process-local token; it never supplies a Riot ID, PUUID, arbitrary match ID, or API key. The existing Winner repository remains the transaction and live-publication boundary, with an optional validated snapshot source inserted in the same transaction as the editable board.
 
 **Tech Stack:** Svelte 5 runes, SvelteKit form actions and request handlers, JavaScript with JSDoc, Zod 4, Twisted 1.82, Drizzle ORM/SQLite, Vitest server and browser projects, Playwright, Skeleton/Tailwind styling.
 
@@ -12,8 +12,8 @@
 
 - Treat `docs/superpowers/specs/2026-08-11-tft-match-v1-winner-import-design.md` as authoritative.
 - Use `RiotApi.Account.getByRiotId`, `TftApi.Match.list`, and `TftApi.Match.get`; do not call Riot with application-owned `fetch`.
-- Read `RIOT_API_KEY` and `RIOT_REGION` only from `$env/dynamic/private`. Never return, log, cache, or interpolate the key into an error.
-- Accept one configured platform region. Derive both routing groups with Twisted's region helpers.
+- Read only `RIOT_API_KEY` from `$env/dynamic/private`. Never return, log, cache, or interpolate the key into an error.
+- Persist one active platform region through the authenticated Settings page. Derive the dropdown choices and both routing groups from Twisted's constants; never hard-code a second browser list.
 - Request `count: 10` exactly. Do not pass `startTime`, `endTime`, or any backfill parameter.
 - Fetch detail records sequentially. One failed detail produces one unavailable row and does not discard successful rows.
 - Ignore augments and `win` everywhere in the Riot contract. Placement is authoritative.
@@ -22,7 +22,7 @@
 - Keep the original **Save board** action as the only persistence boundary. Keep existing Save-while-Live publication advancement unchanged.
 - Cache entries live for 15 minutes, cap at 32 batches, use cryptographically random opaque tokens, and disappear only after successful API-backed Save or normal expiry/eviction.
 - Persist the normalized eight-player champion snapshot exactly as reviewed, even when the operator edits the resulting Winner composer before Save.
-- Preserve the user-supplied `examples/tft-match-v1.example.json` byte-for-byte and add it as a regression fixture.
+- Preserve the user-supplied `examples/tft-match-v1.example.jsonc` byte-for-byte and add it as a regression fixture.
 - Run the Svelte MCP autofixer on every created or modified `.svelte` file until it returns no issues or suggestions.
 - Preserve unrelated worktree changes. Stage only the files named in each task.
 
@@ -32,12 +32,15 @@
 
 - `src/lib/tft-match.js`: browser-safe JSDoc DTOs for availability, match rows, discovery responses, and composer handoff.
 - `src/lib/server/tft-matches/contract.js`: permissive Riot subset schema, strict canonical snapshot schema, normalization, catalog mapping, and preview projection.
-- `src/lib/server/tft-matches/config.js`: private environment parsing, platform-region validation, routing-group derivation, and safe availability projection.
+- `src/lib/server/tft-matches/regions.js`: Twisted-derived browser-safe region choices and exact platform-region validation.
+- `src/lib/server/tft-matches/settings-repository.js`: singleton TFT region reads and writes.
+- `src/lib/server/tft-matches/config.js`: private key parsing, persisted-region validation, routing-group derivation, and safe availability projection.
 - `src/lib/server/tft-matches/gateway.js`: injected Twisted client boundary, sequential ten-match retrieval, safe Riot error translation, and the same-process test gateway factory seam.
 - `src/lib/server/tft-matches/preview-cache.js`: bounded module-level cache and token lifecycle.
 - `src/lib/server/tft-matches/service.js`: roster/catalog authorization, discovery orchestration, safe match rows, and Save-time cache binding validation.
 - `src/lib/server/tft-matches/snapshot-repository.js`: canonical revalidation, in-transaction binding checks, and append-only snapshot insertion.
-- `src/lib/server/db/schema/tft-matches.js`: `tft_match_snapshots` table.
+- `src/lib/server/db/schema/tft-match-settings.js`: singleton `tft_match_settings` table.
+- `src/lib/server/db/schema/tft-matches.js`: append-only `tft_match_snapshots` table.
 - `src/routes/(admin)/admin/graphics/tft-matches/+server.js`: authenticated POST endpoint accepting only local tournament/player IDs.
 - `src/lib/components/admin/TftMatchImportDialog.svelte`: full-screen four-stage modal workflow.
 - `tests/fixtures/fake-tft-match-gateway.js`: deterministic eight-player Playwright gateway.
@@ -45,12 +48,15 @@
 ### New focused tests
 
 - `src/lib/server/tft-matches/contract.test.js`
+- `src/lib/server/tft-matches/regions.test.js`
+- `src/lib/server/tft-matches/settings-repository.test.js`
 - `src/lib/server/tft-matches/config.test.js`
 - `src/lib/server/tft-matches/gateway.test.js`
 - `src/lib/server/tft-matches/preview-cache.test.js`
 - `src/lib/server/tft-matches/service.test.js`
 - `src/lib/server/tft-matches/snapshot-repository.test.js`
 - `src/routes/(admin)/admin/graphics/tft-matches/tft-matches.test.js`
+- `src/routes/(admin)/admin/settings/settings-page.svelte.test.js`
 - `src/lib/components/admin/TftMatchImportDialog.svelte.test.js`
 
 ### Existing files to modify
@@ -62,6 +68,8 @@
 - `src/lib/server/winner-boards/repository.test.js`
 - `src/routes/(admin)/admin/graphics/+page.server.js`
 - `src/routes/(admin)/admin/graphics/+page.svelte`
+- `src/routes/(admin)/admin/settings/+page.server.js`
+- `src/routes/(admin)/admin/settings/+page.svelte`
 - `src/routes/(admin)/admin/admin-actions.test.js`
 - `src/lib/components/admin/WinnerBoardComposer.svelte`
 - `src/lib/components/admin/admin-components.svelte.test.js`
@@ -76,8 +84,10 @@
 
 ### Generated migration files
 
-- `drizzle/0003_tft_match_snapshots.sql`
+- `drizzle/0003_tft_match_settings.sql`
 - `drizzle/meta/0003_snapshot.json`
+- `drizzle/0004_tft_match_snapshots.sql`
+- `drizzle/meta/0004_snapshot.json`
 - `drizzle/meta/_journal.json`
 
 ## Contracts to Keep Consistent
@@ -173,7 +183,7 @@ export {};
  */
 ```
 
-Both timestamps are valid ISO-8601 instants. `participants` contains exactly eight entries sorted by placement, and every champion array preserves Riot unit order after explicitly excluded helpers are removed. No augment, trait, item, companion, mission, or `win` field belongs in this value.
+Both timestamps are valid ISO-8601 instants. `participants` contains exactly eight entries sorted by placement, and every champion array preserves all mapped Riot unit instances in order, including duplicates and rows marked `isExcluded`. No augment, trait, item, companion, mission, or `win` field belongs in this value.
 
 ### Gateway interface
 
@@ -239,7 +249,7 @@ Omitting `sourceSnapshot` must store `NULL` in `winner_board_state.source_tft_ma
 - Create: `src/lib/server/tft-matches/contract.js`
 - Create: `src/lib/server/tft-matches/contract.test.js`
 - Modify: `.prettierignore`
-- Use unchanged and stage: `examples/tft-match-v1.example.json`
+- Use unchanged and stage: `examples/tft-match-v1.example.jsonc`
 - Reference only: `src/lib/openapi/riot-api/openapi-3.0.0.json`
 
 **Interfaces:**
@@ -252,7 +262,7 @@ Omitting `sourceSnapshot` must store `NULL` in `winner_board_state.source_tft_ma
 
 - [ ] **Step 1: Write failing real-fixture and rejection tests**
 
-Load the example with `readFile(new URL('../../../../examples/tft-match-v1.example.json', import.meta.url), 'utf8')`. Build catalog rows from every unique `units[].character_id`; mark `TFT17_IvernMinion` and `TFT17_Summon` as `isExcluded: true`, and mark the remaining rows active.
+Load the JSON-with-comments example with `readFile(new URL('../../../../examples/tft-match-v1.example.jsonc', import.meta.url), 'utf8')`, remove only its leading lines that begin with `//`, and parse the remaining JSON. Build catalog rows from every unique `units[].character_id`; mark `TFT17_IvernMinion` and `TFT17_Summon` as `isExcluded: true`, and mark the remaining rows active.
 
 Cover all of these assertions:
 
@@ -262,11 +272,11 @@ Cover all of these assertions:
 - missing, blank, or partial optional participant Riot-ID fields are accepted and normalize the participant's canonical `riotId` to `null`;
 - the canonical value has `contractVersion: 1`, no augment property, exactly eight participants, and placements `[1,2,3,4,5,6,7,8]`;
 - selecting the placement-four participant works even when several participants have `win: true`;
-- every retained `character_id` maps by exact `externalId`, excluded helpers disappear, original unit order becomes contiguous `displayOrder`, and `tier` becomes `starLevel`;
+- every `character_id` maps by exact `externalId`; repeated IDs and excluded helpers remain separate ordered instances with contiguous `displayOrder`, and `tier` becomes `starLevel`;
 - `metadata.match_id` must equal `requestedMatchId`;
-- duplicate or empty PUUIDs, incomplete placement sets, duplicate retained champions, tiers outside 1–3, missing selected PUUID, malformed data version/timestamp/duration/version/queue/set/participant-level values, and unknown non-excluded champions throw `TftMatchContractError`;
+- duplicate or empty PUUIDs, incomplete placement sets, tiers outside 1–3, missing selected PUUID, malformed data version/timestamp/duration/version/queue/set/participant-level values, and unknown champions throw `TftMatchContractError`;
 - unresolved champion messages contain sorted external IDs and no raw response dump;
-- an empty unit `character_id` throws, while a selected participant whose every well-formed unit is explicitly excluded remains contract-valid with an empty canonical champion array;
+- an empty unit `character_id` throws, while duplicate and `isExcluded` catalog matches remain contract-valid unit instances;
 - `parseCanonicalTftMatchSnapshot` rejects a mutated canonical payload before persistence.
 
 - [ ] **Step 2: Run the test and confirm the missing module failure**
@@ -297,11 +307,10 @@ The canonical schema must exactly represent the version-1 shape in the approved 
 Create one `Map` by `externalId`. For every unit:
 
 - throw if `character_id` is empty or `tier` is not an integer from 1 through 3;
-- omit the unit when the matching catalog row exists and `isExcluded === true`;
 - collect the external ID when no catalog row exists;
-- retain the catalog ID, external ID, display name, icon path, star level, and post-filter order for active rows.
+- retain the catalog ID, external ID, display name, icon path, star level, and Riot unit order for every mapped row regardless of `isExcluded`.
 
-After mapping one participant, reject duplicate retained catalog champion IDs. After mapping the match, reject any unresolved IDs together. Do not add an extra minimum-champion eligibility rule beyond the approved contract.
+Do not deduplicate or reject repeated catalog champion IDs. After mapping the match, reject any unresolved IDs together. Do not add a helper-unit whitelist or an extra minimum-champion eligibility rule beyond the approved contract.
 
 - [ ] **Step 5: Return only the safe browser projection**
 
@@ -309,7 +318,7 @@ After mapping one participant, reject duplicate retained catalog champion IDs. A
 
 - [ ] **Step 6: Run focused verification**
 
-Add `/examples/tft-match-v1.example.json` to `.prettierignore`. The supplied response is an external regression artifact and must not be rewritten merely to satisfy repository formatting; other future examples remain subject to normal formatting.
+Add `/examples/tft-match-v1.example.jsonc` to `.prettierignore`. The supplied response is an external regression artifact and must not be rewritten merely to satisfy repository formatting; other future examples remain subject to normal formatting.
 
 Run:
 
@@ -323,13 +332,116 @@ Expected: both commands PASS.
 - [ ] **Step 7: Commit the contract and unchanged fixture**
 
 ```powershell
-git add src/lib/tft-match.js src/lib/server/tft-matches/contract.js src/lib/server/tft-matches/contract.test.js examples/tft-match-v1.example.json .prettierignore
+git add src/lib/tft-match.js src/lib/server/tft-matches/contract.js src/lib/server/tft-matches/contract.test.js examples/tft-match-v1.example.jsonc .prettierignore
 git commit -m "feat: normalize TFT match snapshots"
 ```
 
 ---
 
-### Task 2: Add private configuration and the Twisted-only gateway
+### Task 2: Add persisted TFT platform-region settings
+
+**Files:**
+
+- Create: `src/lib/server/db/schema/tft-match-settings.js`
+- Modify: `src/lib/server/db/schema/index.js`
+- Modify: `src/lib/server/db/schema/schema.test.js`
+- Create: `src/lib/server/tft-matches/regions.js`
+- Create: `src/lib/server/tft-matches/regions.test.js`
+- Create: `src/lib/server/tft-matches/settings-repository.js`
+- Create: `src/lib/server/tft-matches/settings-repository.test.js`
+- Modify: `src/routes/(admin)/admin/settings/+page.server.js`
+- Modify: `src/routes/(admin)/admin/settings/+page.svelte`
+- Create: `src/routes/(admin)/admin/settings/settings-page.svelte.test.js`
+- Modify: `src/routes/(admin)/admin/admin-actions.test.js`
+- Generate: `drizzle/0003_tft_match_settings.sql`
+- Generate: `drizzle/meta/0003_snapshot.json`
+- Modify generated journal: `drizzle/meta/_journal.json`
+
+**Interfaces:**
+
+- `getTftPlatformRegionOptions()` → `Array<{ value: string, label: string }>`
+- `parseTftPlatformRegion(value)` → exact supported platform code or throws `TftMatchRegionError`
+- `getTftMatchSettings(database)` → `{ region: string | null }`
+- `saveTftMatchRegion(database, region, { updatedAt?: Date }?)` → `{ region: string }`
+- Settings action `saveTftRegion` accepts one `region` form field
+
+**Schema:**
+
+```text
+tft_match_settings
+  id          INTEGER PRIMARY KEY CHECK (id = 1)
+  region      TEXT NOT NULL
+  updated_at  INTEGER NOT NULL
+```
+
+No row represents an unconfigured region. Do not introduce a generic key/value settings abstraction for this single feature.
+
+- [ ] **Step 1: Write failing region-option and repository tests**
+
+Assert that `getTftPlatformRegionOptions()` returns every `Object.entries(Constants.Regions)` item exactly once in enum order. Labels are derived server-side by replacing underscores, preserving acronym words of three letters or fewer, title-casing longer words, and appending the code—for example `{ value: 'VN2', label: 'Vietnam (VN2)' }` and `{ value: 'EUN1', label: 'EU East (EUN1)' }`; no caller supplies its own choices. Assert `parseTftPlatformRegion` accepts each exact enum value and rejects blanks, lowercase aliases, routing-group names, and arbitrary strings.
+
+Use an in-memory SQLite fixture to assert no row returns `{ region: null }`, a valid save upserts singleton ID `1`, a second save replaces only that row, `updatedAt` uses the injected timestamp, and an invalid value writes nothing.
+
+- [ ] **Step 2: Add failing schema and authenticated Settings action tests**
+
+Extend the schema test with the singleton check, required region, and timestamp mode. Extend `admin-actions.test.js` so unauthenticated `saveTftRegion` fails through `requireAdmin`; invalid input returns action-scoped status 422 without changing the stored row; valid input returns `{ action: 'saveTftRegion', tftMatchSettings: { region } }`.
+
+Add a page-load test asserting that authenticated Settings data contains the persisted selection plus the complete safe option array and contains no environment object or API key field.
+
+- [ ] **Step 3: Run server tests and confirm missing behavior**
+
+```powershell
+pnpm exec vitest run --project server src/lib/server/db/schema/schema.test.js src/lib/server/tft-matches/regions.test.js src/lib/server/tft-matches/settings-repository.test.js "src/routes/(admin)/admin/admin-actions.test.js"
+```
+
+Expected: FAIL because the schema, region utilities, repository, load function, and action do not exist.
+
+- [ ] **Step 4: Implement the singleton setting and Settings server flow**
+
+Derive choices directly from `Constants.Regions` in `regions.js`. Keep parsing and label generation there so routes, configuration, and tests share one source. Define `tftMatchSettings` with a Drizzle singleton check and export it from `schema/index.js`.
+
+In the repository, parse before writing and use one SQLite upsert on ID `1`. In the Settings route, call `requireAdmin` before form parsing, load the current setting and choices, and return action failures through the existing `actionFailure` pattern without exposing caught objects.
+
+- [ ] **Step 5: Write a failing Settings component test**
+
+Render the Settings page with a persisted `VN2` selection and the server-derived option DTO. Assert a labelled **TFT platform region** native select renders every supplied choice, selects `VN2`, submits to `?/saveTftRegion`, shows the action error when provided, and leaves the existing account/logout card intact.
+
+- [ ] **Step 6: Implement the Skeleton-aligned region form**
+
+Add one outlined Settings card using the repository's existing Skeleton classes, semantic `<label>` and `<select>`, a short explanation that one region is active at a time, and a **Save region** button. Render only the choices received from page data; do not import Twisted or hard-code codes in the component.
+
+Run the Svelte MCP autofixer on the complete modified `+page.svelte` until it reports no issues or suggestions.
+
+- [ ] **Step 7: Generate and inspect the settings migration**
+
+```powershell
+$env:DATABASE_URL='file:local.db'
+pnpm db:generate --name tft_match_settings
+```
+
+Expected generated tag: `0003_tft_match_settings`. Confirm the SQL creates only the singleton table and its check constraint, with no destructive statement.
+
+- [ ] **Step 8: Run focused verification**
+
+```powershell
+pnpm exec vitest run --project server src/lib/server/db/schema/schema.test.js src/lib/server/tft-matches/regions.test.js src/lib/server/tft-matches/settings-repository.test.js "src/routes/(admin)/admin/admin-actions.test.js"
+pnpm exec vitest run --project client "src/routes/(admin)/admin/settings/settings-page.svelte.test.js"
+pnpm check
+pnpm exec prettier --check src/lib/server/db/schema/tft-match-settings.js src/lib/server/db/schema/index.js src/lib/server/db/schema/schema.test.js src/lib/server/tft-matches/regions.js src/lib/server/tft-matches/regions.test.js src/lib/server/tft-matches/settings-repository.js src/lib/server/tft-matches/settings-repository.test.js "src/routes/(admin)/admin/settings/+page.server.js" "src/routes/(admin)/admin/settings/+page.svelte" "src/routes/(admin)/admin/settings/settings-page.svelte.test.js" "src/routes/(admin)/admin/admin-actions.test.js" drizzle/meta/_journal.json drizzle/meta/0003_snapshot.json
+```
+
+Expected: PASS.
+
+- [ ] **Step 9: Commit the operator-managed region setting**
+
+```powershell
+git add src/lib/server/db/schema/tft-match-settings.js src/lib/server/db/schema/index.js src/lib/server/db/schema/schema.test.js src/lib/server/tft-matches/regions.js src/lib/server/tft-matches/regions.test.js src/lib/server/tft-matches/settings-repository.js src/lib/server/tft-matches/settings-repository.test.js "src/routes/(admin)/admin/settings/+page.server.js" "src/routes/(admin)/admin/settings/+page.svelte" "src/routes/(admin)/admin/settings/settings-page.svelte.test.js" "src/routes/(admin)/admin/admin-actions.test.js" drizzle/0003_tft_match_settings.sql drizzle/meta/0003_snapshot.json drizzle/meta/_journal.json
+git commit -m "feat: manage TFT platform region"
+```
+
+---
+
+### Task 3: Add private key configuration and the Twisted-only gateway
 
 **Files:**
 
@@ -340,8 +452,8 @@ git commit -m "feat: normalize TFT match snapshots"
 
 **Interfaces:**
 
-- `requireTftMatchApiConfig(environment)` → `{ apiKey, region, accountRegionGroup, matchRegionGroup }`
-- `getTftMatchApiAvailability(environment)` → browser-safe `TftMatchApiAvailability`
+- `requireTftMatchApiConfig({ environment, region })` → `{ apiKey, region, accountRegionGroup, matchRegionGroup }`
+- `getTftMatchApiAvailability({ environment, region })` → browser-safe `TftMatchApiAvailability`
 - `createTftMatchGateway({ riotApi, tftApi, accountRegionGroup, matchRegionGroup })`
 - `createRuntimeTftMatchGateway(config)`
 - `TftMatchGatewayError` with `category`, `status`, and `operatorMessage`
@@ -351,9 +463,9 @@ git commit -m "feat: normalize TFT match snapshots"
 
 Assert that:
 
-- a missing key disables only the API feature with `region: null` and a safe key-required reason;
-- a missing or unsupported region produces a safe region-required reason;
-- lowercase `vn2` normalizes to `VN2`;
+- a missing key disables only the API feature with the current safe region and a key-required reason;
+- a missing or unsupported persisted region produces a safe region-required reason;
+- lowercase `vn2` is rejected rather than normalized because only exact dropdown values may be persisted;
 - `Constants.regionToRegionGroup('VN2')` and `Constants.regionToRegionGroupForAccountAPI('VN2')` supply the returned groups;
 - a platform enum value rejected by either routing helper is unavailable;
 - availability JSON never contains the key.
@@ -387,7 +499,7 @@ Expected: FAIL because the configuration and gateway modules do not exist.
 
 - [ ] **Step 4: Implement configuration parsing**
 
-Trim the key, uppercase the platform region, validate against `Object.values(Constants.Regions)`, then invoke both region helpers inside the same guarded function. Throw a typed configuration error with an operator-safe message. `getTftMatchApiAvailability` catches only that typed error and returns `{ enabled: false, region: null, reason }`; when valid, return `{ enabled: true, region, reason: null }` without spreading the private config.
+Trim the environment key and validate the supplied persisted region through `parseTftPlatformRegion`, then invoke both region helpers inside the same guarded function. Throw a typed configuration error with an operator-safe message. `getTftMatchApiAvailability` first attempts `parseTftPlatformRegion(region)` to derive `safeRegion`, catches only `TftMatchRegionError` as `null`, then returns `{ enabled: false, region: safeRegion, reason }` for typed configuration failures; when valid, return `{ enabled: true, region: safeRegion, reason: null }` without spreading the private config.
 
 - [ ] **Step 5: Implement the injected gateway**
 
@@ -420,7 +532,7 @@ git commit -m "feat: add Twisted TFT match gateway"
 
 ---
 
-### Task 3: Build the bounded preview cache and read-only discovery service
+### Task 4: Build the bounded preview cache and read-only discovery service
 
 **Files:**
 
@@ -525,7 +637,7 @@ git commit -m "feat: stage TFT match previews in memory"
 
 ---
 
-### Task 4: Add the append-only snapshot schema and repository
+### Task 5: Add the append-only snapshot schema and repository
 
 **Files:**
 
@@ -535,8 +647,8 @@ git commit -m "feat: stage TFT match previews in memory"
 - Modify: `src/lib/server/db/schema/schema.test.js`
 - Create: `src/lib/server/tft-matches/snapshot-repository.js`
 - Create: `src/lib/server/tft-matches/snapshot-repository.test.js`
-- Generate: `drizzle/0003_tft_match_snapshots.sql`
-- Generate: `drizzle/meta/0003_snapshot.json`
+- Generate: `drizzle/0004_tft_match_snapshots.sql`
+- Generate: `drizzle/meta/0004_snapshot.json`
 - Modify generated journal: `drizzle/meta/_journal.json`
 
 **Schema:**
@@ -600,13 +712,13 @@ $env:DATABASE_URL='file:local.db'
 pnpm db:generate --name tft_match_snapshots
 ```
 
-Expected generated tag: `0003_tft_match_snapshots`. Inspect the SQL and confirm it creates the table and indexes before adding the nullable Winner source column. Reject any generated destructive table recreation or drop statement.
+Expected generated tag: `0004_tft_match_snapshots`. Inspect the SQL and confirm it creates the table and indexes before adding the nullable Winner source column. Reject any generated destructive table recreation or drop statement.
 
 - [ ] **Step 6: Run focused verification**
 
 ```powershell
 pnpm exec vitest run --project server src/lib/server/db/schema/schema.test.js src/lib/server/tft-matches/snapshot-repository.test.js
-pnpm exec prettier --check src/lib/server/db/schema/tft-matches.js src/lib/server/db/schema/winner-boards.js src/lib/server/db/schema/index.js src/lib/server/db/schema/schema.test.js src/lib/server/tft-matches/snapshot-repository.js src/lib/server/tft-matches/snapshot-repository.test.js drizzle/meta/_journal.json drizzle/meta/0003_snapshot.json
+pnpm exec prettier --check src/lib/server/db/schema/tft-matches.js src/lib/server/db/schema/winner-boards.js src/lib/server/db/schema/index.js src/lib/server/db/schema/schema.test.js src/lib/server/tft-matches/snapshot-repository.js src/lib/server/tft-matches/snapshot-repository.test.js drizzle/meta/_journal.json drizzle/meta/0004_snapshot.json
 ```
 
 Expected: PASS.
@@ -614,13 +726,13 @@ Expected: PASS.
 - [ ] **Step 7: Commit the durable snapshot foundation**
 
 ```powershell
-git add src/lib/server/db/schema/tft-matches.js src/lib/server/db/schema/winner-boards.js src/lib/server/db/schema/index.js src/lib/server/db/schema/schema.test.js src/lib/server/tft-matches/snapshot-repository.js src/lib/server/tft-matches/snapshot-repository.test.js drizzle/0003_tft_match_snapshots.sql drizzle/meta/0003_snapshot.json drizzle/meta/_journal.json
+git add src/lib/server/db/schema/tft-matches.js src/lib/server/db/schema/winner-boards.js src/lib/server/db/schema/index.js src/lib/server/db/schema/schema.test.js src/lib/server/tft-matches/snapshot-repository.js src/lib/server/tft-matches/snapshot-repository.test.js drizzle/0004_tft_match_snapshots.sql drizzle/meta/0004_snapshot.json drizzle/meta/_journal.json
 git commit -m "feat: persist immutable TFT match snapshots"
 ```
 
 ---
 
-### Task 5: Integrate snapshot insertion with the existing Winner transaction
+### Task 6: Integrate snapshot insertion with the existing Winner transaction
 
 **Files:**
 
@@ -689,7 +801,7 @@ git commit -m "feat: attach TFT snapshots to winner saves"
 
 ---
 
-### Task 6: Add the authenticated discovery endpoint and Save-action cache resolution
+### Task 7: Add the authenticated discovery endpoint and Save-action cache resolution
 
 **Files:**
 
@@ -712,25 +824,26 @@ Directly call the request handler and assert:
 - unauthenticated events fail through `requireAdmin`;
 - empty tournament/player IDs return 400;
 - missing configuration returns a safe feature-unavailable status and reason;
+- the endpoint reads the current persisted region and never accepts a request-owned region override;
 - authenticated valid input returns the service DTO with `Cache-Control: no-store`;
 - extra form fields named `riotId`, `puuid`, `matchId`, and `region` are ignored and never forwarded;
 - service conflict, rate-limit, key, player-not-found, and temporary-service errors return their safe message/status without stack or private values.
 
 - [ ] **Step 2: Add failing `saveBoard` action tests**
 
-Extend the hoisted mocks for configuration, preview resolution, cache deletion, and the snapshot-aware repository call. Assert:
+Extend the hoisted mocks for settings reads, configuration, preview resolution, cache deletion, and the snapshot-aware repository call. Assert:
 
 - the existing manual form calls `saveWinnerBoardState` with its exact old object and never reads/deletes cache;
 - supplying only one hidden source field returns 409 and never calls the repository;
 - supplying both fields resolves the preview with DB/config/tournament binding, passes the returned source as `sourceSnapshot`, then deletes the cache token only after repository success;
-- missing or changed Riot configuration after an import returns the same 409 fetch-again response and retains the cache;
+- missing or changed key/region configuration after an import returns the same 409 fetch-again response and retains the cache;
 - preview conflict returns the fetch-again message and retains the cache;
 - repository failure retains the cache;
 - successful API Save returns the same `{ action: 'saveBoard', board }` action shape.
 
 - [ ] **Step 3: Add a failing page-load availability test**
 
-Assert the graphics load result includes only `{ enabled, region, reason }` under `tftMatchApi` and does not serialize `apiKey`, account route group, or match route group. Missing configuration must not prevent the rest of the page load.
+Assert the graphics load reads the persisted setting and includes only `{ enabled, region, reason }` under `tftMatchApi`; it must not serialize `apiKey`, the raw environment, account route group, or match route group. A missing key or missing region must not prevent the rest of the page load.
 
 - [ ] **Step 4: Run route/action tests and confirm failure**
 
@@ -742,15 +855,15 @@ Expected: FAIL because the endpoint and action integration are absent.
 
 - [ ] **Step 5: Implement the authenticated endpoint**
 
-Call `requireAdmin(event)` before reading the form. Parse private configuration server-side, create the runtime gateway, and call `discoverTftMatchHistory`. Return SvelteKit `json(result, { headers: { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' } })`.
+Call `requireAdmin(event)` before reading the form. Read the current region through `getTftMatchSettings(database)`, build private configuration from `{ environment: env, region }`, create the runtime gateway, and call `discoverTftMatchHistory`. Return SvelteKit `json(result, { headers: { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' } })`.
 
 Map typed expected failures to safe HTTP responses. For unknown failures, return a generic temporary-unavailability message and log only an internal correlation UUID if project logging is added; do not log the caught object or request form.
 
 - [ ] **Step 6: Implement page availability and API-assisted Save**
 
-In `load`, call `getTftMatchApiAvailability(env)` synchronously and add only its safe result.
+In `load`, read the singleton settings row, call `getTftMatchApiAvailability({ environment: env, region })`, and add only its safe result.
 
-In `saveBoard`, preserve current champion/star/augment parsing. If neither source field exists, use the unchanged manual call. If both exist, require current config, resolve the cache source, pass it to the repository, and delete the batch only after the awaited repository call returns. Convert missing/changed API configuration during an API-backed Save into the same 409 fetch-again conflict as a stale cache. Return a 409 action failure for any `TftMatchPreviewConflictError`; retain the existing generic validation failure for ordinary invalid board data.
+In `saveBoard`, preserve current champion/star/augment parsing. If neither source field exists, use the unchanged manual call without reading TFT settings. If both exist, read the current region, require current config, resolve the cache source, pass it to the repository, and delete the batch only after the awaited repository call returns. Convert missing/changed API configuration during an API-backed Save into the same 409 fetch-again conflict as a stale cache. Return a 409 action failure for any `TftMatchPreviewConflictError`; retain the existing generic validation failure for ordinary invalid board data.
 
 - [ ] **Step 7: Run focused verification**
 
@@ -770,7 +883,7 @@ git commit -m "feat: expose authenticated TFT match discovery"
 
 ---
 
-### Task 7: Build and verify the full-screen match import dialog
+### Task 8: Build and verify the full-screen match import dialog
 
 **Files:**
 
@@ -827,7 +940,7 @@ Select a valid non-first-place row and assert:
 
 - heading text is “Please double-check this is the correct board.”;
 - local player, Riot ID, date/time, placement, game type, set, and match ID render;
-- champions render in one `flex-col` list with icon fallback, display name, and one to three star glyphs based on `starLevel`;
+- champions render in one `flex-col` list with icon fallback, display name, and one to three star glyphs based on `starLevel`; two entries sharing one catalog champion ID remain two rows in response order;
 - no augment label or data renders;
 - Back returns to history without refetching;
 - **Use this board** calls `onuseboard` once with token, match ID, local winner ID, and champions, then closes without a network request;
@@ -881,7 +994,7 @@ git commit -m "feat: add TFT match import dialog"
 
 ---
 
-### Task 8: Populate the existing composer without changing its Save semantics
+### Task 9: Populate the existing composer without changing its Save semantics
 
 **Files:**
 
@@ -902,7 +1015,7 @@ git commit -m "feat: add TFT match import dialog"
 Extend `composerProps()` with complete Riot roster fields and a default enabled availability object. Mock the discovery response and assert:
 
 - **Fetch API Data** is in the same rounded control row as the Live switch and Reset button;
-- importing a board replaces `winnerPlayerId`, champion order, and every imported star level;
+- importing a board replaces `winnerPlayerId` and the ordered champion-instance array, preserving duplicate catalog IDs and every imported star level;
 - the existing title input and selected augment checkboxes are unchanged;
 - the original save form contains exactly one token and match ID hidden input after import;
 - the unsaved review message appears, the Save button remains the existing **Save board**, and Live-on remains disabled while dirty;
@@ -933,9 +1046,8 @@ Render `TftMatchImportDialog` between Live and Reset/broadcast controls. Derive 
 
 ```js
 composer.winnerPlayerId = draft.winnerPlayerId;
-composer.championIds = draft.champions.map((champion) => champion.catalogChampionId);
-composer.starLevels = Object.fromEntries(
-	draft.champions.map((champion) => [champion.catalogChampionId, champion.starLevel])
+composer.champions = draft.champions.map((champion) =>
+	createChampionInstance(champion.catalogChampionId, champion.starLevel)
 );
 apiSource = { previewToken: draft.previewToken, matchId: draft.matchId };
 ```
@@ -969,7 +1081,7 @@ git commit -m "feat: populate winner composer from TFT matches"
 
 ---
 
-### Task 9: Exercise the complete operator workflow with a fake injected gateway
+### Task 10: Exercise the complete operator workflow with a fake injected gateway
 
 **Files:**
 
@@ -985,7 +1097,7 @@ git commit -m "feat: populate winner composer from TFT matches"
 - Match ID `VN2_E2E_MATCH_1`
 - Eight unique participants with placements 1–8
 - Selected roster player's PUUID returned from account resolution and placed at 4
-- One mapped `TFT16_TestChampion` at tier 2 on the selected board
+- Two ordered `TFT16_TestChampion` instances at tiers 2 and 1 on the selected board
 - No augments field
 - Complete match metadata with deterministic timestamp and set values
 
@@ -993,31 +1105,32 @@ git commit -m "feat: populate winner composer from TFT matches"
 
 Create `tests/fixtures/fake-tft-match-gateway.js` with a factory whose initial `fetchRecentMatches` increments a module-local history-call counter and throws exactly `new Error('E2E TFT gateway fixture is not implemented')`. Export counter reset/read helpers. This temporary red behavior must not be committed.
 
-At module startup in both `scripts/e2e-server.js` and `playwright.config.js`, explicitly assign `RIOT_API_KEY = ''` and `RIOT_REGION = ''` rather than inheriting values from the developer shell. Do the same at the beginning of `playwright-global-setup.js`, and delete the provider symbol before `vite.preview` starts. Empty process values intentionally override any ignored local `.env` file that Vite's `loadEnv` would otherwise reload; application configuration trims them and treats them as missing. This guarantees the build and the first browser phase exercise genuinely missing configuration and cannot observe a real credential.
+At module startup in both `scripts/e2e-server.js` and `playwright.config.js`, explicitly assign `RIOT_API_KEY = ''` rather than inheriting a value from the developer shell. Do the same at the beginning of `playwright-global-setup.js`, and delete the provider symbol before `vite.preview` starts. The empty process value intentionally overrides any ignored local `.env` file that Vite's `loadEnv` would otherwise reload. Region configuration must come only from the E2E database through the real Settings workflow; do not define `RIOT_REGION` anywhere in the harness.
 
 In `playwright-global-setup.js`, keep `activeServer`, `mode`, and `restartPromise` in the setup closure and start the first `vite.preview` with the empty environment. Use a small plugin factory to pass a fresh test-only Vite plugin object, backed by that shared closure, to every preview instance. Register middleware directly in `configurePreviewServer`; do not return a post hook, so it runs before the application fallback. Keep preview bound to `127.0.0.1`, reject a non-loopback socket, expose `GET /__e2e/tft-match-mode` returning only `{ mode: 'disabled' | 'restarting' | 'enabled' }`, and accept the transition only once at `POST /__e2e/enable-tft-match`.
 
-The enable handler sets mode to `restarting`, returns 202, and starts one tracked asynchronous restart after the response finishes. The restart must close the disabled preview completely, reset the fake counter, install `globalThis[Symbol.for('tft-match-v1.gateway-factory')] = createFakeTftMatchGateway`, then assign the fake key and `VN2`, and only then call `preview(...)` again on the same port. Set mode to `enabled` only after the replacement preview resolves. Attach a rejection handler to `restartPromise` immediately when it is created, store the error in `restartError`, and let teardown report it; do not leave a rejected restart promise unhandled while Playwright polls.
+The enable handler sets mode to `restarting`, returns 202, and starts one tracked asynchronous restart after the response finishes. The restart must close the disabled preview completely, reset the fake counter, install `globalThis[Symbol.for('tft-match-v1.gateway-factory')] = createFakeTftMatchGateway`, assign the fake key, and only then call `preview(...)` again on the same port. The previously saved `VN2` database setting remains authoritative across the restart. Set mode to `enabled` only after the replacement preview resolves. Attach a rejection handler to `restartPromise` immediately when it is created, store the error in `restartError`, and let teardown report it; do not leave a rejected restart promise unhandled while Playwright polls.
 
-The restart is required because SvelteKit preview snapshots `$env/dynamic/private` during `Server.init`; mutating `process.env` without restarting would leave the feature disabled. Installing the factory before assigning non-empty configuration guarantees no enabled server state can construct a real Twisted client. Teardown awaits the restart promise if present, closes whichever preview is active, reports any restart failure, verifies exactly one history call when enabled, deletes the symbol, and restores both Riot process values to empty strings. These control endpoints exist only in Playwright's in-process preview middleware; do not add an application route or ship a production test hook.
+The restart is required because SvelteKit preview snapshots `$env/dynamic/private` during `Server.init`; mutating the API key without restarting would leave the feature disabled. Installing the factory before assigning a non-empty key guarantees no enabled server state can construct a real Twisted client. Teardown awaits the restart promise if present, closes whichever preview is active, reports any restart failure, verifies exactly one history call when enabled, deletes the symbol, and restores the API-key process value to an empty string. These control endpoints exist only in Playwright's in-process preview middleware; do not add an application route or ship a production test hook.
 
-The fake receives no private key because `createRuntimeTftMatchGateway` passes only key-free routing metadata to injected factories. Task 2's explicit provider test must prove the injected factory is chosen before either Twisted client is constructed.
+The fake receives no private key because `createRuntimeTftMatchGateway` passes only key-free routing metadata to injected factories. Task 3's explicit provider test must prove the injected factory is chosen before either Twisted client is constructed.
 
 - [ ] **Step 2: Add a failing two-phase Playwright workflow**
 
 Extend the existing single operator workflow without splitting it into another server run:
 
-- on the first graphics-page visit, while both Riot variables are forcibly absent, assert **Fetch API Data** is `aria-disabled`, hover/focus its wrapper, and assert the safe configuration reason is visible;
+- while the API key is forcibly absent, visit Settings, assert the dropdown contains all server-derived Twisted choices, select **Vietnam (VN2)**, save it, reload, and confirm the selection persisted without a process restart;
+- on the first graphics-page visit, assert **Fetch API Data** is still `aria-disabled` because the key is absent, hover/focus its wrapper, and assert the safe key-required reason is visible while the availability DTO identifies `VN2`;
 - complete the existing manual title, champion, star-level, and augment edits; click the original **Save board**, take it Live, and assert the broadcast publication succeeds while API configuration is still absent;
 - keep the existing player/catalog maintenance checks, then immediately before the later live-board update call the test-only `POST /__e2e/enable-tft-match` control and require status 202;
 - poll `GET /__e2e/tft-match-mode`, tolerating connection refusal while the port restarts, until it returns `enabled`; then reload the graphics page with the same authenticated browser context and assert API availability is enabled;
 - change the title to `Championship Winner` while leaving the already-saved `Test Augment` selected, click **Fetch API Data**, select the maintained Player Two roster row, choose the valid placement-four match, inspect the champion verification view, and click **Use this board**;
-- assert the edited title and selected augment are preserved, the maintained Player Two and tier-two corrected Test Champion populate, the review message appears, Live remains the prior saved state, and the imported draft has not been persisted;
+- assert the edited title and selected augment are preserved, the maintained Player Two and both ordered corrected Test Champion instances populate with tiers 2 then 1, the review message appears, Live remains the prior saved state, and the imported draft has not been persisted;
 - query SQLite and assert `tft_match_snapshots` still has zero rows and the existing manual board has a null source before **Save board**;
 - click the original **Save board** while Live and assert one snapshot row, exactly eight parsed participants, no augment key, and `winner_board_state.source_tft_match_snapshot_id` equals the inserted snapshot UUID;
 - assert the live publication/version advances through the existing Save-while-Live path and both already-open broadcast pages render the maintained player and corrected champion.
 
-This one test must therefore prove both end-to-end acceptance modes: missing configuration leaves manual Winner Save/Live fully functional, and enabled configuration uses only the deterministic injected boundary.
+This one test must therefore prove both end-to-end acceptance modes: an operator-managed region plus missing key leaves manual Winner Save/Live fully functional, and enabling only the private key uses the persisted region with the deterministic injected boundary.
 
 - [ ] **Step 3: Run E2E and confirm the safe fake-fixture failure**
 
@@ -1025,7 +1138,7 @@ This one test must therefore prove both end-to-end acceptance modes: missing con
 pnpm test:e2e
 ```
 
-Expected: the missing-configuration manual Save/Live phase passes, the controlled preview restart succeeds, then the API phase reaches the throwing fake and FAILS when the expected history row cannot appear, with only the endpoint's safe temporary-unavailability UI exposed. Riot cannot be contacted: empty process values override local `.env` files for the first server, and the replacement server receives non-empty configuration only after the fake is installed.
+Expected: the region-setting and missing-key manual Save/Live phase passes, the controlled preview restart succeeds, then the API phase reaches the throwing fake and FAILS when the expected history row cannot appear, with only the endpoint's safe temporary-unavailability UI exposed. Riot cannot be contacted: the empty API-key process value overrides local `.env` files for the first server, and the replacement server receives a non-empty key only after the fake is installed.
 
 - [ ] **Step 4: Replace the throwing fake with the deterministic match gateway**
 
@@ -1033,7 +1146,7 @@ Keep the same factory and counter interface, but return the exact `fetchRecentMa
 
 - [ ] **Step 5: Update E2E database cleanup order**
 
-Delete `winner_board_state` before `tft_match_snapshots`, and delete `tft_match_snapshots` before tournaments/catalog/players. Keep the existing cleanup rooted under the explicit E2E media directory.
+Delete `winner_board_state` before `tft_match_snapshots`, delete `tft_match_snapshots` before tournaments/catalog/players, and delete the independent `tft_match_settings` singleton during cleanup. Keep the existing cleanup rooted under the explicit E2E media directory.
 
 - [ ] **Step 6: Run E2E and focused server regression tests**
 
@@ -1042,7 +1155,7 @@ pnpm test:e2e
 pnpm exec vitest run --project server src/lib/server/tft-matches src/lib/server/winner-boards/repository.test.js
 ```
 
-Expected: PASS. The initial empty-env phase, authenticated session surviving the controlled restart, loopback-only activation order, global-teardown counter, Task 2 provider test, deliberately invalid E2E key, and network-free fake prove both configuration modes without ever making a Riot request.
+Expected: PASS. The initial empty-key phase, authenticated session surviving the controlled restart, loopback-only activation order, global-teardown counter, Task 3 provider test, deliberately invalid E2E key, and network-free fake prove both configuration modes without ever making a Riot request.
 
 - [ ] **Step 7: Commit the end-to-end coverage**
 
@@ -1053,7 +1166,7 @@ git commit -m "test: cover TFT match winner import workflow"
 
 ---
 
-### Task 10: Document runtime configuration and complete release verification
+### Task 11: Document runtime configuration and complete release verification
 
 **Files:**
 
@@ -1064,14 +1177,13 @@ git commit -m "test: cover TFT match winner import workflow"
 
 - [ ] **Step 1: Document the optional server-only configuration**
 
-Add this exact environment example:
+Keep this exact environment example:
 
 ```dotenv
 RIOT_API_KEY=
-RIOT_REGION=VN2
 ```
 
-Update README's opening claim so it no longer says the key is unused. State that both values enable only the optional admin import, the manual Winner flow works without them, the key never reaches the browser, and one process supports one configured platform region.
+Ensure `.env.example` contains no `RIOT_REGION`. Update README's opening claim so it no longer says the key is unused. State that the key plus one region selected under `/admin/settings` enable only the optional admin import, the manual Winner flow works without either prerequisite, the key never reaches the browser, and changing the persisted region takes effect without restarting while invalidating pending previews only.
 
 Document the freshness policy: account lookup once, exactly ten newest match IDs, sequential detail retrieval, no date range, no Set 1 backfill, and disposable 15-minute process-local previews.
 
@@ -1084,7 +1196,7 @@ In `docs/TODO.md`, mark the four Immediate Priority TFT-MATCH-V1 items complete 
 Run:
 
 ```powershell
-pnpm exec prettier --write src/lib/tft-match.js src/lib/server/tft-matches src/lib/server/db/schema/tft-matches.js src/lib/server/db/schema/winner-boards.js src/lib/server/db/schema/index.js src/lib/server/db/schema/schema.test.js src/lib/server/winner-boards/repository.js src/lib/server/winner-boards/repository.test.js src/lib/components/admin/TftMatchImportDialog.svelte src/lib/components/admin/TftMatchImportDialog.svelte.test.js src/lib/components/admin/WinnerBoardComposer.svelte src/lib/components/admin/admin-components.svelte.test.js "src/routes/(admin)/admin/graphics/+page.server.js" "src/routes/(admin)/admin/graphics/+page.svelte" "src/routes/(admin)/admin/graphics/tft-matches/+server.js" "src/routes/(admin)/admin/graphics/tft-matches/tft-matches.test.js" "src/routes/(admin)/admin/admin-actions.test.js" scripts/e2e-server.js scripts/playwright-global-setup.js playwright.config.js tests/fixtures/fake-tft-match-gateway.js tests/manual-winner-graphics.test.js README.md docs/TODO.md
+pnpm exec prettier --write src/lib/tft-match.js src/lib/server/tft-matches src/lib/server/db/schema/tft-match-settings.js src/lib/server/db/schema/tft-matches.js src/lib/server/db/schema/winner-boards.js src/lib/server/db/schema/index.js src/lib/server/db/schema/schema.test.js src/lib/server/winner-boards/repository.js src/lib/server/winner-boards/repository.test.js src/lib/components/admin/TftMatchImportDialog.svelte src/lib/components/admin/TftMatchImportDialog.svelte.test.js src/lib/components/admin/WinnerBoardComposer.svelte src/lib/components/admin/admin-components.svelte.test.js "src/routes/(admin)/admin/settings/+page.server.js" "src/routes/(admin)/admin/settings/+page.svelte" "src/routes/(admin)/admin/settings/settings-page.svelte.test.js" "src/routes/(admin)/admin/graphics/+page.server.js" "src/routes/(admin)/admin/graphics/+page.svelte" "src/routes/(admin)/admin/graphics/tft-matches/+server.js" "src/routes/(admin)/admin/graphics/tft-matches/tft-matches.test.js" "src/routes/(admin)/admin/admin-actions.test.js" scripts/e2e-server.js scripts/playwright-global-setup.js playwright.config.js tests/fixtures/fake-tft-match-gateway.js tests/manual-winner-graphics.test.js README.md docs/TODO.md
 ```
 
 Expected: formatter exits 0. Inspect `git diff --stat` and confirm no unrelated files changed.
@@ -1111,6 +1223,7 @@ Run:
 
 ```powershell
 rg -n "RIOT_API_KEY|apiKey" src/lib/components src/routes src/lib/tft-match.js
+rg -n "RIOT_REGION" src .env.example README.md
 rg -n "fetch\(" src/lib/server/tft-matches --glob "!*.test.js"
 rg -n "augments|\bwin\b" src/lib/server/tft-matches src/lib/components/admin/TftMatchImportDialog.svelte --glob "!*.test.js"
 rg -n "startTime|endTime|listWithDetails" src/lib/server/tft-matches --glob "!*.test.js"
@@ -1119,6 +1232,7 @@ rg -n "startTime|endTime|listWithDetails" src/lib/server/tft-matches --glob "!*.
 Expected findings:
 
 - no API key name/value is serialized by components or route response objects;
+- no production source or environment documentation references `RIOT_REGION`;
 - the server TFT modules contain no application-owned `fetch` call;
 - no augment/`win` reference exists in the production canonical snapshot or dialog;
 - no backfill parameter or `listWithDetails` call exists in production gateway code.
@@ -1129,7 +1243,7 @@ Run:
 
 ```powershell
 git status --short
-git log -p -1 -- drizzle/0003_tft_match_snapshots.sql drizzle/meta/_journal.json
+git log -p -1 -- drizzle/0003_tft_match_settings.sql drizzle/0004_tft_match_snapshots.sql drizzle/meta/_journal.json
 ```
 
 Expected: only the documentation files and this saved plan artifact remain unstaged, and the migration diff is additive.
@@ -1148,17 +1262,19 @@ git status --short
 git log -10 --oneline
 ```
 
-Expected: clean worktree and the ten focused commits from this plan, with no accidental modification to the supplied example payload.
+Expected: clean worktree and the eleven focused commits from this plan, with no accidental modification to the supplied example payload.
 
 ## Final Acceptance Checklist
 
+- [ ] Settings offers every server-derived Twisted platform region, persists exactly one selection, and applies changes without restarting.
+- [ ] The API key remains the only TFT-MATCH-V1 environment secret; `RIOT_REGION` is absent from production configuration.
 - [ ] The button sits beside Live/Reset and missing prerequisites have a hover/focus reason.
 - [ ] The modal is full-screen with padding and keyboard-safe focus behavior.
 - [ ] Ineligible roster players remain visible but cannot activate.
 - [ ] Selecting a player blocks inside the modal with “Please wait…” while Twisted resolves account, ten IDs, and sequential details.
 - [ ] At most ten newest matches appear; any placement can be selected.
 - [ ] Invalid details or mappings disable only their own row with a safe reason.
-- [ ] Verification shows champions in a vertical column and never shows augments.
+- [ ] Verification shows ordered champion instances in a vertical column, preserves duplicates/helpers/minions, and never shows augments.
 - [ ] **Use this board** changes only in-memory winner/champions/star levels/source and preserves title/augments.
 - [ ] Browsing and handoff leave SQLite and the live graphic untouched.
 - [ ] The original Save atomically inserts the exact eight-player snapshot and editable Winner state.
