@@ -81,11 +81,24 @@ const schemaStatements = [
 		metadata_json TEXT NOT NULL,
 		UNIQUE (catalog_snapshot_id, external_id)
 	)`,
+	`CREATE TABLE tft_match_snapshots (
+		id TEXT PRIMARY KEY NOT NULL,
+		riot_match_id TEXT NOT NULL,
+		region TEXT NOT NULL,
+		tournament_id TEXT NOT NULL,
+		selected_player_id TEXT NOT NULL,
+		active_catalog_snapshot_id TEXT NOT NULL,
+		contract_version INTEGER NOT NULL,
+		payload_json TEXT NOT NULL,
+		fetched_at INTEGER NOT NULL,
+		saved_at INTEGER NOT NULL
+	)`,
 	`CREATE TABLE winner_board_state (
 		id TEXT PRIMARY KEY NOT NULL,
 		tournament_id TEXT NOT NULL REFERENCES tournaments(id),
 		winner_player_id TEXT NOT NULL REFERENCES players(id),
 		title TEXT NOT NULL,
+		source_tft_match_snapshot_id TEXT REFERENCES tft_match_snapshots(id) ON DELETE SET NULL,
 		created_at INTEGER NOT NULL,
 		updated_at INTEGER NOT NULL
 	)`,
@@ -243,6 +256,54 @@ function validInput() {
 	};
 }
 
+/** @returns {import('../tft-matches/snapshot-repository.js').TftMatchSnapshotSource} */
+function validSourceSnapshot() {
+	return {
+		snapshot: {
+			contractVersion: 1,
+			source: {
+				provider: 'riot',
+				region: 'VN2',
+				matchId: 'VN2_MATCH_1',
+				dataVersion: '6',
+				fetchedAt: '2026-08-16T04:00:00.000Z'
+			},
+			match: {
+				completedAt: '2026-08-16T03:00:00.000Z',
+				durationSeconds: 1800,
+				gameVersion: 'Version 16.14',
+				queueId: 1100,
+				gameType: 'standard',
+				setNumber: 17,
+				setCoreName: 'TFTSet17'
+			},
+			participants: Array.from({ length: 8 }, (_, index) => ({
+				puuid: index === 0 ? 'winner-one-puuid' : `other-puuid-${index}`,
+				riotId: index === 0 ? { gameName: 'Winner One', tagline: 'VN1' } : null,
+				placement: index + 1,
+				level: 8,
+				champions: [
+					{
+						externalId: `TFT15_Champion${index + 1}`,
+						catalogChampionId: `champion-${index + 1}`,
+						displayName: `Champion ${index + 1}`,
+						iconPath: null,
+						starLevel: 2,
+						displayOrder: 0
+					}
+				]
+			}))
+		},
+		tournamentId: 'tournament-one',
+		selectedPlayerId: 'player-one',
+		selectedPuuid: 'winner-one-puuid',
+		activeCatalogSnapshotId: 'snapshot-active',
+		riotGameName: 'Winner One',
+		riotTagline: 'VN1',
+		region: 'VN2'
+	};
+}
+
 /**
  * @param {{ readPublicationMedia: (input: { mediaRoot: string, publicationId: string, filename: string }) => Promise<{ bytes: Buffer, mime: string }> }} mediaApi
  * @param {string} url
@@ -346,6 +407,133 @@ describe('winner board singleton repository', () => {
 		]);
 		expect(await repository.getGraphicVersion(database)).toBe(0);
 		expect(await repository.getPublishedWinnerBoard(database)).toBeNull();
+		expect((await client.execute('SELECT * FROM tft_match_snapshots')).rows).toEqual([]);
+		expect(
+			(await client.execute('SELECT source_tft_match_snapshot_id FROM winner_board_state')).rows
+		).toEqual([{ source_tft_match_snapshot_id: null }]);
+	});
+
+	it('atomically attaches an immutable snapshot while keeping edited Winner fields independent', async () => {
+		await execute(
+			client,
+			'INSERT INTO tournament_players (tournament_id, player_id, display_order, notes) VALUES (?, ?, ?, ?)',
+			['tournament-one', 'player-two', 1, null]
+		);
+		const saved = await repository.saveWinnerBoardState(database, {
+			...validInput(),
+			title: 'Operator edited title',
+			winnerPlayerId: 'player-two',
+			champions: [
+				{ catalogChampionId: 'champion-3', starLevel: 1 },
+				{ catalogChampionId: 'champion-2', starLevel: 3 }
+			],
+			augmentIds: ['augment-3'],
+			sourceSnapshot: validSourceSnapshot()
+		});
+
+		expect(saved).toMatchObject({
+			title: 'Operator edited title',
+			winner: { id: 'player-two' },
+			champions: [
+				expect.objectContaining({ id: 'champion-3', starLevel: 1, displayOrder: 0 }),
+				expect.objectContaining({ id: 'champion-2', starLevel: 3, displayOrder: 1 })
+			],
+			augments: [expect.objectContaining({ id: 'augment-3' })]
+		});
+		const snapshots = (await client.execute('SELECT * FROM tft_match_snapshots')).rows;
+		expect(snapshots).toHaveLength(1);
+		expect(JSON.parse(/** @type {string} */ (snapshots[0].payload_json))).toEqual(
+			validSourceSnapshot().snapshot
+		);
+		expect(
+			(await client.execute('SELECT source_tft_match_snapshot_id FROM winner_board_state')).rows[0]
+				.source_tft_match_snapshot_id
+		).toBe(snapshots[0].id);
+
+		await repository.saveWinnerBoardState(database, validInput());
+		expect(
+			(await client.execute('SELECT source_tft_match_snapshot_id FROM winner_board_state')).rows
+		).toEqual([{ source_tft_match_snapshot_id: null }]);
+		expect((await client.execute('SELECT id FROM tft_match_snapshots')).rows).toHaveLength(1);
+
+		await repository.resetWinnerBoardState(database);
+		expect((await client.execute('SELECT id FROM tft_match_snapshots')).rows).toHaveLength(1);
+	});
+
+	it('rolls back both sides when hidden snapshot or Winner child insertion fails', async () => {
+		await repository.saveWinnerBoardState(database, validInput());
+		const prior = await repository.getWinnerBoardState(database);
+		const invalidSource = validSourceSnapshot();
+		invalidSource.region = 'EUN1';
+
+		await expect(
+			repository.saveWinnerBoardState(database, {
+				...validInput(),
+				title: 'Must not persist',
+				sourceSnapshot: invalidSource
+			})
+		).rejects.toThrow();
+		expect(await repository.getWinnerBoardState(database)).toEqual(prior);
+		expect((await client.execute('SELECT * FROM tft_match_snapshots')).rows).toEqual([]);
+
+		await client.execute(`CREATE TRIGGER fail_winner_child BEFORE INSERT ON winner_board_state_champions
+			WHEN NEW.catalog_champion_id = 'champion-3' BEGIN SELECT RAISE(ABORT, 'forced child failure'); END`);
+		await expect(
+			repository.saveWinnerBoardState(database, {
+				...validInput(),
+				champions: [{ catalogChampionId: 'champion-3', starLevel: 2 }],
+				sourceSnapshot: validSourceSnapshot()
+			})
+		).rejects.toThrow();
+		expect(await repository.getWinnerBoardState(database)).toEqual(prior);
+		expect((await client.execute('SELECT * FROM tft_match_snapshots')).rows).toEqual([]);
+	});
+
+	it('atomically advances a live API-assisted save', async () => {
+		await repository.saveWinnerBoardState(database, validInput());
+		await repository.setWinnerBoardLive(database, true);
+		const before = await graphicRow(client);
+
+		const saved = await repository.saveWinnerBoardState(database, {
+			...validInput(),
+			title: 'Imported live update',
+			sourceSnapshot: validSourceSnapshot()
+		});
+
+		expect(saved.title).toBe('Imported live update');
+		expect((await client.execute('SELECT * FROM tft_match_snapshots')).rows).toHaveLength(1);
+		expect((await graphicRow(client))?.published_publication_id).not.toBe(
+			before?.published_publication_id
+		);
+		expect(await repository.getGraphicVersion(database)).toBe(2);
+		expect(await repository.getPublishedWinnerBoard(database)).toMatchObject({
+			title: 'Imported live update'
+		});
+	});
+
+	it('rolls back a live snapshot failure and removes prepared media', async () => {
+		await repository.saveWinnerBoardState(database, validInput());
+		await repository.setWinnerBoardLive(database, true);
+		const prior = await repository.getWinnerBoardState(database);
+		const priorGraphic = await graphicRow(client);
+		const priorDirectories = await readdir(path.join(mediaEnvironment.root, 'publications'));
+		const invalidSource = validSourceSnapshot();
+		invalidSource.selectedPuuid = 'missing-puuid';
+
+		await expect(
+			repository.saveWinnerBoardState(database, {
+				...validInput(),
+				title: 'Must roll back live',
+				sourceSnapshot: invalidSource
+			})
+		).rejects.toThrow();
+
+		expect(await repository.getWinnerBoardState(database)).toEqual(prior);
+		expect(await graphicRow(client)).toEqual(priorGraphic);
+		expect((await client.execute('SELECT * FROM tft_match_snapshots')).rows).toEqual([]);
+		expect(await readdir(path.join(mediaEnvironment.root, 'publications'))).toEqual(
+			priorDirectories
+		);
 	});
 
 	it('rejects a fourth augment but accepts a large champion list', async () => {

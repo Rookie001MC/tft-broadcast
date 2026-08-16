@@ -17,6 +17,7 @@ import {
 	isPublicationMediaFilename,
 	preparePublicationMedia
 } from './publication-media.js';
+import { insertTftMatchSnapshot } from '../tft-matches/snapshot-repository.js';
 
 /**
  * @import {
@@ -38,7 +39,8 @@ let writeTail = Promise.resolve();
  *   winnerPlayerId: string,
  *   title: string,
  *   champions: Array<{ catalogChampionId: string, starLevel: number | null }>,
- *   augmentIds: string[]
+ *   augmentIds: string[],
+ *   sourceSnapshot?: import('../tft-matches/snapshot-repository.js').TftMatchSnapshotSource
  * }} SaveWinnerBoardStateInput
  */
 
@@ -279,6 +281,9 @@ function inputFromState(state) {
  */
 async function replaceState(transaction, input) {
 	const now = new Date();
+	const sourceTftMatchSnapshotId = input.sourceSnapshot
+		? await insertTftMatchSnapshot(transaction, input.sourceSnapshot)
+		: null;
 	await validateTournamentScope(transaction, validationScope(input));
 	await transaction.delete(winnerBoardState).where(eq(winnerBoardState.id, CURRENT_STATE_ID));
 	await transaction.insert(winnerBoardState).values({
@@ -286,6 +291,7 @@ async function replaceState(transaction, input) {
 		tournamentId: input.tournamentId,
 		winnerPlayerId: input.winnerPlayerId,
 		title: input.title,
+		sourceTftMatchSnapshotId,
 		createdAt: now,
 		updatedAt: now
 	});
