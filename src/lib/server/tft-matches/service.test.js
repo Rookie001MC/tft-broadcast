@@ -156,7 +156,7 @@ async function seed(database) {
 
 /** @param {{ failedIndex?: number, unknownChampionIndex?: number }} [options] */
 function createGateway(options = {}) {
-	const fetchRecentMatches = vi.fn(async (identity) => ({
+	const fetchRecentMatches = vi.fn(async () => ({
 		puuid: selectedParticipant.puuid,
 		matches: Array.from({ length: 10 }, (_, index) => {
 			const matchId = `VN2_MATCH_${index + 1}`;
@@ -206,7 +206,7 @@ describe('TFT match discovery service', () => {
 
 	/** @type {Array<[string, (database: any) => Promise<unknown>, string]>} */
 	const discoveryPreconditions = [
-		['outside roster', async (db) => undefined, 'player-outsider'],
+		['outside roster', async () => undefined, 'player-outsider'],
 		[
 			'incomplete Riot identity',
 			async (db) => db.update(players).set({ riotTagline: null }),
