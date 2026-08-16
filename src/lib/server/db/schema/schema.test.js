@@ -18,10 +18,62 @@ describe('manual winner graphics schema', () => {
 			'graphicState',
 			'playerImportPreviews',
 			'firstOperatorClaim',
-			'tftMatchSettings'
+			'tftMatchSettings',
+			'tftMatchSnapshots'
 		]);
 
 		for (const name of tableNames) expect(schema[name]).toBeDefined();
+	});
+
+	test('defines immutable TFT match snapshot columns and indexes', () => {
+		const config = getTableConfig(schema.tftMatchSnapshots);
+		const requiredColumns = [
+			'id',
+			'riot_match_id',
+			'region',
+			'tournament_id',
+			'selected_player_id',
+			'active_catalog_snapshot_id',
+			'contract_version',
+			'payload_json',
+			'fetched_at',
+			'saved_at'
+		];
+
+		expect(config.columns.find((column) => column.name === 'id')).toMatchObject({
+			primary: true,
+			notNull: true
+		});
+		for (const name of requiredColumns) {
+			expect(config.columns.find((column) => column.name === name)).toMatchObject({
+				notNull: true
+			});
+		}
+		for (const name of ['fetched_at', 'saved_at']) {
+			expect(config.columns.find((column) => column.name === name)).toMatchObject({
+				dataType: 'date'
+			});
+		}
+		expect(config.indexes.map((index) => index.config.name)).toEqual(
+			expect.arrayContaining([
+				'tft_match_snapshots_match_idx',
+				'tft_match_snapshots_tournament_idx'
+			])
+		);
+	});
+
+	test('links editable Winner state to an optional snapshot with set-null deletion', () => {
+		const config = getTableConfig(schema.winnerBoardState);
+		const sourceColumn = config.columns.find(
+			(column) => column.name === 'source_tft_match_snapshot_id'
+		);
+		const foreignKey = config.foreignKeys.find((key) =>
+			key.reference().columns.some((column) => column.name === 'source_tft_match_snapshot_id')
+		);
+
+		expect(sourceColumn).toMatchObject({ notNull: false });
+		expect(foreignKey?.reference().foreignColumns[0].name).toBe('id');
+		expect(foreignKey?.onDelete).toBe('set null');
 	});
 
 	test.each([
