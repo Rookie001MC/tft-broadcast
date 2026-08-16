@@ -38,15 +38,21 @@ export const actions = {
 		requireAdmin(event);
 		try {
 			const { form, tournamentId } = await requireTournamentId(event);
-			const championIds = toStringValues(form.getAll('championIds'));
-			const champions = championIds.map((catalogChampionId) => ({
-				catalogChampionId,
-				starLevel: (() => {
-					const value = form.get(`starLevel:${catalogChampionId}`);
-					const starLevel = typeof value === 'string' && value ? Number(value) : Number.NaN;
-					return Number.isInteger(starLevel) ? starLevel : null;
-				})()
-			}));
+			const championIdValues = form.getAll('championIds');
+			const championStarLevelValues = form.getAll('championStarLevels');
+			if (championIdValues.length !== championStarLevelValues.length)
+				throw new Error('Champion instance fields are misaligned');
+			const champions = championIdValues.map((rawChampionId, index) => {
+				const catalogChampionId = text(rawChampionId);
+				const rawStarLevel = championStarLevelValues[index];
+				if (!catalogChampionId || typeof rawStarLevel !== 'string')
+					throw new Error('Champion instance fields are invalid');
+				const normalizedStarLevel = rawStarLevel.trim();
+				const starLevel = normalizedStarLevel === '' ? null : Number(normalizedStarLevel);
+				if (starLevel !== null && (!Number.isInteger(starLevel) || starLevel < 1 || starLevel > 3))
+					throw new Error('Star level must be between 1 and 3');
+				return { catalogChampionId, starLevel };
+			});
 			const board = await saveWinnerBoardState(db, {
 				tournamentId,
 				winnerPlayerId: text(form.get('winnerPlayerId')),

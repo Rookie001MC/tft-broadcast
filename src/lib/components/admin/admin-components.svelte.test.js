@@ -134,6 +134,13 @@ function searchableComposerProps() {
 					externalId: 'TFT16_Champion_Viego',
 					displayName: 'Viego',
 					iconPath: null
+				},
+				{
+					id: 'champion-helper',
+					externalId: 'TFT16_IvernMinion',
+					displayName: 'Ivern Minion',
+					iconPath: null,
+					isExcluded: true
 				}
 			],
 			augments: [
@@ -403,14 +410,14 @@ describe('winner graphic components', () => {
 		await expect.element(page.getByText('Ahri', { exact: true })).toBeVisible();
 	});
 
-	test('keeps selected champions in the summary and preview when filtering candidates', async () => {
+	test('keeps selected units and preview content when filtering available champions', async () => {
 		render(WinnerBoardComposer, searchableComposerProps());
 
-		await page.getByLabelText('Select Ahri').click();
+		await page.getByRole('button', { name: 'Add Ahri' }).click();
 		await page.getByLabelText('Search champions').fill('irelia');
-		await expect.element(page.getByLabelText('Select Ahri')).not.toBeInTheDocument();
+		await expect.element(page.getByRole('button', { name: 'Add Ahri' })).not.toBeInTheDocument();
 		await expect
-			.element(page.getByLabelText('Selected champions'))
+			.element(page.getByRole('region', { name: 'Selected units' }))
 			.toHaveTextContent(/Irelia.*Ahri/);
 		expect(
 			[...document.querySelectorAll('input[name="championIds"]')].map(
@@ -422,49 +429,92 @@ describe('winner graphic components', () => {
 		);
 	});
 
-	test('lists selected assets first and includes each champion star level in the summary', async () => {
+	test('separates available and selected assets within each resource tab', async () => {
 		render(WinnerBoardComposer, searchableComposerProps());
 
-		await page.getByLabelText('Select Viego').click();
-		await page.getByLabelText('Irelia star level').selectOptions('3');
+		await expect.element(page.getByRole('region', { name: 'Available champions' })).toBeVisible();
 		await expect
-			.element(page.getByLabelText('Selected champions'))
-			.toHaveTextContent('Irelia (3), Viego (???)');
-		expect(
-			[...document.querySelectorAll('input[aria-label^="Select "]')].map((input) =>
-				input.getAttribute('aria-label')
-			)
-		).toEqual(['Select Irelia', 'Select Viego', 'Select Ahri', 'Select Leona']);
+			.element(page.getByRole('region', { name: 'Selected units' }))
+			.toHaveTextContent('Irelia');
+		await expect.element(page.getByLabelText('Irelia unit 1 star level')).toHaveValue('3');
+		await expect.element(page.getByRole('button', { name: 'Add Irelia' })).toBeEnabled();
+		await page.getByRole('button', { name: 'Add Viego' }).click();
+		await expect.element(page.getByRole('button', { name: 'Remove Viego unit 2' })).toBeVisible();
 
 		await page.getByRole('tab', { name: 'Augments (0)' }).click();
-		await page.getByLabelText("Select Pandora's Items").click();
+		await expect.element(page.getByRole('region', { name: 'Available augments' })).toBeVisible();
+		await expect
+			.element(page.getByRole('region', { name: 'Selected augments' }))
+			.toHaveTextContent('None selected');
+		await page.getByRole('button', { name: "Add Pandora's Items" }).click();
+		await expect
+			.element(page.getByRole('button', { name: "Remove Pandora's Items" }))
+			.toBeVisible();
+		await expect.element(page.getByRole('button', { name: "Add Pandora's Items" })).toBeDisabled();
 		expect(
-			[...document.querySelectorAll('input[aria-label^="Select "]')].map((input) =>
-				input.getAttribute('aria-label')
+			[...document.querySelectorAll('input[name="championIds"]')].map(
+				(input) => /** @type {HTMLInputElement} */ (input).value
 			)
-		).toEqual([
-			"Select Pandora's Items",
-			'Select Jeweled Lotus',
-			'Select Cybernetic Uplink',
-			'Select Prismatic Pipeline'
-		]);
+		).toEqual(['champion-1', 'champion-4']);
+		expect(
+			[...document.querySelectorAll('input[name="augmentIds"]')].map(
+				(input) => /** @type {HTMLInputElement} */ (input).value
+			)
+		).toEqual(['augment-4']);
+	});
+
+	test('adds duplicate unit instances with independent stars and removes only one copy', async () => {
+		render(WinnerBoardComposer, searchableComposerProps());
+
+		await page.getByRole('button', { name: 'Add Ahri' }).click();
+		await page.getByRole('button', { name: 'Add Ahri' }).click();
+		const stars = page.getByLabelText(/Ahri unit \d+ star level/);
+		await stars.nth(0).selectOptions('1');
+		await stars.nth(1).selectOptions('3');
+
+		expect(
+			[...document.querySelectorAll('input[name="championIds"]')].map(
+				(input) => /** @type {HTMLInputElement} */ (input).value
+			)
+		).toEqual(['champion-1', 'champion-2', 'champion-2']);
+		expect(
+			[...document.querySelectorAll('input[name="championStarLevels"]')].map(
+				(input) => /** @type {HTMLInputElement} */ (input).value
+			)
+		).toEqual(['3', '1', '3']);
+
+		await page.getByRole('button', { name: 'Remove Ahri unit 2' }).click();
+		expect(
+			document.querySelectorAll('[aria-label^="Ahri unit "][aria-label$=" star level"]')
+		).toHaveLength(1);
+		await expect.element(page.getByLabelText(/Ahri unit \d+ star level/)).toHaveValue('3');
+	});
+
+	test('keeps excluded helper units available for manual selection', async () => {
+		render(WinnerBoardComposer, searchableComposerProps());
+
+		await expect.element(page.getByRole('button', { name: 'Add Ivern Minion' })).toBeEnabled();
+		await page.getByRole('button', { name: 'Add Ivern Minion' }).click();
+		await expect
+			.element(page.getByRole('region', { name: 'Selected units' }))
+			.toHaveTextContent('Ivern Minion');
 	});
 
 	test('allows unlimited champions and keeps selected augments removable at the three-choice limit', async () => {
 		render(WinnerBoardComposer, searchableComposerProps());
 
-		for (const champion of ['Ahri', 'Leona', 'Viego']) {
-			await page.getByLabelText(`Select ${champion}`).click();
+		for (const champion of ['Ahri', 'Leona', 'Viego', 'Viego']) {
+			await page.getByRole('button', { name: `Add ${champion}` }).click();
 		}
-		await expect.element(page.getByLabelText('Select Viego')).toBeChecked();
+		await expect.element(page.getByRole('button', { name: 'Add Viego' })).toBeEnabled();
 
 		await page.getByRole('tab', { name: 'Augments (0)' }).click();
 		for (const augment of ['Jeweled Lotus', 'Cybernetic Uplink', 'Prismatic Pipeline']) {
-			await page.getByLabelText(`Select ${augment}`).click();
+			await page.getByRole('button', { name: `Add ${augment}` }).click();
 		}
 
-		const fourthAugment = /** @type {HTMLInputElement} */ (
-			document.querySelector('input[aria-label="Select Pandora\'s Items"]')
+		const fourthAugment = /** @type {HTMLButtonElement} */ (
+			document.querySelector('button[aria-label="Add Pandora\'s Items"]')
 		);
 		expect(fourthAugment.disabled).toBe(true);
 		const descriptionId = fourthAugment.getAttribute('aria-describedby');
@@ -472,10 +522,8 @@ describe('winner graphic components', () => {
 		expect(document.getElementById(/** @type {string} */ (descriptionId))?.textContent).toMatch(
 			/maximum of three augments/i
 		);
-		const selectedAugment = page.getByLabelText('Select Jeweled Lotus');
-		await expect.element(selectedAugment).not.toBeDisabled();
-		await selectedAugment.click();
-		await expect.element(selectedAugment).not.toBeChecked();
+		await page.getByRole('button', { name: 'Remove Jeweled Lotus' }).click();
+		await expect.element(fourthAugment).toBeEnabled();
 	});
 
 	test('disables Live-on when local fields are dirty until Save succeeds', async () => {
