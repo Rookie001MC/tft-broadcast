@@ -168,6 +168,22 @@ describe('inspectPlayerBundle', () => {
 		]);
 	});
 
+	test('matches images named with the original Riot ID hash separator', async () => {
+		const preview = await inspectPlayerBundle(
+			bundle({
+				'players.csv': csv(['Nguyen Van A,Display A,EarlGreyTeemo#sip']),
+				'player_images/EarlGreyTeemo#SIP.png': ONE_BY_ONE_PNG
+			}),
+			[]
+		);
+
+		expect(preview.errors).toEqual([]);
+		expect(preview.rows[0]).toMatchObject({
+			riotId: 'EarlGreyTeemo#sip',
+			image: { path: 'player_images/EarlGreyTeemo#SIP.png' }
+		});
+	});
+
 	test('reports duplicate Riot IDs and duplicate display names using lowercase keys', async () => {
 		const preview = await inspectPlayerBundle(
 			bundle({
