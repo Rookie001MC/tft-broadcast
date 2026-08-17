@@ -2,6 +2,7 @@ import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 import { catalogAugments, catalogChampions } from './catalog.js';
 import { players } from './players.js';
 import { tournaments } from './tournaments.js';
+import { tftMatchSnapshots } from './tft-matches.js';
 
 export const winnerBoardState = sqliteTable('winner_board_state', {
 	id: text('id').primaryKey(),
@@ -12,6 +13,10 @@ export const winnerBoardState = sqliteTable('winner_board_state', {
 		.notNull()
 		.references(() => players.id),
 	title: text('title').notNull(),
+	sourceTftMatchSnapshotId: text('source_tft_match_snapshot_id').references(
+		() => tftMatchSnapshots.id,
+		{ onDelete: 'set null' }
+	),
 	createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
 	updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull()
 });

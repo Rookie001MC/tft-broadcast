@@ -17,6 +17,7 @@ import {
 	isPublicationMediaFilename,
 	preparePublicationMedia
 } from './publication-media.js';
+import { insertTftMatchSnapshot } from '../tft-matches/snapshot-repository.js';
 
 /**
  * @import {
@@ -38,7 +39,8 @@ let writeTail = Promise.resolve();
  *   winnerPlayerId: string,
  *   title: string,
  *   champions: Array<{ catalogChampionId: string, starLevel: number | null }>,
- *   augmentIds: string[]
+ *   augmentIds: string[],
+ *   sourceSnapshot?: import('../tft-matches/snapshot-repository.js').TftMatchSnapshotSource
  * }} SaveWinnerBoardStateInput
  */
 
@@ -103,10 +105,6 @@ function validateInputShape(input) {
 		throw new Error('Winner board state is invalid');
 	if (input.champions.length === 0) throw new Error('At least one champion is required');
 	if (input.augmentIds.length > 3) throw new Error('At most three augments are allowed');
-	assertUnique(
-		input.champions.map((item) => item.catalogChampionId),
-		'Champion IDs must be unique'
-	);
 	assertUnique(input.augmentIds, 'Augment IDs must be unique');
 	for (const { starLevel } of input.champions) {
 		if (starLevel !== null && (!Number.isInteger(starLevel) || starLevel < 1 || starLevel > 3))
@@ -156,16 +154,17 @@ async function validateTournamentScope(transaction, scope) {
 		.limit(1);
 	if (!rosterEntry) throw new Error('Winner must belong to tournament roster');
 
+	const uniqueChampionIds = [...new Set(scope.championIds)];
 	const scopedChampions = await transaction
 		.select({ id: catalogChampions.id })
 		.from(catalogChampions)
 		.where(
 			and(
 				eq(catalogChampions.catalogSnapshotId, activeCatalogSnapshotId),
-				inArray(catalogChampions.id, scope.championIds)
+				inArray(catalogChampions.id, uniqueChampionIds)
 			)
 		);
-	if (scopedChampions.length !== scope.championIds.length)
+	if (scopedChampions.length !== uniqueChampionIds.length)
 		throw new Error('Champion does not belong to active catalog');
 
 	if (scope.augmentIds.length > 0) {
@@ -282,6 +281,9 @@ function inputFromState(state) {
  */
 async function replaceState(transaction, input) {
 	const now = new Date();
+	const sourceTftMatchSnapshotId = input.sourceSnapshot
+		? await insertTftMatchSnapshot(transaction, input.sourceSnapshot)
+		: null;
 	await validateTournamentScope(transaction, validationScope(input));
 	await transaction.delete(winnerBoardState).where(eq(winnerBoardState.id, CURRENT_STATE_ID));
 	await transaction.insert(winnerBoardState).values({
@@ -289,6 +291,7 @@ async function replaceState(transaction, input) {
 		tournamentId: input.tournamentId,
 		winnerPlayerId: input.winnerPlayerId,
 		title: input.title,
+		sourceTftMatchSnapshotId,
 		createdAt: now,
 		updatedAt: now
 	});
@@ -364,7 +367,6 @@ function parsePublicationPayload(json) {
 		)
 			throw new Error(INVALID_PUBLICATION_PAYLOAD);
 
-		const championIds = [];
 		for (const [displayOrder, champion] of value.champions.entries()) {
 			if (
 				!isRecord(champion) ||
@@ -378,7 +380,6 @@ function parsePublicationPayload(json) {
 						champion.starLevel > 3))
 			)
 				throw new Error(INVALID_PUBLICATION_PAYLOAD);
-			championIds.push(champion.id);
 		}
 		const augmentIds = [];
 		for (const [displayOrder, augment] of value.augments.entries()) {
@@ -392,8 +393,6 @@ function parsePublicationPayload(json) {
 				throw new Error(INVALID_PUBLICATION_PAYLOAD);
 			augmentIds.push(augment.id);
 		}
-		if (new Set(championIds).size !== championIds.length)
-			throw new Error(INVALID_PUBLICATION_PAYLOAD);
 		if (new Set(augmentIds).size !== augmentIds.length)
 			throw new Error(INVALID_PUBLICATION_PAYLOAD);
 		return /** @type {WinnerBoardPublicationPayload} */ (value);

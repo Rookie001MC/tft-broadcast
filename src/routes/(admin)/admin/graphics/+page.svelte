@@ -115,6 +115,7 @@
 				roster={data.roster}
 				activeCatalog={data.activeCatalog}
 				savedBoard={data.savedBoard}
+				tftMatchApi={data.tftMatchApi}
 				livePublicationId={data.livePublicationId}
 				{form}
 			/>

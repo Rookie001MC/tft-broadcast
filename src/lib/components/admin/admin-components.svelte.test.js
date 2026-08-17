@@ -65,6 +65,8 @@ const graphicsPageData = {
 			displayName: 'EarlGreyTeemo',
 			fullName: 'Earl Grey Teemo',
 			riotId: 'EarlGreyTeemo#sip',
+			riotGameName: 'EarlGreyTeemo',
+			riotTagline: 'sip',
 			imagePath: null
 		}
 	],
@@ -74,7 +76,8 @@ const graphicsPageData = {
 		augments: []
 	},
 	savedBoard: composerBoard,
-	livePublicationId: 'publication-1'
+	livePublicationId: 'publication-1',
+	tftMatchApi: { enabled: true, region: 'VN2', reason: null }
 };
 
 function composerProps(overrides = {}) {
@@ -86,6 +89,8 @@ function composerProps(overrides = {}) {
 				displayName: 'EarlGreyTeemo',
 				fullName: 'Earl Grey Teemo',
 				riotId: 'EarlGreyTeemo#sip',
+				riotGameName: 'EarlGreyTeemo',
+				riotTagline: 'sip',
 				imagePath: 'player-images/managed.png'
 			}
 		],
@@ -102,6 +107,7 @@ function composerProps(overrides = {}) {
 		},
 		savedBoard: composerBoard,
 		livePublicationId: null,
+		tftMatchApi: { enabled: true, region: 'VN2', reason: null },
 		...overrides
 	};
 }
@@ -134,6 +140,13 @@ function searchableComposerProps() {
 					externalId: 'TFT16_Champion_Viego',
 					displayName: 'Viego',
 					iconPath: null
+				},
+				{
+					id: 'champion-helper',
+					externalId: 'TFT16_IvernMinion',
+					displayName: 'Ivern Minion',
+					iconPath: null,
+					isExcluded: true
 				}
 			],
 			augments: [
@@ -373,6 +386,156 @@ describe('winner graphic components', () => {
 		expect(document.querySelector('input[name="boardId"]')).toBeNull();
 	});
 
+	test('imports an API board into the existing save form without replacing title or augments', async () => {
+		const apiBoard = {
+			available: true,
+			matchId: 'VN2_match-import',
+			completedAt: '2026-08-16T01:00:00.000Z',
+			placement: 2,
+			gameType: 'Ranked',
+			setNumber: 15,
+			setCoreName: 'K.O. Coliseum',
+			champions: [
+				{
+					catalogChampionId: 'champion-1',
+					externalId: 'TFT15_Irelia',
+					displayName: 'Irelia',
+					iconPath: null,
+					starLevel: 1,
+					displayOrder: 0
+				},
+				{
+					catalogChampionId: 'champion-1',
+					externalId: 'TFT15_Irelia',
+					displayName: 'Irelia',
+					iconPath: null,
+					starLevel: 3,
+					displayOrder: 1
+				}
+			]
+		};
+		vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+			new Response(
+				JSON.stringify({
+					token: 'preview-token',
+					selectedPlayer: {
+						id: 'player-2',
+						displayName: 'Second Player',
+						riotId: 'Second#VN2'
+					},
+					matches: [apiBoard]
+				}),
+				{ status: 200, headers: { 'Content-Type': 'application/json' } }
+			)
+		);
+		const existingAugment = {
+			id: 'augment-1',
+			displayName: 'Jeweled Lotus',
+			iconPath: null,
+			displayOrder: 0
+		};
+		const importedProps = composerProps({
+			roster: [
+				...composerProps().roster,
+				{
+					id: 'player-2',
+					displayName: 'Second Player',
+					fullName: 'Second Player',
+					riotId: 'Second#VN2',
+					riotGameName: 'Second',
+					riotTagline: 'VN2',
+					imagePath: null
+				}
+			],
+			activeCatalog: {
+				...composerProps().activeCatalog,
+				augments: [existingAugment]
+			},
+			savedBoard: { ...composerBoard, augments: [existingAugment] }
+		});
+		const rendered = render(WinnerBoardComposer, importedProps);
+
+		const fetchControl = page.getByRole('button', { name: 'Fetch API Data' });
+		const controlRow = document.querySelector('[data-winner-control-row]');
+		expect(controlRow?.contains(requiredButton(/^Fetch API Data$/))).toBe(true);
+		await fetchControl.click();
+		await page.getByRole('button', { name: /Second Player/ }).click();
+		await page.getByRole('button', { name: /VN2_match-import/ }).click();
+		await page.getByRole('button', { name: 'Use this board' }).click();
+
+		await expect.element(page.getByLabelText('Graphic title')).toHaveValue('Grand Final Winner');
+		expect(
+			/** @type {HTMLSelectElement} */ (document.querySelector('select[name="winnerPlayerId"]'))
+				.value
+		).toBe('player-2');
+		expect(
+			[...document.querySelectorAll('input[name="championIds"]')].map(
+				(input) => /** @type {HTMLInputElement} */ (input).value
+			)
+		).toEqual(['champion-1', 'champion-1']);
+		expect(
+			[...document.querySelectorAll('input[name="championStarLevels"]')].map(
+				(input) => /** @type {HTMLInputElement} */ (input).value
+			)
+		).toEqual(['1', '3']);
+		expect(
+			/** @type {HTMLInputElement} */ (document.querySelector('input[name="augmentIds"]')).value
+		).toBe('augment-1');
+		expect(document.querySelectorAll('input[name="tftPreviewToken"]')).toHaveLength(1);
+		expect(document.querySelectorAll('input[name="tftMatchId"]')).toHaveLength(1);
+		await expect.element(page.getByText('API board loaded. Review it, then Save.')).toBeVisible();
+		await expect.element(page.getByRole('button', { name: 'Save board' })).toBeEnabled();
+		await expect.element(page.getByRole('switch', { name: 'Live graphic' })).toBeDisabled();
+		expect(document.activeElement).toBe(document.querySelector('[data-composer-review]'));
+
+		await rendered.rerender({
+			...importedProps,
+			form: {
+				action: 'saveBoard',
+				message: 'This TFT match preview expired. Fetch the match again.'
+			}
+		});
+		await expect
+			.element(page.getByText('This TFT match preview expired. Fetch the match again.'))
+			.toBeVisible();
+		expect(document.querySelectorAll('input[name="tftPreviewToken"]')).toHaveLength(1);
+		await rendered.rerender({
+			...importedProps,
+			form: { action: 'saveBoard', message: 'Winner board details are invalid.' }
+		});
+		expect(document.querySelectorAll('input[name="tftPreviewToken"]')).toHaveLength(1);
+
+		const savedApiBoard = {
+			...composerBoard,
+			updatedAt: new Date('2026-08-16T02:00:00.000Z'),
+			winner: {
+				id: 'player-2',
+				displayName: 'Second Player',
+				riotId: 'Second#VN2',
+				imagePath: null
+			},
+			champions: apiBoard.champions.map((champion) => ({
+				id: champion.catalogChampionId,
+				displayName: champion.displayName,
+				iconPath: null,
+				starLevel: champion.starLevel,
+				displayOrder: champion.displayOrder
+			})),
+			augments: [existingAugment]
+		};
+		await rendered.rerender({
+			...importedProps,
+			savedBoard: savedApiBoard,
+			form: { action: 'saveBoard', board: savedApiBoard }
+		});
+		expect(document.querySelectorAll('input[name="tftPreviewToken"]')).toHaveLength(0);
+		await expect
+			.element(page.getByText('API board loaded. Review it, then Save.'))
+			.not.toBeInTheDocument();
+		await page.getByLabelText('Graphic title').fill('Manual follow-up');
+		expect(document.querySelectorAll('input[name="tftPreviewToken"]')).toHaveLength(0);
+	});
+
 	test('switches candidate tabs by keyboard and retains independent, type-scoped searches', async () => {
 		render(WinnerBoardComposer, searchableComposerProps());
 
@@ -403,14 +566,14 @@ describe('winner graphic components', () => {
 		await expect.element(page.getByText('Ahri', { exact: true })).toBeVisible();
 	});
 
-	test('keeps selected champions in the summary and preview when filtering candidates', async () => {
+	test('keeps selected units and preview content when filtering available champions', async () => {
 		render(WinnerBoardComposer, searchableComposerProps());
 
-		await page.getByLabelText('Select Ahri').click();
+		await page.getByRole('button', { name: 'Add Ahri' }).click();
 		await page.getByLabelText('Search champions').fill('irelia');
-		await expect.element(page.getByLabelText('Select Ahri')).not.toBeInTheDocument();
+		await expect.element(page.getByRole('button', { name: 'Add Ahri' })).not.toBeInTheDocument();
 		await expect
-			.element(page.getByLabelText('Selected champions'))
+			.element(page.getByRole('region', { name: 'Selected units' }))
 			.toHaveTextContent(/Irelia.*Ahri/);
 		expect(
 			[...document.querySelectorAll('input[name="championIds"]')].map(
@@ -422,49 +585,92 @@ describe('winner graphic components', () => {
 		);
 	});
 
-	test('lists selected assets first and includes each champion star level in the summary', async () => {
+	test('separates available and selected assets within each resource tab', async () => {
 		render(WinnerBoardComposer, searchableComposerProps());
 
-		await page.getByLabelText('Select Viego').click();
-		await page.getByLabelText('Irelia star level').selectOptions('3');
+		await expect.element(page.getByRole('region', { name: 'Available champions' })).toBeVisible();
 		await expect
-			.element(page.getByLabelText('Selected champions'))
-			.toHaveTextContent('Irelia (3), Viego (???)');
-		expect(
-			[...document.querySelectorAll('input[aria-label^="Select "]')].map((input) =>
-				input.getAttribute('aria-label')
-			)
-		).toEqual(['Select Irelia', 'Select Viego', 'Select Ahri', 'Select Leona']);
+			.element(page.getByRole('region', { name: 'Selected units' }))
+			.toHaveTextContent('Irelia');
+		await expect.element(page.getByLabelText('Irelia unit 1 star level')).toHaveValue('3');
+		await expect.element(page.getByRole('button', { name: 'Add Irelia' })).toBeEnabled();
+		await page.getByRole('button', { name: 'Add Viego' }).click();
+		await expect.element(page.getByRole('button', { name: 'Remove Viego unit 2' })).toBeVisible();
 
 		await page.getByRole('tab', { name: 'Augments (0)' }).click();
-		await page.getByLabelText("Select Pandora's Items").click();
+		await expect.element(page.getByRole('region', { name: 'Available augments' })).toBeVisible();
+		await expect
+			.element(page.getByRole('region', { name: 'Selected augments' }))
+			.toHaveTextContent('None selected');
+		await page.getByRole('button', { name: "Add Pandora's Items" }).click();
+		await expect
+			.element(page.getByRole('button', { name: "Remove Pandora's Items" }))
+			.toBeVisible();
+		await expect.element(page.getByRole('button', { name: "Add Pandora's Items" })).toBeDisabled();
 		expect(
-			[...document.querySelectorAll('input[aria-label^="Select "]')].map((input) =>
-				input.getAttribute('aria-label')
+			[...document.querySelectorAll('input[name="championIds"]')].map(
+				(input) => /** @type {HTMLInputElement} */ (input).value
 			)
-		).toEqual([
-			"Select Pandora's Items",
-			'Select Jeweled Lotus',
-			'Select Cybernetic Uplink',
-			'Select Prismatic Pipeline'
-		]);
+		).toEqual(['champion-1', 'champion-4']);
+		expect(
+			[...document.querySelectorAll('input[name="augmentIds"]')].map(
+				(input) => /** @type {HTMLInputElement} */ (input).value
+			)
+		).toEqual(['augment-4']);
+	});
+
+	test('adds duplicate unit instances with independent stars and removes only one copy', async () => {
+		render(WinnerBoardComposer, searchableComposerProps());
+
+		await page.getByRole('button', { name: 'Add Ahri' }).click();
+		await page.getByRole('button', { name: 'Add Ahri' }).click();
+		const stars = page.getByLabelText(/Ahri unit \d+ star level/);
+		await stars.nth(0).selectOptions('1');
+		await stars.nth(1).selectOptions('3');
+
+		expect(
+			[...document.querySelectorAll('input[name="championIds"]')].map(
+				(input) => /** @type {HTMLInputElement} */ (input).value
+			)
+		).toEqual(['champion-1', 'champion-2', 'champion-2']);
+		expect(
+			[...document.querySelectorAll('input[name="championStarLevels"]')].map(
+				(input) => /** @type {HTMLInputElement} */ (input).value
+			)
+		).toEqual(['3', '1', '3']);
+
+		await page.getByRole('button', { name: 'Remove Ahri unit 2' }).click();
+		expect(
+			document.querySelectorAll('[aria-label^="Ahri unit "][aria-label$=" star level"]')
+		).toHaveLength(1);
+		await expect.element(page.getByLabelText(/Ahri unit \d+ star level/)).toHaveValue('3');
+	});
+
+	test('keeps excluded helper units available for manual selection', async () => {
+		render(WinnerBoardComposer, searchableComposerProps());
+
+		await expect.element(page.getByRole('button', { name: 'Add Ivern Minion' })).toBeEnabled();
+		await page.getByRole('button', { name: 'Add Ivern Minion' }).click();
+		await expect
+			.element(page.getByRole('region', { name: 'Selected units' }))
+			.toHaveTextContent('Ivern Minion');
 	});
 
 	test('allows unlimited champions and keeps selected augments removable at the three-choice limit', async () => {
 		render(WinnerBoardComposer, searchableComposerProps());
 
-		for (const champion of ['Ahri', 'Leona', 'Viego']) {
-			await page.getByLabelText(`Select ${champion}`).click();
+		for (const champion of ['Ahri', 'Leona', 'Viego', 'Viego']) {
+			await page.getByRole('button', { name: `Add ${champion}` }).click();
 		}
-		await expect.element(page.getByLabelText('Select Viego')).toBeChecked();
+		await expect.element(page.getByRole('button', { name: 'Add Viego' })).toBeEnabled();
 
 		await page.getByRole('tab', { name: 'Augments (0)' }).click();
 		for (const augment of ['Jeweled Lotus', 'Cybernetic Uplink', 'Prismatic Pipeline']) {
-			await page.getByLabelText(`Select ${augment}`).click();
+			await page.getByRole('button', { name: `Add ${augment}` }).click();
 		}
 
-		const fourthAugment = /** @type {HTMLInputElement} */ (
-			document.querySelector('input[aria-label="Select Pandora\'s Items"]')
+		const fourthAugment = /** @type {HTMLButtonElement} */ (
+			document.querySelector('button[aria-label="Add Pandora\'s Items"]')
 		);
 		expect(fourthAugment.disabled).toBe(true);
 		const descriptionId = fourthAugment.getAttribute('aria-describedby');
@@ -472,10 +678,8 @@ describe('winner graphic components', () => {
 		expect(document.getElementById(/** @type {string} */ (descriptionId))?.textContent).toMatch(
 			/maximum of three augments/i
 		);
-		const selectedAugment = page.getByLabelText('Select Jeweled Lotus');
-		await expect.element(selectedAugment).not.toBeDisabled();
-		await selectedAugment.click();
-		await expect.element(selectedAugment).not.toBeChecked();
+		await page.getByRole('button', { name: 'Remove Jeweled Lotus' }).click();
+		await expect.element(fourthAugment).toBeEnabled();
 	});
 
 	test('disables Live-on when local fields are dirty until Save succeeds', async () => {

@@ -34,6 +34,8 @@ async function resetDatabase(database) {
 		'graphic_state',
 		'winner_board_publications',
 		'winner_board_state',
+		'tft_match_snapshots',
+		'tft_match_settings',
 		'tournament_players',
 		'tournaments',
 		'catalog_augments',
@@ -235,6 +237,14 @@ test('operator workflow publishes and hides an already-open broadcast source', a
 		await expect(admin.getByRole('heading', { level: 1, name: heading }).last()).toBeVisible();
 	}
 
+	await admin.goto('/admin/settings');
+	const regionSelect = admin.getByLabel('TFT platform region');
+	await expect(regionSelect.locator('option')).toHaveCount(16);
+	await regionSelect.selectOption('VN2');
+	await admin.getByRole('button', { name: 'Save region' }).click();
+	await admin.reload();
+	await expect(admin.getByLabel('TFT platform region')).toHaveValue('VN2');
+
 	await admin.goto('/admin/tournaments');
 	await admin.getByLabel('Tournament name').fill('HCMUSEC TFT Finals');
 	await admin.getByRole('button', { name: 'Create', exact: true }).click();
@@ -316,6 +326,12 @@ test('operator workflow publishes and hides an already-open broadcast source', a
 	await expect(augmentCatalog.getByText('Test Champion', { exact: true })).toHaveCount(0);
 
 	await admin.goto(`/admin/graphics?tournament=${tournamentId}`);
+	const disabledApiControl = admin.getByRole('button', { name: 'Fetch API Data' });
+	await expect(disabledApiControl).toHaveAttribute('aria-disabled', 'true');
+	await disabledApiControl.hover();
+	await expect(admin.getByRole('tooltip')).toContainText(
+		'A Riot API key is required to fetch TFT matches.'
+	);
 
 	const broadcast = await context.newPage();
 	await broadcast.goto('/gfx');
@@ -329,43 +345,62 @@ test('operator workflow publishes and hides an already-open broadcast source', a
 	expect(unchangedInitialVersion.status()).toBe(304);
 
 	await admin.getByLabel('Graphic title').fill('Grand Final Winner');
-	await admin.getByLabel('Select Test Champion').check();
+	await admin.getByRole('button', { name: 'Add Test Champion' }).click();
+	await admin.getByRole('button', { name: 'Add Test Champion' }).click();
 	await admin.getByLabel('Search champions').fill('does-not-match');
-	await expect(admin.getByLabel('Select Test Champion')).toHaveCount(0);
-	await expect(admin.getByLabel('Selected champions')).toContainText('Test Champion');
+	await expect(admin.getByRole('button', { name: 'Add Test Champion' })).toHaveCount(0);
+	await expect(admin.getByRole('region', { name: 'Selected units' })).toContainText(
+		'Test Champion'
+	);
 	await expect(
 		admin.getByTestId('winner-graphic-frame').getByText('Test Champion', { exact: true })
-	).toBeVisible();
+	).toHaveCount(2);
 	await admin.getByLabel('Search champions').fill('');
-	await admin.getByLabel('Test Champion star level').selectOption('3');
+	await admin.getByLabel('Test Champion unit 1 star level').selectOption('1');
+	await admin.getByLabel('Test Champion unit 2 star level').selectOption('3');
 	await admin.getByRole('tab', { name: /Augments/ }).click();
-	await admin.getByRole('checkbox', { name: 'Test Augment', exact: true }).check();
-	await admin.getByRole('checkbox', { name: 'Test Augment Two', exact: true }).check();
-	await admin.getByRole('checkbox', { name: 'Test Augment Three', exact: true }).check();
+	await admin.getByRole('button', { name: 'Add Test Augment', exact: true }).click();
+	await admin.getByRole('button', { name: 'Add Test Augment Two', exact: true }).click();
+	await admin.getByRole('button', { name: 'Add Test Augment Three', exact: true }).click();
 	await expect(
-		admin.getByRole('checkbox', { name: 'Test Augment Four', exact: true })
+		admin.getByRole('button', { name: 'Add Test Augment Four', exact: true })
 	).toBeDisabled();
-	await admin.getByRole('checkbox', { name: 'Test Augment Two', exact: true }).uncheck();
+	await admin.getByRole('button', { name: 'Remove Test Augment Two', exact: true }).click();
 	await expect(
-		admin.getByRole('checkbox', { name: 'Test Augment Four', exact: true })
+		admin.getByRole('button', { name: 'Add Test Augment Four', exact: true })
 	).toBeEnabled();
-	await admin.getByRole('checkbox', { name: 'Test Augment Three', exact: true }).uncheck();
+	await admin.getByRole('button', { name: 'Remove Test Augment Three', exact: true }).click();
 	await expect(admin.getByText('Grand Final Winner', { exact: true })).toBeVisible();
+	await expect(admin.getByText('★', { exact: true })).toBeVisible();
 	await expect(admin.getByText('★★★', { exact: true })).toBeVisible();
 	const liveSwitch = admin.getByRole('switch', { name: 'Live graphic' });
 	await expect(liveSwitch).toBeDisabled();
 	await expect(admin.getByText('Save changes before taking the board live.')).toBeVisible();
 	await admin.getByRole('button', { name: 'Save board' }).click();
 	await expect(admin.getByText('Saved', { exact: true })).toBeVisible();
-	await expect(liveSwitch).toBeEnabled();
 
-	await liveSwitch.click();
-	await expect(liveSwitch).toHaveAttribute('aria-checked', 'true');
+	await admin.reload();
+	await expect(admin.getByRole('region', { name: 'Selected units' })).toContainText(
+		'Test Champion'
+	);
+	await expect(admin.getByLabel('Test Champion unit 1 star level')).toHaveValue('1');
+	await expect(admin.getByLabel('Test Champion unit 2 star level')).toHaveValue('3');
+	await expect(
+		admin.getByTestId('winner-graphic-frame').getByText('Test Champion', { exact: true })
+	).toHaveCount(2);
+	const reloadedLiveSwitch = admin.getByRole('switch', { name: 'Live graphic' });
+	await expect(reloadedLiveSwitch).toBeEnabled();
+
+	await reloadedLiveSwitch.click();
+	await expect(reloadedLiveSwitch).toHaveAttribute('aria-checked', 'true');
 	await expect(admin.getByText('Live', { exact: true })).toBeVisible();
 	await expect(broadcast.getByText('Player Two', { exact: true })).toBeVisible({ timeout: 4000 });
 	await expect(broadcast.getByText('Grand Final Winner', { exact: true })).toBeVisible();
+	await expect(broadcast.getByText('Test Champion', { exact: true })).toHaveCount(2);
+	await expect(broadcast.getByText('★', { exact: true })).toBeVisible();
+	await expect(broadcast.getByText('★★★', { exact: true })).toBeVisible();
 	const publishedImages = broadcast.locator('img[src^="/media/publications/"]');
-	await expect(publishedImages).toHaveCount(2);
+	await expect(publishedImages).toHaveCount(3);
 	const firstPublicationImages = await publishedImages.evaluateAll((images) =>
 		images.flatMap((image) => {
 			const source = image.getAttribute('src');
@@ -441,37 +476,110 @@ test('operator workflow publishes and hides an already-open broadcast source', a
 
 	await expect(broadcast.getByText('Player Two', { exact: true })).toBeVisible();
 	await expect(broadcast.getByText('Player Two Maintained', { exact: true })).not.toBeVisible();
-	await expect(broadcast.getByText('Test Champion', { exact: true })).toBeVisible();
+	await expect(broadcast.getByText('Test Champion', { exact: true })).toHaveCount(2);
 	await expect(broadcast.getByText('Corrected Champion', { exact: true })).not.toBeVisible();
 
 	const freshBroadcast = await context.newPage();
 	await freshBroadcast.goto('/gfx');
 	await expect(freshBroadcast.getByText('Player Two', { exact: true })).toBeVisible();
-	await expect(freshBroadcast.getByText('Test Champion', { exact: true })).toBeVisible();
+	await expect(freshBroadcast.getByText('Test Champion', { exact: true })).toHaveCount(2);
 	await expect(freshBroadcast.getByText('Test Augment', { exact: true })).toBeVisible();
 	await expect(
 		freshBroadcast.getByText('Player Two Maintained', { exact: true })
 	).not.toBeVisible();
 	await expect(freshBroadcast.getByText('Corrected Champion', { exact: true })).not.toBeVisible();
-	await expect(freshBroadcast.locator('img[src^="/media/publications/"]')).toHaveCount(2);
+	await expect(freshBroadcast.locator('img[src^="/media/publications/"]')).toHaveCount(3);
+
+	const enableResponse = await request.post('/__e2e/enable-tft-match');
+	expect(enableResponse.status()).toBe(202);
+	await expect
+		.poll(
+			async () => {
+				try {
+					const response = await request.get('/__e2e/tft-match-mode');
+					return response.ok() ? (await response.json()).mode : 'unavailable';
+				} catch {
+					return 'restarting';
+				}
+			},
+			{ timeout: 30_000 }
+		)
+		.toBe('enabled');
 
 	await admin.goto(`/admin/graphics?tournament=${tournamentId}`);
+	await expect(admin.getByRole('button', { name: 'Fetch API Data' })).not.toHaveAttribute(
+		'aria-disabled',
+		'true'
+	);
 	await expect(admin.getByRole('switch', { name: 'Live graphic' })).toHaveAttribute(
 		'aria-checked',
 		'true'
 	);
 	await admin.getByLabel('Graphic title').fill('Championship Winner');
+	await admin.getByRole('button', { name: 'Fetch API Data' }).click();
+	await admin.getByRole('button', { name: /Player Two Maintained/ }).click();
+	await admin.getByRole('button', { name: /VN2_E2E_MATCH_1/ }).click();
+	const importDialog = admin.getByRole('dialog', {
+		name: 'Please double-check this is the correct board.'
+	});
+	await expect(
+		importDialog.getByRole('heading', { name: 'Please double-check this is the correct board.' })
+	).toBeVisible();
+	await expect(importDialog).toContainText('Player Two Maintained');
+	await expect(importDialog.getByText('Corrected Champion', { exact: true })).toHaveCount(2);
+	await expect(importDialog.getByText('★★', { exact: true })).toBeVisible();
+	await expect(importDialog.getByText('★', { exact: true })).toBeVisible();
+	await importDialog.getByRole('button', { name: 'Use this board' }).click();
+	await expect(admin.getByLabel('Graphic title')).toHaveValue('Championship Winner');
+	await expect(admin.locator('input[name="augmentIds"][value="e2e-augment"]')).toHaveCount(1);
+	await expect(admin.getByLabel('Corrected Champion unit 1 star level')).toHaveValue('2');
+	await expect(admin.getByLabel('Corrected Champion unit 2 star level')).toHaveValue('1');
+	await expect(admin.getByText('API board loaded. Review it, then Save.')).toBeVisible();
+	await expect(admin.getByRole('switch', { name: 'Live graphic' })).toHaveAttribute(
+		'aria-checked',
+		'true'
+	);
+	const beforeApiSave = await withFixtureDatabase(async (database) => {
+		const snapshots = await database.execute('SELECT COUNT(*) AS count FROM tft_match_snapshots');
+		const winner = await database.execute(
+			'SELECT title, source_tft_match_snapshot_id FROM winner_board_state LIMIT 1'
+		);
+		return { snapshotCount: Number(snapshots.rows[0]?.count), winner: winner.rows[0] };
+	});
+	expect(beforeApiSave.snapshotCount).toBe(0);
+	expect(beforeApiSave.winner?.source_tft_match_snapshot_id).toBeNull();
+	expect(beforeApiSave.winner?.title).toBe('Grand Final Winner');
+
+	const apiSaveResponse = admin.waitForResponse(
+		(response) => response.url().includes('/saveBoard') && response.request().method() === 'POST'
+	);
 	await admin.getByRole('button', { name: 'Save board' }).click();
+	expect((await apiSaveResponse).ok()).toBe(true);
+	await expect(admin.getByText('API board loaded. Review it, then Save.')).toHaveCount(0);
+	const persistedApiSource = await withFixtureDatabase(async (database) => {
+		const snapshots = await database.execute('SELECT id, payload_json FROM tft_match_snapshots');
+		const winner = await database.execute(
+			'SELECT source_tft_match_snapshot_id FROM winner_board_state LIMIT 1'
+		);
+		return { snapshots: snapshots.rows, winner: winner.rows[0] };
+	});
+	expect(persistedApiSource.snapshots).toHaveLength(1);
+	const persistedSnapshot = JSON.parse(String(persistedApiSource.snapshots[0]?.payload_json));
+	expect(persistedSnapshot.participants).toHaveLength(8);
+	expect(JSON.stringify(persistedSnapshot)).not.toContain('augments');
+	expect(persistedApiSource.winner?.source_tft_match_snapshot_id).toBe(
+		persistedApiSource.snapshots[0]?.id
+	);
 	await expect(broadcast.getByText('Championship Winner', { exact: true })).toBeVisible({
 		timeout: 4000
 	});
 	await expect(broadcast.getByText('Player Two Maintained', { exact: true })).toBeVisible();
-	await expect(broadcast.getByText('Corrected Champion', { exact: true })).toBeVisible();
+	await expect(broadcast.getByText('Corrected Champion', { exact: true })).toHaveCount(2);
 	await expect(broadcast.getByText('Test Champion', { exact: true })).not.toBeVisible();
-	await expect(freshBroadcast.getByText('Corrected Champion', { exact: true })).toBeVisible();
+	await expect(freshBroadcast.getByText('Corrected Champion', { exact: true })).toHaveCount(2);
 	await expect(freshBroadcast.getByText('Test Champion', { exact: true })).not.toBeVisible();
 	const republishedImages = broadcast.locator('img[src^="/media/publications/"]');
-	await expect(republishedImages).toHaveCount(2);
+	await expect(republishedImages).toHaveCount(3);
 	const secondPublicationImages = await republishedImages.evaluateAll((images) =>
 		images.flatMap((image) => {
 			const source = image.getAttribute('src');
@@ -490,7 +598,10 @@ test('operator workflow publishes and hides an already-open broadcast source', a
 		return JSON.parse(String(result.rows[0]?.render_payload_json));
 	});
 	expect(originalPublicationPayload).toMatchObject({
-		champions: [expect.objectContaining({ displayName: 'Test Champion' })]
+		champions: [
+			expect.objectContaining({ displayName: 'Test Champion', starLevel: 1, displayOrder: 0 }),
+			expect.objectContaining({ displayName: 'Test Champion', starLevel: 3, displayOrder: 1 })
+		]
 	});
 	expect(originalPublicationPayload).not.toMatchObject({
 		champions: [expect.objectContaining({ displayName: 'Corrected Champion' })]
@@ -510,6 +621,7 @@ test('operator workflow publishes and hides an already-open broadcast source', a
 	await expect(resetDialog).toBeVisible();
 	await resetDialog.getByRole('button', { name: 'Confirm reset and hide' }).click();
 	await expect(admin.getByText('Catalog correction saved.', { exact: true })).toBeVisible();
+	await admin.getByRole('checkbox', { name: 'Show hidden champions' }).check();
 	await expect(selectedChampionRow.getByText('Hidden', { exact: true })).toBeVisible();
 	await selectedChampionRow.getByRole('button', { name: 'Restore' }).click();
 	await expect(admin.getByText('Catalog correction saved.', { exact: true })).toBeVisible();
