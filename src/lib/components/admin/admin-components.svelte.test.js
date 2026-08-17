@@ -292,15 +292,19 @@ describe('winner graphic components', () => {
 
 			await expect.element(page.getByText('EarlGreyTeemo', { exact: true })).toBeInTheDocument();
 			await expect.element(page.getByText('Irelia', { exact: true })).toBeInTheDocument();
-			await expect.element(page.getByText('★★★', { exact: true })).toBeInTheDocument();
+			await expect.element(page.getByText('â˜…â˜…â˜…', { exact: true })).toBeInTheDocument();
 			const images = [...document.querySelectorAll('img')];
-			expect(images.map((image) => requestedSources.get(image))).toEqual([
+			expect(images.flatMap((image) => requestedSources.get(image) ?? [])).toEqual([
 				'/media/player-images/player-1',
 				'/media/catalog-assets/snapshot-1/champions/irelia.png'
 			]);
 			const frame = document.querySelector('[data-testid="winner-graphic-frame"]');
 			expect(getComputedStyle(/** @type {Element} */ (frame)).width).toBe('1920px');
 			expect(getComputedStyle(/** @type {Element} */ (frame)).height).toBe('1080px');
+			const photoFrame = document.querySelector('.winner-photo');
+			const playerImage = photoFrame?.querySelector('img');
+			expect(getComputedStyle(/** @type {Element} */ (photoFrame)).overflow).toBe('hidden');
+			expect(getComputedStyle(/** @type {Element} */ (playerImage)).objectFit).toBe('cover');
 		} finally {
 			setAttribute.mockRestore();
 		}
@@ -325,14 +329,16 @@ describe('winner graphic components', () => {
 		);
 
 		try {
+			const publicationRoot =
+				'/media/publications/11111111-1111-4111-8111-111111111111';
 			render(WinnerBoardGraphic, {
 				board: {
 					...board,
-					winner: { ...board.winner, imagePath: null },
+					winner: { ...board.winner, imagePath: `${publicationRoot}/winner.png` },
 					champions: [
 						{
 							...board.champions[0],
-							iconPath: '/media/publications/11111111-1111-4111-8111-111111111111/champion.png'
+							iconPath: `${publicationRoot}/champion.png`
 						}
 					],
 					augments: [
@@ -345,8 +351,9 @@ describe('winner graphic components', () => {
 			});
 
 			const images = [...document.querySelectorAll('img')];
-			expect(images.map((image) => requestedSources.get(image))).toEqual([
-				'/media/publications/11111111-1111-4111-8111-111111111111/champion.png'
+			expect(images.flatMap((image) => requestedSources.get(image) ?? [])).toEqual([
+				`${publicationRoot}/winner.png`,
+				`${publicationRoot}/champion.png`
 			]);
 		} finally {
 			setAttribute.mockRestore();
@@ -1525,7 +1532,7 @@ describe('catalog manager progress', () => {
 			await expect.element(page.getByText('50%')).toBeInTheDocument();
 			await page.getByRole('tab', { name: 'Augments (0/0)' }).click();
 			await expect.element(page.getByText('Downloading catalog images')).toBeVisible();
-			await expect.element(page.getByRole('button', { name: 'Downloading…' })).toBeDisabled();
+			await expect.element(page.getByRole('button', { name: 'Downloadingâ€¦' })).toBeDisabled();
 			finish();
 			await expect.element(page.getByRole('button', { name: 'Sync catalog' })).toBeEnabled();
 			expect(fetchMock).toHaveBeenCalledWith(
@@ -1595,7 +1602,7 @@ describe('catalog manager progress', () => {
 			await expect
 				.element(page.getByText('Extracting the Data Dragon package'))
 				.toBeInTheDocument();
-			await expect.element(page.getByRole('button', { name: 'Downloading…' })).toBeDisabled();
+			await expect.element(page.getByRole('button', { name: 'Downloadingâ€¦' })).toBeDisabled();
 			fail();
 			await expect
 				.element(
