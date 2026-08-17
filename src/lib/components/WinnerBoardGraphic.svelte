@@ -79,7 +79,6 @@
 									>{initials(champion.displayName)}</span
 								>
 							{/if}
-							<span class="asset-label">{champion.displayName}</span>
 							{#if champion.starLevel}
 								<span class="stars" aria-label={`${champion.starLevel} star`}
 									>{'★'.repeat(champion.starLevel)}</span
@@ -234,12 +233,9 @@
 		position: absolute;
 		top: 690px;
 		left: 42px;
-		display: grid;
-		width: 700px;
-		max-height: 212px;
-		grid-template-columns: repeat(5, 120px);
-		grid-auto-rows: 100px;
-		gap: 12px 14px;
+		display: flex;
+		flex-wrap: nowrap;
+		gap: 10px;
 		overflow: hidden;
 	}
 
@@ -253,8 +249,9 @@
 	}
 
 	.champion-card {
-		width: 100px;
-		height: 100px;
+		flex: 0 0 70px;
+		width: 70px;
+		height: 70px;
 	}
 
 	.champion-card > img,
