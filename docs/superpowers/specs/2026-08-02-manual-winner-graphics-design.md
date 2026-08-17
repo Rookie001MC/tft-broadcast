@@ -253,9 +253,11 @@ Preview stores the validated ZIP in an app-controlled staging directory and retu
 
 CSV import normalizes Riot identity from `riot_id`. Split columns are accepted as optional redundant data only when they match the normalized `riot_id`.
 
-Image matching uses Riot ID. Staff must name image files using a filename-safe Riot ID convention:
+Image matching uses Riot ID. Image files may use the Riot ID directly or the legacy underscore
+separator:
 
 ```txt
+GameName#TAG.ext
 GameName_TAG.ext
 ```
 
@@ -263,7 +265,8 @@ Example:
 
 ```txt
 players.csv: riot_id = EarlGreyTeemo#sip
-image file: player_images/EarlGreyTeemo_sip.png
+image file: player_images/EarlGreyTeemo#sip.png
+legacy form: player_images/EarlGreyTeemo_sip.png
 ```
 
 Supported image extensions:
