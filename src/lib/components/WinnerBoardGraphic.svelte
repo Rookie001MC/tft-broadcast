@@ -91,18 +91,15 @@
 				{#if board.augments.length}
 					<div class="augment-list" aria-label="Hextech Augments">
 						{#each board.augments as augment (augment.id)}
-							<article class="augment-card" title={augment.displayName}>
+							<div class="augment" title={augment.displayName}>
 								{#if catalogImage(augment.iconPath)}
-									<img
-										src={catalogImage(augment.iconPath)}
-										alt={augment.displayName}
-										crossorigin="anonymous"
-									/>
+									<img src={catalogImage(augment.iconPath)} alt="" crossorigin="anonymous" />
 								{:else}
-									<span class="asset-placeholder" aria-hidden="true">◆</span>
+									<span class="augment-placeholder" aria-hidden="true">◆</span>
 								{/if}
-								<span class="asset-label">{augment.displayName}</span>
-							</article>
+
+								<strong>{augment.displayName}</strong>
+							</div>
 						{/each}
 					</div>
 				{/if}
@@ -239,8 +236,7 @@
 		overflow: hidden;
 	}
 
-	.champion-card,
-	.augment-card {
+	.champion-card {
 		position: relative;
 		overflow: hidden;
 		border: 3px solid #facc15;
@@ -255,7 +251,6 @@
 	}
 
 	.champion-card > img,
-	.augment-card > img,
 	.asset-placeholder {
 		display: grid;
 		width: 100%;
@@ -271,22 +266,6 @@
 		font-weight: 900;
 	}
 
-	.asset-label {
-		position: absolute;
-		right: 0;
-		bottom: 0;
-		left: 0;
-		overflow: hidden;
-		padding: 5px 6px;
-		background: rgb(0 0 0 / 78%);
-		font-size: 13px;
-		font-weight: 800;
-		line-height: 1;
-		text-align: center;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-
 	.stars {
 		position: absolute;
 		top: 3px;
@@ -300,22 +279,94 @@
 	}
 
 	.augment-list {
+		display: flex;
 		position: absolute;
-		top: 922px;
-		left: 42px;
+		flex-wrap: nowrap;
+		gap: 14px;
+		margin-top: 20px;
+		overflow: hidden;
+		top: 36px;
+	}
+
+	.augment {
+		display: flex;
+		width: 260px;
+		height: 70px;
+		flex: 0 0 260px;
+		align-items: center;
+		gap: 12px;
+		padding: 0 28px;
+
+		background: #ffd900;
+		clip-path: polygon(8% 0, 100% 0, 92% 100%, 0 100%);
+
+		color: #111;
+		overflow: hidden;
+	}
+
+	.augment img,
+	.augment strong {
+		min-width: 0;
+		overflow: hidden;
+		font-size: 18px;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.augment {
+		position: relative;
+		width: 260px;
+		height: 70px;
+		flex: 0 0 260px;
+	}
+
+	.augment-list {
 		display: grid;
-		grid-template-columns: repeat(3, 92px);
-		gap: 20px;
+		width: 100%;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		gap: 14px;
+		margin-top: 20px;
+		position: absolute;
+top: 790px
 	}
 
-	.augment-card {
-		width: 86px;
-		height: 86px;
-		border-color: #fb923c;
-		border-radius: 18px;
+	.augment {
+		display: flex;
+		width: 100%;
+		height: 70px;
+		min-width: 0;
+		box-sizing: border-box;
+		align-items: center;
+		gap: 12px;
+		padding: 7px 34px;
+
+		overflow: hidden;
+		border: 0;
+		border-radius: 0;
+		background: #ffd900;
+		clip-path: polygon(8% 0, 100% 0, 92% 100%, 0 100%);
+
+		color: #111;
+
+		font-family: "IBM Plex Sans";
 	}
 
-	.augment-card .asset-label {
-		font-size: 11px;
+	.augment img,
+	.augment-placeholder {
+		display: grid;
+		width: 56px;
+		height: 56px;
+		flex: 0 0 56px;
+		place-items: center;
+		object-fit: contain;
+	}
+
+	.augment strong {
+		min-width: 0;
+		overflow: hidden;
+		font-size: 18px;
+		line-height: 3;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 </style>

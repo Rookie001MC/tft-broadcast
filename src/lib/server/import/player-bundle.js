@@ -5,7 +5,7 @@ import { fileTypeFromBuffer } from 'file-type';
 import yauzl from 'yauzl';
 import { normalizeRiotId } from './riot-id.js';
 
-const MAX_ZIP_BYTES = 25 * 1024 * 1024;
+const MAX_ZIP_BYTES = 60 * 1024 * 1024;
 const MAX_ENTRIES = 500;
 const MAX_EXPANDED_BYTES = 100 * 1024 * 1024;
 const REQUIRED_COLUMNS = ['full_name', 'display_name', 'riot_id'];
