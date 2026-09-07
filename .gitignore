@@ -31,3 +31,8 @@ vite.config.ts.timestamp-*
 
 # Playwright
 test-results
+
+# Player LCU desktop build output
+/players-lcu-client/bin/
+/players-lcu-client/obj/
+/players-lcu-client/artifacts/
