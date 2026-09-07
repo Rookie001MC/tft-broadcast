@@ -38,7 +38,7 @@ public sealed class WindowsDpapiDeviceTokenStore : IDeviceTokenStore
     /// without changing the process-wide local application-data location.
     /// </summary>
     public WindowsDpapiDeviceTokenStore(string rootDirectory)
-        : this(rootDirectory, DefaultFileName)
+        : this(ValidateExplicitRootDirectory(rootDirectory), DefaultFileName)
     {
     }
 
@@ -329,6 +329,12 @@ public sealed class WindowsDpapiDeviceTokenStore : IDeviceTokenStore
             return null;
         }
 
+    }
+
+    private static string ValidateExplicitRootDirectory(string rootDirectory)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(rootDirectory);
+        return rootDirectory;
     }
 
     private static void Zero(byte[]? buffer)

@@ -65,6 +65,30 @@ public sealed class WindowsDpapiDeviceTokenStoreTests : IDisposable
     }
 
     [Fact]
+    public void PublicRoot_Null_ThrowsArgumentNullException()
+    {
+#pragma warning disable CA1416 // Constructor validation happens before any Windows-only behavior.
+        var exception = Assert.Throws<ArgumentNullException>(
+            () => new WindowsDpapiDeviceTokenStore(null!));
+#pragma warning restore CA1416
+
+        Assert.Equal("rootDirectory", exception.ParamName);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void PublicRoot_Blank_ThrowsArgumentException(string rootDirectory)
+    {
+#pragma warning disable CA1416 // Constructor validation happens before any Windows-only behavior.
+        var exception = Assert.Throws<ArgumentException>(
+            () => new WindowsDpapiDeviceTokenStore(rootDirectory));
+#pragma warning restore CA1416
+
+        Assert.Equal("rootDirectory", exception.ParamName);
+    }
+
+    [Fact]
     public void Windows_FreshInstanceLoad_RoundTripsCurrentUserProtectedTokenWithoutPlaintext()
     {
         if (!OperatingSystem.IsWindows())
