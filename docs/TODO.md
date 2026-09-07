@@ -40,6 +40,9 @@ Success. However there are a few issues:
   - Suggestion: this interface should be added to facilitate easier adding/removing additional operators.
 - Sample `players.zip`: The operators does not know how to structure the CSV and the players images.
   - Suggestion: A sample ZIP should be provided to make it easier to add player data directly into the admin panel.
+- The ZIP import preview success section is still displaying the recent result even if navigating out of the page, causing confusion whether the recent import is working or not.
+  - Suggestion: 10 sec delay on disappearing the status, also disappear the status when navigating (Suggestions are welcome.)
+- Error messages on the ZIP import is not clear which section of the ZIP is not correct.
 
 ## After TFT-MATCH-V1 — Broadcast Graphics Scenes
 
