@@ -1,0 +1,2002 @@
+{
+  "eventPVEData": {
+    "affixes": [],
+    "bossName": "",
+    "buddyIcon": "",
+    "buddyName": ""
+  },
+  "gameId": 1571626722,
+  "gameLength": 2486,
+  "isRanked": false,
+  "localPlayer": {
+    "augments": [],
+    "boardPieces": [
+      {
+        "championId": "DA_18_Yunara",
+        "icon": "/lol-game-data/assets/ASSETS/Characters/TFT18_Yunara/TFT18_Yunara_Square.TFT_Set18.png",
+        "items": [],
+        "level": 2,
+        "name": "Yunara",
+        "price": 2,
+        "traits": [
+          {
+            "id": "DA_18_Blossom",
+            "name": "Hoa Linh"
+          },
+          {
+            "id": "DA_18_Executioner",
+            "name": "Đao Phủ"
+          }
+        ]
+      },
+      {
+        "championId": "DA_Krug18",
+        "icon": "/lol-game-data/assets/ASSETS/Characters/TFT18_Krug/TFT18_Krug_Square.TFT_Set18.png",
+        "items": [],
+        "level": 1,
+        "name": "Quái Đá Krug",
+        "price": 3,
+        "traits": [
+          {
+            "id": "DA_Riftbeast18",
+            "name": "Quái Rừng"
+          },
+          {
+            "id": "DA_18_Brawler",
+            "name": "Đấu Sĩ"
+          }
+        ]
+      },
+      {
+        "championId": "DA_18_Rammus",
+        "icon": "/lol-game-data/assets/ASSETS/Characters/TFT18_Rammus/TFT18_Rammus_Square.TFT_Set18.png",
+        "items": [],
+        "level": 1,
+        "name": "Rammus",
+        "price": 3,
+        "traits": [
+          {
+            "id": "DA_18_Sprykin",
+            "name": "Tinh Nghịch"
+          },
+          {
+            "id": "DA_18_Defender",
+            "name": "Vệ Quân"
+          }
+        ]
+      },
+      {
+        "championId": "DA_18_Alistar",
+        "icon": "/lol-game-data/assets/ASSETS/Characters/TFT18_Alistar/TFT18_Alistar_Square.TFT_Set18.png",
+        "items": [],
+        "level": 1,
+        "name": "Alistar",
+        "price": 2,
+        "traits": [
+          {
+            "id": "DA_18_Elderwood",
+            "name": "Thần Rừng"
+          },
+          {
+            "id": "DA_18_Brawler",
+            "name": "Đấu Sĩ"
+          }
+        ]
+      },
+      {
+        "championId": "DA_18_Varus",
+        "icon": "/lol-game-data/assets/ASSETS/Characters/TFT18_Varus/TFT18_Varus_Square.TFT_Set18.png",
+        "items": [],
+        "level": 1,
+        "name": "Varus",
+        "price": 1,
+        "traits": [
+          {
+            "id": "DA_18_Inferno",
+            "name": "Hỏa Ngục"
+          },
+          {
+            "id": "DA_18_Rapidfire",
+            "name": "Liên Kích"
+          }
+        ]
+      }
+    ],
+    "companion": {
+      "colorName": "",
+      "icon": "/lol-game-data/assets/ASSETS/Loadouts/Companions/Tooltip_RazorBeak_Set16RankedRewards_Victorious_Tier1.LL_RazorBeak_Set16RankedRewards.png",
+      "speciesName": "Chim Biến Dị"
+    },
+    "customAugmentContainer": {
+      "description": "Không có vòng kỳ ngộ.",
+      "displayName": "",
+      "iconPath": "/lol-game-data/assets/",
+      "nameId": "TFT_Portals_Default_NoPortal"
+    },
+    "ffaStanding": 8,
+    "health": 251,
+    "iconId": 988,
+    "isInteractable": true,
+    "isLocalPlayer": true,
+    "partnerGroupId": 0,
+    "playbook": {
+      "iconSmall": "",
+      "itemId": 0,
+      "name": ""
+    },
+    "puuid": "3a0870f2-c706-55a0-a50f-b0d25b59a7cb",
+    "rank": 8,
+    "riotIdGameName": "mid",
+    "riotIdTagLine": "1111",
+    "setCoreName": "",
+    "summonerId": 3139322230212448,
+    "summonerName": "mid"
+  },
+  "playerSkillTreeEoG": {
+    "delta": 0,
+    "eventSkillToScore": []
+  },
+  "players": [
+    {
+      "augments": [],
+      "boardPieces": [
+        {
+          "championId": "DA_18_Ivern",
+          "icon": "/lol-game-data/assets/ASSETS/Characters/TFT18_Ivern/TFT18_Ivern_Square.TFT_Set18.png",
+          "items": [
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/TFT/Icons/Items/Hexcore/TFT_Item_Leviathan.png",
+              "id": 0,
+              "name": "Nanh Nashor",
+              "nameId": "DA_NashorsTooth"
+            },
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/TFT/Icons/Items/Hexcore/TFT_Item_JeweledGauntlet.png",
+              "id": 0,
+              "name": "Găng Bảo Thạch",
+              "nameId": "DA_JeweledGauntlet"
+            },
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/TFT/Icons/Items/Hexcore/TFT_Item_JeweledGauntlet.png",
+              "id": 0,
+              "name": "Găng Bảo Thạch",
+              "nameId": "DA_JeweledGauntlet"
+            }
+          ],
+          "level": 2,
+          "name": "Ivern",
+          "price": 5,
+          "traits": [
+            {
+              "id": "DA_18_Greenfather",
+              "name": "Thụ Thần"
+            }
+          ]
+        },
+        {
+          "championId": "DA_18_Kennen",
+          "icon": "/lol-game-data/assets/ASSETS/Characters/TFT18_Kennen/TFT18_Kennen_Square.TFT_Set18.png",
+          "items": [
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/TFT/Icons/Items/Hexcore/TFT_Item_GargoyleStoneplate.png",
+              "id": 0,
+              "name": "Thú Tượng Thạch Giáp",
+              "nameId": "DA_GargoyleStoneplate"
+            },
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/TFT/Icons/Items/Hexcore/TFT_Item_Crownguard.png",
+              "id": 0,
+              "name": "Vương Miện Hoàng Gia",
+              "nameId": "DA_Crownguard"
+            },
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/TFT/Icons/Items/Hexcore/TFT_Item_TitansResolve.png",
+              "id": 0,
+              "name": "Quyền Năng Khổng Lồ",
+              "nameId": "DA_TitansResolve"
+            }
+          ],
+          "level": 2,
+          "name": "Kennen",
+          "price": 5,
+          "traits": [
+            {
+              "id": "DA_18_Inferno",
+              "name": "Hỏa Ngục"
+            },
+            {
+              "id": "DA_18_Executioner",
+              "name": "Đao Phủ"
+            }
+          ]
+        },
+        {
+          "championId": "DA_18_Maokai",
+          "icon": "/lol-game-data/assets/ASSETS/Characters/TFT18_Maokai/TFT18_Maokai_Square.TFT_Set18.png",
+          "items": [
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/TFT/Icons/Items/Hexcore/TFT_Item_GargoyleStoneplate.png",
+              "id": 0,
+              "name": "Thú Tượng Thạch Giáp",
+              "nameId": "DA_GargoyleStoneplate"
+            },
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/TFT/Icons/Items/Hexcore/TFT_Item_DragonsClaw.png",
+              "id": 0,
+              "name": "Vuốt Rồng",
+              "nameId": "DA_DragonsClaw"
+            },
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/TFT/Icons/Items/Hexcore/TFT_Item_Crownguard.png",
+              "id": 0,
+              "name": "Vương Miện Hoàng Gia",
+              "nameId": "DA_Crownguard"
+            }
+          ],
+          "level": 2,
+          "name": "Maokai",
+          "price": 5,
+          "traits": [
+            {
+              "id": "DA_18_Maokai_UniqueTrait",
+              "name": "Cổ Thụ"
+            },
+            {
+              "id": "DA_Juggernaut18",
+              "name": "Dũng Sĩ"
+            }
+          ]
+        },
+        {
+          "championId": "DA_18_ElderDragon",
+          "icon": "/lol-game-data/assets/ASSETS/Characters/TFT18_ElderDragon/TFT18_ElderDragon_Square.TFT_Set18.png",
+          "items": [
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/TFT/Icons/Items/Hexcore/TFT_Item_PowerGauntlet.png",
+              "id": 0,
+              "name": "Chùy Đoản Côn",
+              "nameId": "DA_StrikersFlail"
+            },
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/TFT/Icons/Items/Hexcore/TFT_Item_InfinityEdge.png",
+              "id": 0,
+              "name": "Vô Cực Kiếm",
+              "nameId": "DA_InfinityEdge"
+            },
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/TFT/Icons/Items/Hexcore/TFT_Item_Deathblade.png",
+              "id": 0,
+              "name": "Kiếm Tử Thần",
+              "nameId": "DA_Deathblade"
+            }
+          ],
+          "level": 2,
+          "name": "Rồng Ngàn Tuổi",
+          "price": 5,
+          "traits": [
+            {
+              "id": "DA_18_ApexPredator",
+              "name": "Bá Chủ"
+            },
+            {
+              "id": "DA_Riftbeast18",
+              "name": "Quái Rừng"
+            }
+          ]
+        },
+        {
+          "championId": "DA_Taric18",
+          "icon": "/lol-game-data/assets/ASSETS/Characters/TFT18_Taric/TFT18_Taric_Square.TFT_Set18.png",
+          "items": [
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/TFT/Icons/Items/Hexcore/TFT_Item_BrambleVest.png",
+              "id": 0,
+              "name": "Áo Choàng Gai",
+              "nameId": "DA_BrambleVest"
+            }
+          ],
+          "level": 2,
+          "name": "Taric",
+          "price": 5,
+          "traits": [
+            {
+              "id": "DA_Emerald18",
+              "name": "Lục Bảo"
+            },
+            {
+              "id": "DA_18_Vanguard",
+              "name": "Tiên Phong"
+            }
+          ]
+        },
+        {
+          "championId": "DA_Amumu18",
+          "icon": "/lol-game-data/assets/ASSETS/Characters/TFT18_Amumu/TFT18_Amumu_Square.TFT_Set18.png",
+          "items": [
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/Particles/TFT/Item_Icons/Traits/Spatula/Set18/TFT18_Emblem_Blackthorn.TFT_Set18.png",
+              "id": 0,
+              "name": "Ấn Gai Đen",
+              "nameId": "DA_18_EmblemBlackthorn"
+            },
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/Particles/TFT/Item_Icons/Traits/Spatula/Set18/TFT18_Emblem_Spellweaver.TFT_Set18.png",
+              "id": 0,
+              "name": "Ấn Thuật Sư",
+              "nameId": "DA_18_EmblemSpellweaver"
+            },
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/Particles/TFT/Item_Icons/Traits/Spatula/Set18/TFT18_Emblem_Sprykin.TFT_Set18.png",
+              "id": 0,
+              "name": "Ấn Tinh Nghịch",
+              "nameId": "DA_18_EmblemSprykin"
+            }
+          ],
+          "level": 2,
+          "name": "Amumu",
+          "price": 4,
+          "traits": [
+            {
+              "id": "DA_18_Inferno",
+              "name": "Hỏa Ngục"
+            },
+            {
+              "id": "DA_Juggernaut18",
+              "name": "Dũng Sĩ"
+            }
+          ]
+        },
+        {
+          "championId": "DA_18_Morgana",
+          "icon": "/lol-game-data/assets/ASSETS/Characters/TFT18_Morgana/TFT18_Morgana_Square.TFT_Set18.png",
+          "items": [],
+          "level": 2,
+          "name": "Morgana",
+          "price": 4,
+          "traits": [
+            {
+              "id": "DA_18_Coven",
+              "name": "Tiên Hắc Ám"
+            },
+            {
+              "id": "DA_18_Invoker",
+              "name": "Thuật Sĩ"
+            }
+          ]
+        },
+        {
+          "championId": "DA_18_Soraka",
+          "icon": "/lol-game-data/assets/ASSETS/Characters/TFT18_Soraka/TFT18_Soraka_Square.TFT_Set18.png",
+          "items": [],
+          "level": 2,
+          "name": "Soraka",
+          "price": 4,
+          "traits": [
+            {
+              "id": "DA_FloraFatalis18",
+              "name": "Thực Vật"
+            },
+            {
+              "id": "DA_18_Executioner",
+              "name": "Đao Phủ"
+            }
+          ]
+        },
+        {
+          "championId": "DA_Sentinel18",
+          "icon": "/lol-game-data/assets/ASSETS/Characters/TFT18_Sentinel/TFT18_Sentinel_Square.TFT_Set18.png",
+          "items": [],
+          "level": 1,
+          "name": "Người Đá",
+          "price": 4,
+          "traits": [
+            {
+              "id": "DA_Riftbeast18",
+              "name": "Quái Rừng"
+            },
+            {
+              "id": "DA_18_Vanguard",
+              "name": "Tiên Phong"
+            },
+            {
+              "id": "DA_18_Invoker",
+              "name": "Thuật Sĩ"
+            }
+          ]
+        }
+      ],
+      "companion": {
+        "colorName": "",
+        "icon": "/lol-game-data/assets/ASSETS/Loadouts/Companions/Tooltip_ChibiKatarina_Base_Classic_Tier1.png",
+        "speciesName": "Katarina"
+      },
+      "customAugmentContainer": {
+        "description": "Không có vòng kỳ ngộ.",
+        "displayName": "",
+        "iconPath": "/lol-game-data/assets/",
+        "nameId": "TFT_Portals_Default_NoPortal"
+      },
+      "ffaStanding": 1,
+      "health": 15,
+      "iconId": 4881,
+      "isInteractable": true,
+      "isLocalPlayer": false,
+      "partnerGroupId": 0,
+      "playbook": {
+        "iconSmall": "",
+        "itemId": 0,
+        "name": ""
+      },
+      "puuid": "67afbcec-9bea-5ba0-a44b-c9176d1d05a5",
+      "rank": 1,
+      "riotIdGameName": "PayẶcc",
+      "riotIdTagLine": "8216",
+      "setCoreName": "TFTSet18",
+      "summonerId": 3141460514072544,
+      "summonerName": "PayẶcc"
+    },
+    {
+      "augments": [],
+      "boardPieces": [
+        {
+          "championId": "DA_18_GnarSmall",
+          "icon": "/lol-game-data/assets/ASSETS/Characters/TFT18_Gnar/TFT18_Gnar_Square.TFT_Set18.png",
+          "items": [
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/TFT/Icons/Items/Hexcore/TFT_Item_SteraksGage.png",
+              "id": 0,
+              "name": "Móng Vuốt Sterak",
+              "nameId": "DA_SteraksGage"
+            },
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/TFT/Icons/Items/Hexcore/TFT_Item_Quicksilver.png",
+              "id": 0,
+              "name": "Áo Choàng Thủy Ngân",
+              "nameId": "DA_Quicksilver"
+            },
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/TFT/Icons/Items/Hexcore/TFT_Item_MadredsBloodrazor.png",
+              "id": 0,
+              "name": "Diệt Khổng Lồ",
+              "nameId": "DA_GiantSlayer"
+            }
+          ],
+          "level": 2,
+          "name": "Gnar",
+          "price": 5,
+          "traits": [
+            {
+              "id": "DA_18_Elderwood",
+              "name": "Thần Rừng"
+            },
+            {
+              "id": "DA_18_Sprykin",
+              "name": "Tinh Nghịch"
+            },
+            {
+              "id": "DA_18_Brawler",
+              "name": "Đấu Sĩ"
+            }
+          ]
+        },
+        {
+          "championId": "DA_18_Ahri",
+          "icon": "/lol-game-data/assets/ASSETS/Characters/TFT18_Ahri/TFT18_Ahri_Square.TFT_Set18.png",
+          "items": [
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/TFT/Icons/Items/Hexcore/TFT_Item_SpearOfShojin.png",
+              "id": 0,
+              "name": "Ngọn Giáo Shojin",
+              "nameId": "DA_SpearOfShojin"
+            },
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/TFT/Icons/Items/Hexcore/TFT_Item_RabadonsDeathcap.png",
+              "id": 0,
+              "name": "Mũ Phù Thủy Rabadon",
+              "nameId": "DA_RabadonsDeathcap"
+            },
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/TFT/Icons/Items/Hexcore/TFT_Item_JeweledGauntlet.png",
+              "id": 0,
+              "name": "Găng Bảo Thạch",
+              "nameId": "DA_JeweledGauntlet"
+            }
+          ],
+          "level": 2,
+          "name": "Ahri",
+          "price": 4,
+          "traits": [
+            {
+              "id": "DA_18_Blossom",
+              "name": "Hoa Linh"
+            },
+            {
+              "id": "DA_18_Spellweaver",
+              "name": "Thuật Sư"
+            }
+          ]
+        },
+        {
+          "championId": "DA_18_Morgana",
+          "icon": "/lol-game-data/assets/ASSETS/Characters/TFT18_Morgana/TFT18_Morgana_Square.TFT_Set18.png",
+          "items": [
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/TFT/Icons/Items/Hexcore/TFT_Item_Crownguard.png",
+              "id": 0,
+              "name": "Vương Miện Hoàng Gia",
+              "nameId": "DA_Crownguard"
+            },
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/TFT/Icons/Items/Hexcore/TFT_Item_SpectralGauntlet.png",
+              "id": 0,
+              "name": "Giáp Vai Nguyệt Thần",
+              "nameId": "DA_Evenshroud"
+            },
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/Particles/TFT/Item_Icons/Traits/Spatula/Set18/TFT18_Emblem_Spellweaver.TFT_Set18.png",
+              "id": 0,
+              "name": "Ấn Thuật Sư",
+              "nameId": "DA_18_EmblemSpellweaver"
+            }
+          ],
+          "level": 2,
+          "name": "Morgana",
+          "price": 4,
+          "traits": [
+            {
+              "id": "DA_18_Coven",
+              "name": "Tiên Hắc Ám"
+            },
+            {
+              "id": "DA_18_Invoker",
+              "name": "Thuật Sĩ"
+            }
+          ]
+        },
+        {
+          "championId": "DA_Sentinel18",
+          "icon": "/lol-game-data/assets/ASSETS/Characters/TFT18_Sentinel/TFT18_Sentinel_Square.TFT_Set18.png",
+          "items": [
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/TFT/Icons/Items/Hexcore/TFT_Item_WarmogsArmor.png",
+              "id": 0,
+              "name": "Giáp Máu Warmog",
+              "nameId": "DA_WarmogsArmor"
+            },
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/TFT/Icons/Items/Hexcore/TFT_Item_GargoyleStoneplate.png",
+              "id": 0,
+              "name": "Thú Tượng Thạch Giáp",
+              "nameId": "DA_GargoyleStoneplate"
+            },
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/TFT/Icons/Items/Hexcore/TFT_Item_GargoyleStoneplate.png",
+              "id": 0,
+              "name": "Thú Tượng Thạch Giáp",
+              "nameId": "DA_GargoyleStoneplate"
+            }
+          ],
+          "level": 2,
+          "name": "Người Đá",
+          "price": 4,
+          "traits": [
+            {
+              "id": "DA_Riftbeast18",
+              "name": "Quái Rừng"
+            },
+            {
+              "id": "DA_18_Vanguard",
+              "name": "Tiên Phong"
+            },
+            {
+              "id": "DA_18_Invoker",
+              "name": "Thuật Sĩ"
+            }
+          ]
+        },
+        {
+          "championId": "DA_Nidalee18_AP",
+          "icon": "/lol-game-data/assets/ASSETS/Characters/TFT18_Nidalee/TFT18_Nidalee_Square.TFT_Set18.png",
+          "items": [
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/TFT/Icons/Items/Hexcore/TFT_Item_GuinsoosRageblade.png",
+              "id": 0,
+              "name": "Cuồng Đao Guinsoo",
+              "nameId": "DA_GuinsoosRageblade"
+            },
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/TFT/Icons/Items/Hexcore/TFT_Item_PowerGauntlet.png",
+              "id": 0,
+              "name": "Chùy Đoản Côn",
+              "nameId": "DA_StrikersFlail"
+            },
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/TFT/Icons/Items/Hexcore/TFT_Item_VoidStaff.png",
+              "id": 0,
+              "name": "Trượng Hư Vô",
+              "nameId": "DA_VoidStaff"
+            }
+          ],
+          "level": 2,
+          "name": "Nidalee",
+          "price": 4,
+          "traits": [
+            {
+              "id": "DA_Primal18",
+              "name": "Nguyên Sinh"
+            },
+            {
+              "id": "DA_18_Adaptor",
+              "name": "Thích Ứng"
+            }
+          ]
+        },
+        {
+          "championId": "DA_18_Sivir",
+          "icon": "/lol-game-data/assets/ASSETS/Characters/TFT18_Sivir/TFT18_Sivir_Square.TFT_Set18.png",
+          "items": [],
+          "level": 2,
+          "name": "Sivir",
+          "price": 4,
+          "traits": [
+            {
+              "id": "DA_Primal18",
+              "name": "Nguyên Sinh"
+            },
+            {
+              "id": "DA_18_Hunter",
+              "name": "Thợ Săn"
+            }
+          ]
+        },
+        {
+          "championId": "DA_18_Hecarim",
+          "icon": "/lol-game-data/assets/ASSETS/Characters/TFT18_Hecarim/TFT18_Hecarim_Square.TFT_Set18.png",
+          "items": [
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/Particles/TFT/Item_Icons/Traits/Spatula/Set18/TFT18_Emblem_FloraFatalis.TFT_Set18.png",
+              "id": 0,
+              "name": "Ấn Thực Vật",
+              "nameId": "DA_18_EmblemFloraFatalis"
+            },
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/Particles/TFT/Item_Icons/Traits/Spatula/Set18/TFT18_Emblem_Primal.TFT_Set18.png",
+              "id": 0,
+              "name": "Ấn Nguyên Sinh",
+              "nameId": "DA_18_EmblemPrimal"
+            },
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/TFT/Icons/Items/Hexcore/TFT_Item_TitansResolve.png",
+              "id": 0,
+              "name": "Quyền Năng Khổng Lồ",
+              "nameId": "DA_TitansResolve"
+            }
+          ],
+          "level": 2,
+          "name": "Hecarim",
+          "price": 3,
+          "traits": [
+            {
+              "id": "DA_18_Elderwood",
+              "name": "Thần Rừng"
+            },
+            {
+              "id": "DA_18_Vanguard",
+              "name": "Tiên Phong"
+            }
+          ]
+        },
+        {
+          "championId": "DA_18_LeBlanc",
+          "icon": "/lol-game-data/assets/ASSETS/Characters/TFT18_Leblanc/TFT18_Leblanc_Square.TFT_Set18.png",
+          "items": [
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/TFT/Icons/Items/Hexcore/TFT_Item_Morellonomicon.png",
+              "id": 0,
+              "name": "Quỷ Thư Morello",
+              "nameId": "DA_Morellonomicon"
+            }
+          ],
+          "level": 2,
+          "name": "LeBlanc",
+          "price": 2,
+          "traits": [
+            {
+              "id": "DA_18_Elderwood",
+              "name": "Thần Rừng"
+            },
+            {
+              "id": "DA_18_Spellweaver",
+              "name": "Thuật Sư"
+            }
+          ]
+        },
+        {
+          "championId": "DA_18_Alune",
+          "icon": "/lol-game-data/assets/ASSETS/Characters/TFT18_Alune/TFT18_Alune_Square.TFT_Set18.png",
+          "items": [
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/TFT/Icons/Items/Hexcore/TFT_Item_RapidFireCannon.png",
+              "id": 0,
+              "name": "Bùa Đỏ",
+              "nameId": "DA_RedBuff"
+            },
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/TFT/Icons/Items/Hexcore/TFT_Item_BlueBuff.png",
+              "id": 0,
+              "name": "Bùa Xanh",
+              "nameId": "DA_BlueBuff"
+            },
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/TFT/Icons/Items/Hexcore/TFT_Item_RabadonsDeathcap.png",
+              "id": 0,
+              "name": "Mũ Phù Thủy Rabadon",
+              "nameId": "DA_RabadonsDeathcap"
+            }
+          ],
+          "level": 1,
+          "name": "Alune",
+          "price": 5,
+          "traits": [
+            {
+              "id": "DA_AluneUniqueTrait18",
+              "name": "Hòa Hợp"
+            },
+            {
+              "id": "DA_18_Lunar",
+              "name": "Mặt Trăng"
+            },
+            {
+              "id": "DA_18_Spellweaver",
+              "name": "Thuật Sư"
+            }
+          ]
+        },
+        {
+          "championId": "DA_Vi18",
+          "icon": "/lol-game-data/assets/ASSETS/Characters/TFT18_Vi/TFT18_VI_Square.TFT_Set18.png",
+          "items": [],
+          "level": 1,
+          "name": "Vi",
+          "price": 3,
+          "traits": [
+            {
+              "id": "DA_Primal18",
+              "name": "Nguyên Sinh"
+            },
+            {
+              "id": "DA_Juggernaut18",
+              "name": "Dũng Sĩ"
+            }
+          ]
+        }
+      ],
+      "companion": {
+        "colorName": "",
+        "icon": "/lol-game-data/assets/ASSETS/Loadouts/Companions/Tooltip_TFT_Avatar_Blue.png",
+        "speciesName": "Thủy Thần"
+      },
+      "customAugmentContainer": {
+        "description": "Không có vòng kỳ ngộ.",
+        "displayName": "",
+        "iconPath": "/lol-game-data/assets/",
+        "nameId": "TFT_Portals_Default_NoPortal"
+      },
+      "ffaStanding": 2,
+      "health": 6,
+      "iconId": 608,
+      "isInteractable": true,
+      "isLocalPlayer": false,
+      "partnerGroupId": 0,
+      "playbook": {
+        "iconSmall": "",
+        "itemId": 0,
+        "name": ""
+      },
+      "puuid": "43cccada-052f-566a-ac07-f59c51db85fd",
+      "rank": 2,
+      "riotIdGameName": "Reeweed",
+      "riotIdTagLine": "6078",
+      "setCoreName": "TFTSet18",
+      "summonerId": 3147161357215456,
+      "summonerName": "Reeweed"
+    },
+    {
+      "augments": [],
+      "boardPieces": [
+        {
+          "championId": "DA_18_ElderDragon",
+          "icon": "/lol-game-data/assets/ASSETS/Characters/TFT18_ElderDragon/TFT18_ElderDragon_Square.TFT_Set18.png",
+          "items": [
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/TFT/Icons/Items/Hexcore/TFT_Item_GuardianAngel.png",
+              "id": 0,
+              "name": "Áo Choàng Bóng Tối",
+              "nameId": "DA_EdgeOfNight"
+            },
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/TFT/Icons/Items/Hexcore/TFT_Item_UnstableConcoction.png",
+              "id": 0,
+              "name": "Bàn Tay Công Lý",
+              "nameId": "DA_HandOfJustice"
+            }
+          ],
+          "level": 2,
+          "name": "Rồng Ngàn Tuổi",
+          "price": 5,
+          "traits": [
+            {
+              "id": "DA_18_ApexPredator",
+              "name": "Bá Chủ"
+            },
+            {
+              "id": "DA_Riftbeast18",
+              "name": "Quái Rừng"
+            }
+          ]
+        },
+        {
+          "championId": "DA_CrimsonRaptor18",
+          "icon": "/lol-game-data/assets/ASSETS/Characters/TFT18_Raptor/HUD/TFT18_Raptor_Square.TFT_Set18.png",
+          "items": [
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/TFT/Icons/Items/Hexcore/TFT_Item_GuinsoosRageblade.png",
+              "id": 0,
+              "name": "Cuồng Đao Guinsoo",
+              "nameId": "DA_GuinsoosRageblade"
+            },
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/TFT/Icons/Items/Hexcore/TFT_Item_MadredsBloodrazor.png",
+              "id": 0,
+              "name": "Diệt Khổng Lồ",
+              "nameId": "DA_GiantSlayer"
+            }
+          ],
+          "level": 2,
+          "name": "Chim Mẹ",
+          "price": 3,
+          "traits": [
+            {
+              "id": "DA_Riftbeast18",
+              "name": "Quái Rừng"
+            },
+            {
+              "id": "DA_18_Summoner",
+              "name": "Triệu Hồi"
+            },
+            {
+              "id": "DA_18_Rapidfire",
+              "name": "Liên Kích"
+            }
+          ]
+        },
+        {
+          "championId": "DA_Krug18",
+          "icon": "/lol-game-data/assets/ASSETS/Characters/TFT18_Krug/TFT18_Krug_Square.TFT_Set18.png",
+          "items": [
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/Particles/TFT/Item_Icons/Traits/Spatula/Set18/TFT18_Emblem_Ravager.TFT_Set18.png",
+              "id": 0,
+              "name": "Ấn Tàn Phá",
+              "nameId": "DA_18_EmblemSlayer"
+            }
+          ],
+          "level": 2,
+          "name": "Quái Đá Krug",
+          "price": 3,
+          "traits": [
+            {
+              "id": "DA_Riftbeast18",
+              "name": "Quái Rừng"
+            },
+            {
+              "id": "DA_18_Brawler",
+              "name": "Đấu Sĩ"
+            }
+          ]
+        },
+        {
+          "championId": "DA_Gromp18_AP",
+          "icon": "/lol-game-data/assets/ASSETS/Characters/TFT18_Gromp/TFT18_Gromp_Square.TFT_Set18.png",
+          "items": [],
+          "level": 2,
+          "name": "Cóc Thành Tinh",
+          "price": 2,
+          "traits": [
+            {
+              "id": "DA_Riftbeast18",
+              "name": "Quái Rừng"
+            },
+            {
+              "id": "DA_18_Adaptor",
+              "name": "Thích Ứng"
+            }
+          ]
+        },
+        {
+          "championId": "DA_Murkwolf18",
+          "icon": "/lol-game-data/assets/ASSETS/Characters/TFT18_Murkwolf/TFT18_MurkWolf_Square.TFT_Set18.png",
+          "items": [
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/Particles/TFT/Item_Icons/Traits/Spatula/Set18/TFT18_Emblem_Juggernaut.TFT_Set18.png",
+              "id": 0,
+              "name": "Ấn Dũng Sĩ",
+              "nameId": "DA_18_EmblemJuggernaut"
+            }
+          ],
+          "level": 2,
+          "name": "Sói Hắc Ám",
+          "price": 2,
+          "traits": [
+            {
+              "id": "DA_Riftbeast18",
+              "name": "Quái Rừng"
+            },
+            {
+              "id": "DA_18_Slayer",
+              "name": "Tàn Phá"
+            }
+          ]
+        },
+        {
+          "championId": "DA_18_Sentry",
+          "icon": "/lol-game-data/assets/ASSETS/Characters/TFT18_Sentry/TFT18_Sentry_Square.TFT_Set18.png",
+          "items": [
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/TFT/Icons/Items/Hexcore/TFT_Item_RabadonsDeathcap.png",
+              "id": 0,
+              "name": "Mũ Phù Thủy Rabadon",
+              "nameId": "DA_RabadonsDeathcap"
+            },
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/TFT/Icons/Items/Hexcore/TFT_Item_JeweledGauntlet.png",
+              "id": 0,
+              "name": "Găng Bảo Thạch",
+              "nameId": "DA_JeweledGauntlet"
+            },
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/Particles/TFT/Item_Icons/Traits/Spatula/Set18/TFT18_Emblem_Rapidfire.TFT_Set18.png",
+              "id": 0,
+              "name": "Ấn Liên Kích",
+              "nameId": "DA_18_EmblemRapidfire"
+            }
+          ],
+          "level": 2,
+          "name": "Sỏi",
+          "price": 1,
+          "traits": [
+            {
+              "id": "DA_Riftbeast18",
+              "name": "Quái Rừng"
+            },
+            {
+              "id": "DA_18_Invoker",
+              "name": "Thuật Sĩ"
+            }
+          ]
+        },
+        {
+          "championId": "DA_Sentinel18",
+          "icon": "/lol-game-data/assets/ASSETS/Characters/TFT18_Sentinel/TFT18_Sentinel_Square.TFT_Set18.png",
+          "items": [
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/TFT/Icons/Items/Hexcore/TFT_Item_DragonsClaw.png",
+              "id": 0,
+              "name": "Vuốt Rồng",
+              "nameId": "DA_DragonsClaw"
+            },
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/TFT/Icons/Items/Hexcore/TFT_Item_RedBuff.png",
+              "id": 0,
+              "name": "Áo Choàng Lửa",
+              "nameId": "DA_SunfireCape"
+            },
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/TFT/Icons/Items/Hexcore/TFT_Item_NightHarvester.png",
+              "id": 0,
+              "name": "Trái Tim Kiên Định",
+              "nameId": "DA_SteadfastHeart"
+            }
+          ],
+          "level": 1,
+          "name": "Người Đá",
+          "price": 4,
+          "traits": [
+            {
+              "id": "DA_Riftbeast18",
+              "name": "Quái Rừng"
+            },
+            {
+              "id": "DA_18_Vanguard",
+              "name": "Tiên Phong"
+            },
+            {
+              "id": "DA_18_Invoker",
+              "name": "Thuật Sĩ"
+            }
+          ]
+        }
+      ],
+      "companion": {
+        "colorName": "",
+        "icon": "/lol-game-data/assets/ASSETS/Loadouts/Companions/Tooltip_ChibiLux_Porcelain_Porcelain1_Tier1.png",
+        "speciesName": "Lux"
+      },
+      "customAugmentContainer": {
+        "description": "Không có vòng kỳ ngộ.",
+        "displayName": "",
+        "iconPath": "/lol-game-data/assets/",
+        "nameId": "TFT_Portals_Default_NoPortal"
+      },
+      "ffaStanding": 3,
+      "health": 247,
+      "iconId": 6353,
+      "isInteractable": true,
+      "isLocalPlayer": false,
+      "partnerGroupId": 0,
+      "playbook": {
+        "iconSmall": "",
+        "itemId": 0,
+        "name": ""
+      },
+      "puuid": "6e343c8c-8a68-5dbc-a889-6a1d0663fe7d",
+      "rank": 3,
+      "riotIdGameName": "Naxz",
+      "riotIdTagLine": "2808",
+      "setCoreName": "TFTSet18",
+      "summonerId": 3361443943662720,
+      "summonerName": "Naxz"
+    },
+    {
+      "augments": [],
+      "boardPieces": [
+        {
+          "championId": "DA_18_Tristana",
+          "icon": "/lol-game-data/assets/ASSETS/Characters/TFT18_Tristana/TFT18_Tristana_Square.TFT_Set18.png",
+          "items": [
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/TFT/Icons/Items/Hexcore/TFT_Item_PowerGauntlet.png",
+              "id": 0,
+              "name": "Chùy Đoản Côn",
+              "nameId": "DA_StrikersFlail"
+            },
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/TFT/Icons/Items/Hexcore/TFT_Item_InfinityEdge.png",
+              "id": 0,
+              "name": "Vô Cực Kiếm",
+              "nameId": "DA_InfinityEdge"
+            },
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/TFT/Icons/Items/Hexcore/TFT_Item_BFSword.png",
+              "id": 0,
+              "name": "Kiếm B.F.",
+              "nameId": "DA_Component_BFSword"
+            }
+          ],
+          "level": 2,
+          "name": "Tristana",
+          "price": 3,
+          "traits": [
+            {
+              "id": "DA_18_Fae",
+              "name": "Tiên Linh"
+            },
+            {
+              "id": "DA_18_Sprykin",
+              "name": "Tinh Nghịch"
+            },
+            {
+              "id": "DA_18_Hunter",
+              "name": "Thợ Săn"
+            }
+          ]
+        },
+        {
+          "championId": "DA_Vi18",
+          "icon": "/lol-game-data/assets/ASSETS/Characters/TFT18_Vi/TFT18_VI_Square.TFT_Set18.png",
+          "items": [
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/TFT/Icons/Items/Hexcore/TFT_Item_RecurveBow.png",
+              "id": 0,
+              "name": "Cung Gỗ",
+              "nameId": "DA_Component_RecurveBow"
+            },
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/Particles/TFT/Item_Icons/Traits/Spatula/Set18/TFT18_Emblem_Ravager.TFT_Set18.png",
+              "id": 0,
+              "name": "Ấn Tàn Phá",
+              "nameId": "DA_18_EmblemSlayer"
+            },
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/Particles/TFT/Item_Icons/Traits/Spatula/Set18/TFT18_Emblem_FloraFatalis.TFT_Set18.png",
+              "id": 0,
+              "name": "Ấn Thực Vật",
+              "nameId": "DA_18_EmblemFloraFatalis"
+            }
+          ],
+          "level": 2,
+          "name": "Vi",
+          "price": 3,
+          "traits": [
+            {
+              "id": "DA_Primal18",
+              "name": "Nguyên Sinh"
+            },
+            {
+              "id": "DA_Juggernaut18",
+              "name": "Dũng Sĩ"
+            }
+          ]
+        },
+        {
+          "championId": "DA_18_Sejuani",
+          "icon": "/lol-game-data/assets/ASSETS/Characters/TFT18_Sejuani/TFT18_Sejuani_Square.TFT_Set18.png",
+          "items": [
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/TFT/Icons/Items/Hexcore/TFT_Item_IonicSpark.png",
+              "id": 0,
+              "name": "Nỏ Sét",
+              "nameId": "DA_IonicSpark"
+            },
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/Particles/TFT/Item_Icons/Traits/Spatula/Set18/TFT18_Emblem_Primal.TFT_Set18.png",
+              "id": 0,
+              "name": "Ấn Nguyên Sinh",
+              "nameId": "DA_18_EmblemPrimal"
+            },
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/TFT/Icons/Items/Hexcore/TFT_Item_IonicSpark.png",
+              "id": 0,
+              "name": "Nỏ Sét",
+              "nameId": "DA_IonicSpark"
+            }
+          ],
+          "level": 2,
+          "name": "Sejuani",
+          "price": 2,
+          "traits": [
+            {
+              "id": "DA_18_Solar",
+              "name": "Mặt Trời"
+            },
+            {
+              "id": "DA_Juggernaut18",
+              "name": "Dũng Sĩ"
+            }
+          ]
+        },
+        {
+          "championId": "DA_18_Shen",
+          "icon": "/lol-game-data/assets/ASSETS/Characters/TFT18_Shen/TFT18_Shen_Square.TFT_Set18.png",
+          "items": [
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/TFT/Icons/Items/Hexcore/TFT_Item_Morellonomicon.png",
+              "id": 0,
+              "name": "Quỷ Thư Morello",
+              "nameId": "DA_Morellonomicon"
+            },
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/TFT/Icons/Items/Hexcore/TFT_Item_RabadonsDeathcap.png",
+              "id": 0,
+              "name": "Mũ Phù Thủy Rabadon",
+              "nameId": "DA_RabadonsDeathcap"
+            },
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/TFT/Icons/Items/Hexcore/TFT_Item_SteraksGage.png",
+              "id": 0,
+              "name": "Móng Vuốt Sterak",
+              "nameId": "DA_SteraksGage"
+            }
+          ],
+          "level": 2,
+          "name": "Shen",
+          "price": 2,
+          "traits": [
+            {
+              "id": "DA_18_Inferno",
+              "name": "Hỏa Ngục"
+            },
+            {
+              "id": "DA_18_Defender",
+              "name": "Vệ Quân"
+            }
+          ]
+        },
+        {
+          "championId": "DA_18_Leona",
+          "icon": "/lol-game-data/assets/ASSETS/Characters/TFT18_Leona/TFT18_Leona_Square.TFT_Set18.png",
+          "items": [],
+          "level": 2,
+          "name": "Leona",
+          "price": 1,
+          "traits": [
+            {
+              "id": "DA_18_Solar",
+              "name": "Mặt Trời"
+            },
+            {
+              "id": "DA_18_Defender",
+              "name": "Vệ Quân"
+            }
+          ]
+        },
+        {
+          "championId": "DA_18_Sivir",
+          "icon": "/lol-game-data/assets/ASSETS/Characters/TFT18_Sivir/TFT18_Sivir_Square.TFT_Set18.png",
+          "items": [
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/TFT/Icons/Items/Hexcore/TFT_Item_FrozenHeart.png",
+              "id": 0,
+              "name": "Lời Thề Hộ Vệ",
+              "nameId": "DA_ProtectorsVow"
+            },
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/TFT/Icons/Items/Hexcore/TFT_Item_MadredsBloodrazor.png",
+              "id": 0,
+              "name": "Diệt Khổng Lồ",
+              "nameId": "DA_GiantSlayer"
+            },
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/TFT/Icons/Items/Hexcore/TFT_Item_Leviathan.png",
+              "id": 0,
+              "name": "Nanh Nashor",
+              "nameId": "DA_NashorsTooth"
+            }
+          ],
+          "level": 1,
+          "name": "Sivir",
+          "price": 4,
+          "traits": [
+            {
+              "id": "DA_Primal18",
+              "name": "Nguyên Sinh"
+            },
+            {
+              "id": "DA_18_Hunter",
+              "name": "Thợ Săn"
+            }
+          ]
+        }
+      ],
+      "companion": {
+        "colorName": "",
+        "icon": "/lol-game-data/assets/ASSETS/Loadouts/Companions/Tooltip_Buglet_Kaiju_Kaiju2_Tier1.png",
+        "speciesName": "Bé Bọ"
+      },
+      "customAugmentContainer": {
+        "description": "Không có vòng kỳ ngộ.",
+        "displayName": "",
+        "iconPath": "/lol-game-data/assets/",
+        "nameId": "TFT_Portals_Default_NoPortal"
+      },
+      "ffaStanding": 4,
+      "health": 249,
+      "iconId": 0,
+      "isInteractable": false,
+      "isLocalPlayer": false,
+      "partnerGroupId": 0,
+      "playbook": {
+        "iconSmall": "",
+        "itemId": 0,
+        "name": ""
+      },
+      "puuid": "00000000-0000-0000-0000-000000000000",
+      "rank": 4,
+      "riotIdGameName": "hard2 explain",
+      "riotIdTagLine": "8462",
+      "setCoreName": "TFTSet18",
+      "summonerId": 0,
+      "summonerName": "hard2 explain"
+    },
+    {
+      "augments": [],
+      "boardPieces": [
+        {
+          "championId": "DA_CrimsonRaptor18",
+          "icon": "/lol-game-data/assets/ASSETS/Characters/TFT18_Raptor/HUD/TFT18_Raptor_Square.TFT_Set18.png",
+          "items": [
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/Particles/TFT/Item_Icons/Traits/Spatula/Set18/TFT18_Emblem_Juggernaut.TFT_Set18.png",
+              "id": 0,
+              "name": "Ấn Dũng Sĩ",
+              "nameId": "DA_18_EmblemJuggernaut"
+            },
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/Particles/TFT/Item_Icons/Traits/Spatula/Set18/TFT18_Emblem_Executioner.TFT_Set18.png",
+              "id": 0,
+              "name": "Ấn Đao Phủ",
+              "nameId": "DA_18_EmblemExecutioner"
+            },
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/TFT/Icons/Items/Hexcore/TFT_Item_Quicksilver.png",
+              "id": 0,
+              "name": "Áo Choàng Thủy Ngân",
+              "nameId": "DA_Quicksilver"
+            }
+          ],
+          "level": 2,
+          "name": "Chim Mẹ",
+          "price": 3,
+          "traits": [
+            {
+              "id": "DA_Riftbeast18",
+              "name": "Quái Rừng"
+            },
+            {
+              "id": "DA_18_Summoner",
+              "name": "Triệu Hồi"
+            },
+            {
+              "id": "DA_18_Rapidfire",
+              "name": "Liên Kích"
+            }
+          ]
+        },
+        {
+          "championId": "DA_Krug18",
+          "icon": "/lol-game-data/assets/ASSETS/Characters/TFT18_Krug/TFT18_Krug_Square.TFT_Set18.png",
+          "items": [
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/TFT/Icons/Items/Hexcore/TFT_Item_RabadonsDeathcap.png",
+              "id": 0,
+              "name": "Mũ Phù Thủy Rabadon",
+              "nameId": "DA_RabadonsDeathcap"
+            },
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/TFT/Icons/Items/Hexcore/TFT_Item_RedBuff.png",
+              "id": 0,
+              "name": "Áo Choàng Lửa",
+              "nameId": "DA_SunfireCape"
+            },
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/TFT/Icons/Items/Hexcore/TFT_Item_UnstableConcoction.png",
+              "id": 0,
+              "name": "Bàn Tay Công Lý",
+              "nameId": "DA_HandOfJustice"
+            }
+          ],
+          "level": 2,
+          "name": "Quái Đá Krug",
+          "price": 3,
+          "traits": [
+            {
+              "id": "DA_Riftbeast18",
+              "name": "Quái Rừng"
+            },
+            {
+              "id": "DA_18_Brawler",
+              "name": "Đấu Sĩ"
+            }
+          ]
+        },
+        {
+          "championId": "DA_18_Rakan",
+          "icon": "/lol-game-data/assets/ASSETS/Characters/TFT18_Rakan/TFT18_Rakan_Square.TFT_Set18.png",
+          "items": [
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/TFT/Icons/Items/Hexcore/TFT_Item_GiantsBelt.png",
+              "id": 0,
+              "name": "Đai Khổng Lồ",
+              "nameId": "DA_Component_GiantsBelt"
+            },
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/TFT/Icons/Items/Hexcore/TFT4_Item_OrnnInfinityForce.png",
+              "id": 0,
+              "name": "Tam Luyện Kiếm",
+              "nameId": "DA_Artifact_InfinityForce"
+            }
+          ],
+          "level": 2,
+          "name": "Rakan",
+          "price": 1,
+          "traits": [
+            {
+              "id": "DA_18_Fae",
+              "name": "Tiên Linh"
+            },
+            {
+              "id": "DA_Juggernaut18",
+              "name": "Dũng Sĩ"
+            },
+            {
+              "id": "DA_18_Vanguard",
+              "name": "Tiên Phong"
+            }
+          ]
+        },
+        {
+          "championId": "DA_18_Xayah",
+          "icon": "/lol-game-data/assets/ASSETS/Characters/TFT18_Xayah/TFT18_Xayah_Square.TFT_Set18.png",
+          "items": [
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/TFT/Icons/Items/Hexcore/TFT_Item_InfinityEdge.png",
+              "id": 0,
+              "name": "Vô Cực Kiếm",
+              "nameId": "DA_InfinityEdge"
+            }
+          ],
+          "level": 2,
+          "name": "Xayah",
+          "price": 1,
+          "traits": [
+            {
+              "id": "DA_18_Elderwood",
+              "name": "Thần Rừng"
+            },
+            {
+              "id": "DA_18_Fae",
+              "name": "Tiên Linh"
+            },
+            {
+              "id": "DA_18_Rapidfire",
+              "name": "Liên Kích"
+            }
+          ]
+        },
+        {
+          "championId": "DA_18_Yorick",
+          "icon": "/lol-game-data/assets/ASSETS/Characters/TFT18_Yorick/TFT18_Yorick_Square.TFT_Set18.png",
+          "items": [],
+          "level": 2,
+          "name": "Yorick",
+          "price": 1,
+          "traits": [
+            {
+              "id": "DA_18_Blossom",
+              "name": "Hoa Linh"
+            },
+            {
+              "id": "DA_Juggernaut18",
+              "name": "Dũng Sĩ"
+            },
+            {
+              "id": "DA_18_Summoner",
+              "name": "Triệu Hồi"
+            }
+          ]
+        },
+        {
+          "championId": "DA_Sentinel18",
+          "icon": "/lol-game-data/assets/ASSETS/Characters/TFT18_Sentinel/TFT18_Sentinel_Square.TFT_Set18.png",
+          "items": [],
+          "level": 1,
+          "name": "Người Đá",
+          "price": 4,
+          "traits": [
+            {
+              "id": "DA_Riftbeast18",
+              "name": "Quái Rừng"
+            },
+            {
+              "id": "DA_18_Vanguard",
+              "name": "Tiên Phong"
+            },
+            {
+              "id": "DA_18_Invoker",
+              "name": "Thuật Sĩ"
+            }
+          ]
+        }
+      ],
+      "companion": {
+        "colorName": "",
+        "icon": "/lol-game-data/assets/ASSETS/Loadouts/Companions/Tooltip_Miner_Yellow_Tier2.png",
+        "speciesName": "Chuột Chũi"
+      },
+      "customAugmentContainer": {
+        "description": "Không có vòng kỳ ngộ.",
+        "displayName": "",
+        "iconPath": "/lol-game-data/assets/",
+        "nameId": "TFT_Portals_Default_NoPortal"
+      },
+      "ffaStanding": 5,
+      "health": 240,
+      "iconId": 0,
+      "isInteractable": false,
+      "isLocalPlayer": false,
+      "partnerGroupId": 0,
+      "playbook": {
+        "iconSmall": "",
+        "itemId": 0,
+        "name": ""
+      },
+      "puuid": "00000000-0000-0000-0000-000000000000",
+      "rank": 5,
+      "riotIdGameName": "huancx2002",
+      "riotIdTagLine": "7723",
+      "setCoreName": "TFTSet18",
+      "summonerId": 0,
+      "summonerName": "huancx2002"
+    },
+    {
+      "augments": [],
+      "boardPieces": [
+        {
+          "championId": "DA_Fiddlesticks18",
+          "icon": "/lol-game-data/assets/ASSETS/Characters/TFT18_Fiddlesticks/TFT18_Fiddlesticks_Square.TFT_Set18.png",
+          "items": [
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/Particles/TFT/Item_Icons/Traits/Spatula/Set18/TFT18_Emblem_Coven.TFT_Set18.png",
+              "id": 0,
+              "name": "Ấn Tiên Hắc Ám",
+              "nameId": "DA_18_EmblemCoven"
+            },
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/Particles/TFT/Item_Icons/Traits/Spatula/Set18/TFT18_Emblem_Elderwood.TFT_Set18.png",
+              "id": 0,
+              "name": "Ấn Thần Rừng",
+              "nameId": "DA_18_EmblemElderwood"
+            },
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/TFT/Icons/Items/Hexcore/TFT_Item_SpearOfShojin.png",
+              "id": 0,
+              "name": "Ngọn Giáo Shojin",
+              "nameId": "DA_SpearOfShojin"
+            }
+          ],
+          "level": 2,
+          "name": "Fiddlesticks",
+          "price": 3,
+          "traits": [
+            {
+              "id": "DA_FloraFatalis18",
+              "name": "Thực Vật"
+            },
+            {
+              "id": "DA_18_Defender",
+              "name": "Vệ Quân"
+            },
+            {
+              "id": "DA_18_Spellweaver",
+              "name": "Thuật Sư"
+            }
+          ]
+        },
+        {
+          "championId": "DA_Vi18",
+          "icon": "/lol-game-data/assets/ASSETS/Characters/TFT18_Vi/TFT18_VI_Square.TFT_Set18.png",
+          "items": [],
+          "level": 2,
+          "name": "Vi",
+          "price": 3,
+          "traits": [
+            {
+              "id": "DA_Primal18",
+              "name": "Nguyên Sinh"
+            },
+            {
+              "id": "DA_Juggernaut18",
+              "name": "Dũng Sĩ"
+            }
+          ]
+        },
+        {
+          "championId": "DA_18_Lillia",
+          "icon": "/lol-game-data/assets/ASSETS/Characters/TFT18_Lillia/TFT18_Lillia_Square.TFT_Set18.png",
+          "items": [],
+          "level": 1,
+          "name": "Lillia",
+          "price": 4,
+          "traits": [
+            {
+              "id": "DA_18_Fae",
+              "name": "Tiên Linh"
+            },
+            {
+              "id": "DA_18_Defender",
+              "name": "Vệ Quân"
+            }
+          ]
+        },
+        {
+          "championId": "DA_18_Rammus",
+          "icon": "/lol-game-data/assets/ASSETS/Characters/TFT18_Rammus/TFT18_Rammus_Square.TFT_Set18.png",
+          "items": [
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/Particles/TFT/Item_Icons/Traits/Spatula/Set18/TFT18_Emblem_Fae.TFT_Set18.png",
+              "id": 0,
+              "name": "Ấn Tiên Linh",
+              "nameId": "DA_18_EmblemFae"
+            }
+          ],
+          "level": 1,
+          "name": "Rammus",
+          "price": 3,
+          "traits": [
+            {
+              "id": "DA_18_Sprykin",
+              "name": "Tinh Nghịch"
+            },
+            {
+              "id": "DA_18_Defender",
+              "name": "Vệ Quân"
+            }
+          ]
+        },
+        {
+          "championId": "DA_18_Tristana",
+          "icon": "/lol-game-data/assets/ASSETS/Characters/TFT18_Tristana/TFT18_Tristana_Square.TFT_Set18.png",
+          "items": [
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/TFT/Icons/Items/Hexcore/TFT_Item_MadredsBloodrazor.png",
+              "id": 0,
+              "name": "Diệt Khổng Lồ",
+              "nameId": "DA_GiantSlayer"
+            },
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/TFT/Icons/Items/Hexcore/TFT_Item_RapidFireCannon.png",
+              "id": 0,
+              "name": "Bùa Đỏ",
+              "nameId": "DA_RedBuff"
+            },
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/TFT/Icons/Items/Hexcore/TFT_Item_Leviathan.png",
+              "id": 0,
+              "name": "Nanh Nashor",
+              "nameId": "DA_NashorsTooth"
+            }
+          ],
+          "level": 1,
+          "name": "Tristana",
+          "price": 3,
+          "traits": [
+            {
+              "id": "DA_18_Fae",
+              "name": "Tiên Linh"
+            },
+            {
+              "id": "DA_18_Sprykin",
+              "name": "Tinh Nghịch"
+            },
+            {
+              "id": "DA_18_Hunter",
+              "name": "Thợ Săn"
+            }
+          ]
+        },
+        {
+          "championId": "DA_18_Shen",
+          "icon": "/lol-game-data/assets/ASSETS/Characters/TFT18_Shen/TFT18_Shen_Square.TFT_Set18.png",
+          "items": [
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/TFT/Icons/Items/Hexcore/TFT_Item_NegatronCloak.png",
+              "id": 0,
+              "name": "Áo Choàng Bạc",
+              "nameId": "DA_Component_NegatronCloak"
+            }
+          ],
+          "level": 1,
+          "name": "Shen",
+          "price": 2,
+          "traits": [
+            {
+              "id": "DA_18_Inferno",
+              "name": "Hỏa Ngục"
+            },
+            {
+              "id": "DA_18_Defender",
+              "name": "Vệ Quân"
+            }
+          ]
+        }
+      ],
+      "companion": {
+        "colorName": "",
+        "icon": "/lol-game-data/assets/ASSETS/Loadouts/Companions/Tooltip_Crab_Base_Variant2_Tier1.LL_Crab_Base_Variant2.png",
+        "speciesName": "Cua Kỳ Cục"
+      },
+      "customAugmentContainer": {
+        "description": "Không có vòng kỳ ngộ.",
+        "displayName": "",
+        "iconPath": "/lol-game-data/assets/",
+        "nameId": "TFT_Portals_Default_NoPortal"
+      },
+      "ffaStanding": 6,
+      "health": 252,
+      "iconId": 0,
+      "isInteractable": false,
+      "isLocalPlayer": false,
+      "partnerGroupId": 0,
+      "playbook": {
+        "iconSmall": "",
+        "itemId": 0,
+        "name": ""
+      },
+      "puuid": "00000000-0000-0000-0000-000000000000",
+      "rank": 6,
+      "riotIdGameName": "99DDragoon",
+      "riotIdTagLine": "q5or",
+      "setCoreName": "TFTSet18",
+      "summonerId": 0,
+      "summonerName": "99DDragoon"
+    },
+    {
+      "augments": [],
+      "boardPieces": [
+        {
+          "championId": "DA_18_Kayle",
+          "icon": "/lol-game-data/assets/ASSETS/Characters/TFT18_Kayle/TFT18_Kayle_Square.TFT_Set18.png",
+          "items": [
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/Particles/TFT/Item_Icons/Traits/Spatula/Set18/TFT18_Emblem_Sprykin.TFT_Set18.png",
+              "id": 0,
+              "name": "Ấn Tinh Nghịch",
+              "nameId": "DA_18_EmblemSprykin"
+            },
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/TFT/Icons/Items/Hexcore/TFT_Item_SteraksGage.png",
+              "id": 0,
+              "name": "Móng Vuốt Sterak",
+              "nameId": "DA_SteraksGage"
+            },
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/TFT/Icons/Items/Hexcore/TFT_Item_VoidStaff.png",
+              "id": 0,
+              "name": "Trượng Hư Vô",
+              "nameId": "DA_VoidStaff"
+            }
+          ],
+          "level": 2,
+          "name": "Kayle",
+          "price": 2,
+          "traits": [
+            {
+              "id": "DA_18_Solar",
+              "name": "Mặt Trời"
+            },
+            {
+              "id": "DA_18_Rapidfire",
+              "name": "Liên Kích"
+            }
+          ]
+        },
+        {
+          "championId": "DA_18_Sejuani",
+          "icon": "/lol-game-data/assets/ASSETS/Characters/TFT18_Sejuani/TFT18_Sejuani_Square.TFT_Set18.png",
+          "items": [
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/TFT/Icons/Items/Hexcore/TFT_Item_GargoyleStoneplate.png",
+              "id": 0,
+              "name": "Thú Tượng Thạch Giáp",
+              "nameId": "DA_GargoyleStoneplate"
+            },
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/Particles/TFT/Item_Icons/Traits/Spatula/Set18/TFT18_Emblem_Vanguard.TFT_Set18.png",
+              "id": 0,
+              "name": "Ấn Tiên Phong",
+              "nameId": "DA_18_EmblemVanguard"
+            },
+            {
+              "icon": "/lol-game-data/assets/ASSETS/Maps/Particles/TFT/Item_Icons/Traits/Spatula/Set18/TFT18_Emblem_Elderwood.TFT_Set18.png",
+              "id": 0,
+              "name": "Ấn Thần Rừng",
+              "nameId": "DA_18_EmblemElderwood"
+            }
+          ],
+          "level": 2,
+          "name": "Sejuani",
+          "price": 2,
+          "traits": [
+            {
+              "id": "DA_18_Solar",
+              "name": "Mặt Trời"
+            },
+            {
+              "id": "DA_Juggernaut18",
+              "name": "Dũng Sĩ"
+            }
+          ]
+        },
+        {
+          "championId": "DA_18_Shen",
+          "icon": "/lol-game-data/assets/ASSETS/Characters/TFT18_Shen/TFT18_Shen_Square.TFT_Set18.png",
+          "items": [],
+          "level": 1,
+          "name": "Shen",
+          "price": 2,
+          "traits": [
+            {
+              "id": "DA_18_Inferno",
+              "name": "Hỏa Ngục"
+            },
+            {
+              "id": "DA_18_Defender",
+              "name": "Vệ Quân"
+            }
+          ]
+        },
+        {
+          "championId": "DA_18_Leona",
+          "icon": "/lol-game-data/assets/ASSETS/Characters/TFT18_Leona/TFT18_Leona_Square.TFT_Set18.png",
+          "items": [],
+          "level": 1,
+          "name": "Leona",
+          "price": 1,
+          "traits": [
+            {
+              "id": "DA_18_Solar",
+              "name": "Mặt Trời"
+            },
+            {
+              "id": "DA_18_Defender",
+              "name": "Vệ Quân"
+            }
+          ]
+        },
+        {
+          "championId": "DA_18_Varus",
+          "icon": "/lol-game-data/assets/ASSETS/Characters/TFT18_Varus/TFT18_Varus_Square.TFT_Set18.png",
+          "items": [],
+          "level": 1,
+          "name": "Varus",
+          "price": 1,
+          "traits": [
+            {
+              "id": "DA_18_Inferno",
+              "name": "Hỏa Ngục"
+            },
+            {
+              "id": "DA_18_Rapidfire",
+              "name": "Liên Kích"
+            }
+          ]
+        }
+      ],
+      "companion": {
+        "colorName": "",
+        "icon": "/lol-game-data/assets/ASSETS/Loadouts/Companions/Tooltip_Buglet_Sandbringer_Tier2.png",
+        "speciesName": "Bé Bọ"
+      },
+      "customAugmentContainer": {
+        "description": "Không có vòng kỳ ngộ.",
+        "displayName": "",
+        "iconPath": "/lol-game-data/assets/",
+        "nameId": "TFT_Portals_Default_NoPortal"
+      },
+      "ffaStanding": 7,
+      "health": 254,
+      "iconId": 0,
+      "isInteractable": false,
+      "isLocalPlayer": false,
+      "partnerGroupId": 0,
+      "playbook": {
+        "iconSmall": "",
+        "itemId": 0,
+        "name": ""
+      },
+      "puuid": "00000000-0000-0000-0000-000000000000",
+      "rank": 7,
+      "riotIdGameName": "Qúa Nhiều",
+      "riotIdTagLine": "tyuuu",
+      "setCoreName": "TFTSet18",
+      "summonerId": 0,
+      "summonerName": "Qúa Nhiều"
+    },
+    {
+      "augments": [],
+      "boardPieces": [
+        {
+          "championId": "DA_18_Yunara",
+          "icon": "/lol-game-data/assets/ASSETS/Characters/TFT18_Yunara/TFT18_Yunara_Square.TFT_Set18.png",
+          "items": [],
+          "level": 2,
+          "name": "Yunara",
+          "price": 2,
+          "traits": [
+            {
+              "id": "DA_18_Blossom",
+              "name": "Hoa Linh"
+            },
+            {
+              "id": "DA_18_Executioner",
+              "name": "Đao Phủ"
+            }
+          ]
+        },
+        {
+          "championId": "DA_Krug18",
+          "icon": "/lol-game-data/assets/ASSETS/Characters/TFT18_Krug/TFT18_Krug_Square.TFT_Set18.png",
+          "items": [],
+          "level": 1,
+          "name": "Quái Đá Krug",
+          "price": 3,
+          "traits": [
+            {
+              "id": "DA_Riftbeast18",
+              "name": "Quái Rừng"
+            },
+            {
+              "id": "DA_18_Brawler",
+              "name": "Đấu Sĩ"
+            }
+          ]
+        },
+        {
+          "championId": "DA_18_Rammus",
+          "icon": "/lol-game-data/assets/ASSETS/Characters/TFT18_Rammus/TFT18_Rammus_Square.TFT_Set18.png",
+          "items": [],
+          "level": 1,
+          "name": "Rammus",
+          "price": 3,
+          "traits": [
+            {
+              "id": "DA_18_Sprykin",
+              "name": "Tinh Nghịch"
+            },
+            {
+              "id": "DA_18_Defender",
+              "name": "Vệ Quân"
+            }
+          ]
+        },
+        {
+          "championId": "DA_18_Alistar",
+          "icon": "/lol-game-data/assets/ASSETS/Characters/TFT18_Alistar/TFT18_Alistar_Square.TFT_Set18.png",
+          "items": [],
+          "level": 1,
+          "name": "Alistar",
+          "price": 2,
+          "traits": [
+            {
+              "id": "DA_18_Elderwood",
+              "name": "Thần Rừng"
+            },
+            {
+              "id": "DA_18_Brawler",
+              "name": "Đấu Sĩ"
+            }
+          ]
+        },
+        {
+          "championId": "DA_18_Varus",
+          "icon": "/lol-game-data/assets/ASSETS/Characters/TFT18_Varus/TFT18_Varus_Square.TFT_Set18.png",
+          "items": [],
+          "level": 1,
+          "name": "Varus",
+          "price": 1,
+          "traits": [
+            {
+              "id": "DA_18_Inferno",
+              "name": "Hỏa Ngục"
+            },
+            {
+              "id": "DA_18_Rapidfire",
+              "name": "Liên Kích"
+            }
+          ]
+        }
+      ],
+      "companion": {
+        "colorName": "",
+        "icon": "/lol-game-data/assets/ASSETS/Loadouts/Companions/Tooltip_RazorBeak_Set16RankedRewards_Victorious_Tier1.LL_RazorBeak_Set16RankedRewards.png",
+        "speciesName": "Chim Biến Dị"
+      },
+      "customAugmentContainer": {
+        "description": "Không có vòng kỳ ngộ.",
+        "displayName": "",
+        "iconPath": "/lol-game-data/assets/",
+        "nameId": "TFT_Portals_Default_NoPortal"
+      },
+      "ffaStanding": 8,
+      "health": 251,
+      "iconId": 988,
+      "isInteractable": true,
+      "isLocalPlayer": true,
+      "partnerGroupId": 0,
+      "playbook": {
+        "iconSmall": "",
+        "itemId": 0,
+        "name": ""
+      },
+      "puuid": "3a0870f2-c706-55a0-a50f-b0d25b59a7cb",
+      "rank": 8,
+      "riotIdGameName": "mid",
+      "riotIdTagLine": "1111",
+      "setCoreName": "TFTSet18",
+      "summonerId": 3139322230212448,
+      "summonerName": "mid"
+    }
+  ],
+  "queueId": 1090,
+  "queueType": "NORMAL_TFT"
+}

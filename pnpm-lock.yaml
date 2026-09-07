@@ -36,6 +36,9 @@ importers:
       '@eslint/js':
         specifier: ^10.0.1
         version: 10.0.1(eslint@10.8.0(jiti@2.7.0))
+      '@hasagi/types':
+        specifier: ^16.12.2
+        version: 16.12.2
       '@playwright/test':
         specifier: ^1.60.0
         version: 1.62.1
@@ -922,6 +925,9 @@ packages:
 
   '@floating-ui/utils@0.2.12':
     resolution: {integrity: sha512-HpCo8tmWzLVad5s2d19EhAz5zqrrQ6s69qd6moPMQvkOuSwDT1YgRfWSVuc4ennqrgv3OHppiOGMQ7oC13yIww==}
+
+  '@hasagi/types@16.12.2':
+    resolution: {integrity: sha512-5OAR1NIonLyUxDCdan6nXipZLc6gkWK2hCSlHZcKeekOf2w4Q6oLfnpxf0R6+jQTTywEIa7sVyn8fXE2w4wd2g==}
 
   '@humanfs/core@0.19.2':
     resolution: {integrity: sha512-UhXNm+CFMWcbChXywFwkmhqjs3PRCmcSa/hfBgLIb7oQ5HNb1wS0icWsGtSAUNgefHeI+eBrA8I1fxmbHsGdvA==}
@@ -3849,6 +3855,8 @@ snapshots:
       '@floating-ui/utils': 0.2.12
 
   '@floating-ui/utils@0.2.12': {}
+
+  '@hasagi/types@16.12.2': {}
 
   '@humanfs/core@0.19.2':
     dependencies:
