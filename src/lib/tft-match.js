@@ -1,9 +1,42 @@
-/** @typedef {{ id: string, externalId: string, displayName: string, iconPath: string | null }} CatalogChampion */
-
-/** @typedef {{ catalogChampionId: string, externalId: string, displayName: string, iconPath: string | null, starLevel: 1 | 2 | 3, displayOrder: number }} TftMatchChampion */
-
-/** @typedef {{ puuid: string, placement: number, champions: TftMatchChampion[], omittedUnitCount: number }} TftMatchParticipant */
-
-/** @typedef {{ contractVersion: 1, matchId: string, region: string, queueId: number, completedAt: string, fetchedAt: string, participants: TftMatchParticipant[] }} CanonicalTftMatchSnapshot */
+/**
+ * @typedef {{ enabled: boolean, region: string | null, reason: string | null }} TftMatchApiAvailability
+ *
+ * @typedef {{
+ *   catalogChampionId: string,
+ *   externalId: string,
+ *   displayName: string,
+ *   iconPath: string | null,
+ *   starLevel: number,
+ *   displayOrder: number
+ * }} TftMatchPreviewChampion
+ *
+ * @typedef {{
+ *   available: true,
+ *   matchId: string,
+ *   completedAt: string,
+ *   placement: number,
+ *   gameType: string,
+ *   setNumber: number,
+ *   setCoreName: string,
+ *   champions: TftMatchPreviewChampion[]
+ * } | {
+ *   available: false,
+ *   matchId: string,
+ *   reason: string
+ * }} TftMatchPreviewRow
+ *
+ * @typedef {{
+ *   token: string,
+ *   selectedPlayer: { id: string, displayName: string, riotId: string },
+ *   matches: TftMatchPreviewRow[]
+ * }} TftMatchDiscoveryResponse
+ *
+ * @typedef {{
+ *   previewToken: string,
+ *   matchId: string,
+ *   winnerPlayerId: string,
+ *   champions: TftMatchPreviewChampion[]
+ * }} TftMatchComposerDraft
+ */
 
 export {};

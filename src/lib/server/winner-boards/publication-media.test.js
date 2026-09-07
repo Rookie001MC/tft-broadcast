@@ -26,9 +26,12 @@ function publicationMediaApi() {
 	return import('./publication-media.js');
 }
 
-/** @param {string} url */
+/** @param {string | null | undefined} url */
 function filenameFromUrl(url) {
-	return new URL(url, 'https://broadcast.example').pathname.split('/').at(-1);
+	if (!url) throw new Error('Expected a publication media URL');
+	const filename = new URL(url, 'https://broadcast.example').pathname.split('/').at(-1);
+	if (!filename) throw new Error('Publication media URL is incomplete');
+	return filename;
 }
 
 describe('publication media', () => {
@@ -234,6 +237,7 @@ describe('publication media', () => {
 		}
 
 		expect(caught).toEqual(expect.objectContaining({ message: 'Publication media was not found' }));
+		if (!caught) throw new Error('Expected publication media to be missing');
 		expect(caught.message).not.toContain(mediaRoot);
 	});
 });

@@ -14,8 +14,8 @@ import {
 	updatePlayer
 } from '$lib/server/players/repository.js';
 
-const MAX_BUNDLE_BYTES = 25 * 1024 * 1024;
-const MAX_PLAYER_IMAGE_BYTES = 10 * 1024 * 1024;
+const MAX_BUNDLE_BYTES = 60 * 1024 * 1024;
+const MAX_PLAYER_IMAGE_BYTES = 30 * 1024 * 1024;
 const PLAYER_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp']);
 const MEDIA_ROOT = env.MEDIA_ROOT ?? 'media';
 
@@ -153,7 +153,7 @@ export const actions = {
 				});
 			}
 			if (rawFile.size > MAX_BUNDLE_BYTES) {
-				return fail(400, { action: 'previewBundle', message: 'ZIP file is too large.' });
+				return fail(400, { action: 'previewBundle', message: 'ZIP file exceeds the 60 MiB limit.' });
 			}
 			const existingPlayers = await db.select().from(players);
 			const { token, preview } = await stagePlayerImport({

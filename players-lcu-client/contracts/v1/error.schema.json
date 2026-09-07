@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tft-broadcast.local/contracts/player-relay/v1/error.schema.json",
+  "title": "TFT Player Relay v1 safe error response",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["code", "retryable"],
+  "properties": {
+    "code": {
+      "enum": [
+        "invalid_envelope",
+        "id_content_conflict",
+        "expired_token",
+        "token_revoked",
+        "payload_too_large",
+        "unsupported_protocol",
+        "rate_limited",
+        "temporary_unavailable"
+      ]
+    },
+    "retryable": { "type": "boolean" },
+    "retryAfterSeconds": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 300
+    }
+  }
+}

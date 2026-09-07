@@ -5,7 +5,7 @@ import { fileTypeFromBuffer } from 'file-type';
 import yauzl from 'yauzl';
 import { normalizeRiotId } from './riot-id.js';
 
-const MAX_ZIP_BYTES = 25 * 1024 * 1024;
+const MAX_ZIP_BYTES = 60 * 1024 * 1024;
 const MAX_ENTRIES = 500;
 const MAX_EXPANDED_BYTES = 100 * 1024 * 1024;
 const REQUIRED_COLUMNS = ['full_name', 'display_name', 'riot_id'];
@@ -234,6 +234,21 @@ function key(value) {
 	return value.trim().toLocaleLowerCase('en-US');
 }
 
+/**
+ * Preserve the legacy GameName_TAG convention while also accepting the Riot
+ * ID itself (GameName#TAG) as an image filename.
+ *
+ * @param {string} stem
+ */
+function playerImageKey(stem) {
+	if (!stem.includes('#')) return key(stem);
+	try {
+		return normalizeRiotId(stem).imageKey;
+	} catch {
+		return key(stem);
+	}
+}
+
 /** @param {unknown} value */
 function text(value) {
 	return typeof value === 'string' ? value.trim() : '';
@@ -303,7 +318,11 @@ export async function inspectPlayerBundle(zipBytes, existingPlayers = []) {
 			}
 
 			const basename = path.posix.basename(name);
-			images.push({ path: name, key: key(basename.slice(0, -extension.length)), mime: type.mime });
+			images.push({
+				path: name,
+				key: playerImageKey(basename.slice(0, -extension.length)),
+				mime: type.mime
+			});
 		}
 
 		/** @type {Map<string, PlayerImage[]>} */

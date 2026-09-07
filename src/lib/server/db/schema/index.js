@@ -6,3 +6,5 @@ export * from './tft-matches.js';
 export * from './winner-boards.js';
 export * from './imports.js';
 export * from './setup.js';
+export * from './tft-match-settings.js';
+export * from './tft-matches.js';

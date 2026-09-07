@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tft-broadcast.local/contracts/player-relay/v1/capture.schema.json",
+  "title": "TFT Player Relay v1 capture envelope",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "protocolVersion",
+    "captureId",
+    "installationId",
+    "sequence",
+    "capturedAt",
+    "appVersion",
+    "observationKind",
+    "sourcePlatform",
+    "gameId",
+    "localPlayer",
+    "context",
+    "payloadSha256",
+    "payloadJson"
+  ],
+  "properties": {
+    "protocolVersion": { "const": 1 },
+    "captureId": { "$ref": "#/$defs/uuid" },
+    "installationId": { "$ref": "#/$defs/uuid" },
+    "sequence": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]{0,18}$"
+    },
+    "capturedAt": { "$ref": "#/$defs/utcTimestamp" },
+    "appVersion": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "observationKind": {
+      "enum": ["event", "recovery"]
+    },
+    "sourcePlatform": {
+      "type": ["string", "null"],
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "gameId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "localPlayer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["puuid", "gameName", "tagLine"],
+      "properties": {
+        "puuid": { "type": ["string", "null"], "minLength": 1, "maxLength": 256 },
+        "gameName": { "type": ["string", "null"], "minLength": 1, "maxLength": 100 },
+        "tagLine": { "type": ["string", "null"], "minLength": 1, "maxLength": 100 }
+      }
+    },
+    "context": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["serverId", "eventId"],
+      "properties": {
+        "serverId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "eventId": { "type": "string", "minLength": 1, "maxLength": 128 }
+      }
+    },
+    "payloadSha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "payloadJson": {
+      "type": "string",
+      "minLength": 2,
+      "maxLength": 4194304
+    }
+  },
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "utcTimestamp": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]{1,7})?Z$"
+    }
+  }
+}

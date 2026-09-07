@@ -4,6 +4,11 @@
 - **Package Manager**: pnpm
 - **Add-ons**: prettier, eslint, tailwindcss, sveltekit-adapter, drizzle, ai-tools
 
+
+---
+- Ensure type safety and test coverage for most functions and UI (if possible). 
+- Allow flexibility for future features.
+- Performance must still be first out of anything. Memory bloats and leaks are UNACCEPTABLE.
 ---
 
 You are able to use the Svelte MCP server, where you have access to comprehensive Svelte 5 and SvelteKit documentation. Here's how to use the available tools effectively:

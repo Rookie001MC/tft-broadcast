@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "07cb1240-c014-4987-988f-6be438620651",
+  "id": "eec8f8b1-a37b-42e5-8620-1faa8a3cbea9",
   "prevId": "6443028b-f78a-42d5-bc37-0056f6169dd7",
   "tables": {
     "account": {
@@ -1012,172 +1012,6 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
-    "tft_match_snapshot_participants": {
-      "name": "tft_match_snapshot_participants",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "snapshot_id": {
-          "name": "snapshot_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "puuid": {
-          "name": "puuid",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "placement": {
-          "name": "placement",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "board_json": {
-          "name": "board_json",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {
-        "tft_match_snapshot_participants_puuid_uq": {
-          "name": "tft_match_snapshot_participants_puuid_uq",
-          "columns": [
-            "snapshot_id",
-            "puuid"
-          ],
-          "isUnique": true
-        },
-        "tft_match_snapshot_participants_placement_uq": {
-          "name": "tft_match_snapshot_participants_placement_uq",
-          "columns": [
-            "snapshot_id",
-            "placement"
-          ],
-          "isUnique": true
-        }
-      },
-      "foreignKeys": {
-        "tft_match_snapshot_participants_snapshot_id_tft_match_snapshots_id_fk": {
-          "name": "tft_match_snapshot_participants_snapshot_id_tft_match_snapshots_id_fk",
-          "tableFrom": "tft_match_snapshot_participants",
-          "tableTo": "tft_match_snapshots",
-          "columnsFrom": [
-            "snapshot_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
-    "tft_match_snapshots": {
-      "name": "tft_match_snapshots",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "tournament_id": {
-          "name": "tournament_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "riot_match_id": {
-          "name": "riot_match_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "region": {
-          "name": "region",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "queue_id": {
-          "name": "queue_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "contract_version": {
-          "name": "contract_version",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "completed_at": {
-          "name": "completed_at",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "fetched_at": {
-          "name": "fetched_at",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "saved_at": {
-          "name": "saved_at",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {
-        "tft_match_snapshots_match_idx": {
-          "name": "tft_match_snapshots_match_idx",
-          "columns": [
-            "region",
-            "riot_match_id"
-          ],
-          "isUnique": false
-        },
-        "tft_match_snapshots_tournament_idx": {
-          "name": "tft_match_snapshots_tournament_idx",
-          "columns": [
-            "tournament_id",
-            "saved_at"
-          ],
-          "isUnique": false
-        }
-      },
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
     "graphic_state": {
       "name": "graphic_state",
       "columns": {
@@ -1322,13 +1156,6 @@
           "notNull": true,
           "autoincrement": false
         },
-        "source_tft_match_snapshot_id": {
-          "name": "source_tft_match_snapshot_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
         "title": {
           "name": "title",
           "type": "text",
@@ -1377,19 +1204,6 @@
             "id"
           ],
           "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "winner_board_state_source_tft_match_snapshot_id_tft_match_snapshots_id_fk": {
-          "name": "winner_board_state_source_tft_match_snapshot_id_tft_match_snapshots_id_fk",
-          "tableFrom": "winner_board_state",
-          "tableTo": "tft_match_snapshots",
-          "columnsFrom": [
-            "source_tft_match_snapshot_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
           "onUpdate": "no action"
         }
       },
@@ -1653,6 +1467,42 @@
         "first_operator_claim_status_ck": {
           "name": "first_operator_claim_status_ck",
           "value": "\"first_operator_claim\".\"status\" IN ('pending', 'complete')"
+        }
+      }
+    },
+    "tft_match_settings": {
+      "name": "tft_match_settings",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "region": {
+          "name": "region",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "tft_match_settings_singleton_ck": {
+          "name": "tft_match_settings_singleton_ck",
+          "value": "\"tft_match_settings\".\"id\" = 1"
         }
       }
     }

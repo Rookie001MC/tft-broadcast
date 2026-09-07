@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="vi">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>TFT · Thống kê sau trận</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600;700&amp;display=block">
+<style>
+html{background:transparent}
+*{box-sizing:border-box}body{margin:0;background:#12111b;color:#eeeaf5;font:14px 'IBM Plex Sans',sans-serif}header{padding:20px 28px;display:flex;align-items:center;gap:12px;border-bottom:1px solid #353044}header strong{margin-right:auto;letter-spacing:2px}button,.file{font:inherit;color:#eeeaf5;background:#292334;border:1px solid #514365;border-radius:6px;padding:10px 16px;cursor:pointer}button:hover,.file:hover{background:#493260}input[type=file]{display:none}main{padding:28px}.preview{background-color:#252330;background-image:linear-gradient(45deg,#302d3b 25%,transparent 25%),linear-gradient(-45deg,#302d3b 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#302d3b 75%),linear-gradient(-45deg,transparent 75%,#302d3b 75%);background-size:24px 24px;background-position:0 0,0 12px,12px -12px,-12px 0;box-shadow:0 18px 60px #0005}canvas{display:block;width:100%;height:auto}#status{color:#b9afca;line-height:1.7}body.obs,body.obs main,body.obs .preview{background:transparent;margin:0;padding:0;box-shadow:none}body.obs header,body.obs #status{display:none}body.obs canvas{width:1920px;height:1080px}
+</style>
+<header><strong>TFT / POST MATCH</strong><label class="file">Nạp JSON<input id="file" type="file" accept=".json,application/json"></label><button id="background">Xem nền tối</button><button id="retry">Tải lại ảnh</button><button id="export" disabled>Xuất PNG · 1920 × 1080</button></header>
+<main><div class="preview"><canvas id="canvas" width="1920" height="1080" aria-label="Bảng kết quả TFT: thứ hạng, người chơi, đội hình và trang bị"></canvas></div><p id="status" role="status"></p></main>
+<script>
+'use strict';
+const initial=/*__PAYLOAD__*/;
+let data=initial.data, assets=initial.assets;
+const canvas=document.querySelector('canvas'), ctx=canvas.getContext('2d'), status=document.querySelector('#status');
+const palette=['#646475','#a5a5b4','#50ba85','#519be7','#bc77ee','#f4ca6a','#f4ca6a'];
+const images=new Map(); let missing=new Set(), generation=0, ready=false;
+const exportButton=document.querySelector('#export');
+const mappedUrls=new Map();
+let winnerPortrait="";
+let animationFrame=0, animationTime=Infinity;
+const motionDuration=560;
+function motion(delay,dx=64,dy=0){
+ const t=Math.max(0,Math.min(1,(animationTime-delay)/motionDuration));
+ const eased=t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2;
+ ctx.save();ctx.globalAlpha*=eased;ctx.translate(dx*(1-eased),dy*(1-eased));
+}
+function stopAnimation(){cancelAnimationFrame(animationFrame);animationFrame=0}
+function playAnimation(){
+ stopAnimation();
+ const started=performance.now();
+ const units=Math.max(11,...data.players.map(p=>(p.boardPieces||[]).length));
+ const duration=initial.ranking?1000+Math.max(0,data.players.length-2)*80+motionDuration:Math.max(0,data.players.length-1)*100+100+(units-1)*24+motionDuration;
+ exportButton.disabled=true;window.overlayState.animating=true;
+ function tick(now){
+  animationTime=(now-started)*1.2;draw();
+  if(animationTime<duration){animationFrame=requestAnimationFrame(tick)}
+  else{animationTime=Infinity;draw();animationFrame=0;exportButton.disabled=false;window.overlayState.animating=false}
+ }
+ tick(started);
+}
+const emptySlotUrl='https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-tft-team-planner/global/default/images/team_codes_champion_empty.png';
+window.overlayState={phase:'loading',loaded:0,total:0,missing:[]};
+if(new URLSearchParams(location.search).has('obs')) document.body.classList.add('obs');
+function text(s,x,y,size=18,color='#f3f0fa',weight=600,max=1000){ctx.fillStyle=color;ctx.font=`${weight} ${size}px "IBM Plex Sans",Arial,sans-serif`;s=String(s);while(ctx.measureText(s).width>max&&s.length>1)s=s.slice(0,-2)+'…';ctx.fillText(s,x,y)}
+function box(x,y,w,h,color){ctx.fillStyle=color;ctx.fillRect(x,y,w,h)}
+function image(path,x,y,w,h){const im=images.get(path);if(im)ctx.drawImage(im,x,y,w,h);return !!im}
+function iconPaths(value){if(initial.ranking){value={players:[...value.players].sort((a,b)=>a.ffaStanding-b.ffaStanding).slice(0,1)}}const paths=new Set();if(initial.ranking&&winnerPortrait)paths.add(winnerPortrait);if(!initial.ranking&&value.players.some(p=>(p.boardPieces||[]).length<11))paths.add(emptySlotUrl);for(const p of value.players)for(const u of p.boardPieces||[]){paths.add(u.icon||'');mappedUrls.set(u.icon,initial.catalog?.champions?.[u.championId]||[]);for(const item of u.items||[]){paths.add(item.icon||'');mappedUrls.set(item.icon,initial.catalog?.items?.[item.nameId]||[])}}return paths}
+function assetUrls(path){
+ if(!path)return [];
+ if(/^data:image\/(png|webp);base64,/.test(path))return [path];
+ if(/^https:\/\/raw\.communitydragon\.org\//i.test(path))return [path];
+ const prefix='/lol-game-data/assets/';if(!path.startsWith(prefix))return [];
+ const relative=path.slice(prefix.length).toLowerCase();
+ if(relative.split('/').includes('..'))return [];
+ // LCU supplies the exact asset identity; do not match items by id=0 or translated names.
+ return [...new Set([...(mappedUrls.get(path)||[]),...['latest','pbe'].flatMap(version=>[
+  `https://raw.communitydragon.org/${version}/plugins/rcp-be-lol-game-data/global/default/${relative}`,
+  `https://raw.communitydragon.org/${version}/game/${relative}`
+ ])])];
+}
+async function loadImage(path){
+ if(images.has(path))return true;
+ for(const url of assetUrls(path)){
+  const im=await new Promise(resolve=>{
+   const img=new Image();img.crossOrigin='anonymous';
+   const timer=setTimeout(()=>finish(null),12000);
+   function finish(result){clearTimeout(timer);img.onload=null;img.onerror=null;resolve(result)}
+   img.onload=async()=>{try{await img.decode();finish(img)}catch{finish(null)}};
+   img.onerror=()=>finish(null);img.src=url;
+  });
+  if(im){images.set(path,im);return true}
+ }
+ return false;
+}
+function draw(){
+ ctx.clearRect(0,0,1920,1080);
+ const players=[...data.players].sort((a,b)=>(a.ffaStanding??a.rank??99)-(b.ffaStanding??b.rank??99));
+ const bounds={left:71,right:1820,top:60,bottom:180+(players.length-1)*120};
+ const width=bounds.right-bounds.left,height=bounds.bottom-bounds.top;
+ const scale=Math.min(1,1720/width,780/height);
+ ctx.save();
+ ctx.translate((1920-width*scale)/2-bounds.left*scale,(1080-height*scale)/2-bounds.top*scale);
+ ctx.scale(scale,scale);
+ players.forEach((p,i)=>{
+  const y=70+i*120, rank=p.ffaStanding??p.rank??i+1;
+  // Flat name panel, restrained rank divider and a single winner accent.
+  motion(i*100,-64);
+  box(90,y+4,425,102,'#ffffff');
+  if(rank===1){const gradient=ctx.createLinearGradient(90,y,170,y+106);gradient.addColorStop(0,'#9f1730');gradient.addColorStop(1,'#e84452');box(90,y+4,78,102,gradient)}
+  else box(168,y+30,1,50,'#e4e4e9');
+  ctx.textAlign='center';text(rank,129,y+68,34,rank===1?'#ffffff':'#65616d',700);ctx.textAlign='left';
+  const name=p.riotIdGameName||p.summonerName||'—';text(name,190,y+66,27,'#25212b',600,303);
+  ctx.restore();
+  const units=p.boardPieces||[],slots=Math.max(11,units.length),gap=8,size=Math.min(110,(1300-(slots-1)*gap)/slots);
+  for(let j=0;j<slots;j++){
+   const x=530+j*(size+gap),u=units[j];
+   motion(i*100+100+j*24,48);
+   const color=u?palette[Math.min(6,Math.max(0,Number(u.price)||0))]:'#343139';box(x,y,size,size,color);
+   if(!u){image(emptySlotUrl,x+2,y+2,size-4,size-4);ctx.restore();continue}
+   const portrait=images.get(u.icon);if(portrait){const side=Math.min(portrait.naturalWidth,portrait.naturalHeight);ctx.drawImage(portrait,(portrait.naturalWidth-side)/2,(portrait.naturalHeight-side)/2,side,side,x+2,y+2,size-4,size-4)}
+   ctx.textAlign='center';ctx.strokeStyle='#181020';ctx.lineWidth=3;ctx.font='bold 18px "IBM Plex Sans"';const stars='★'.repeat(Math.max(0,Math.min(4,Number(u.level)||0)));ctx.strokeText(stars,x+size/2,y+13);text(stars,x+size/2,y+13,18,Number(u.level)>=3?'#ffdc6c':'#e7dff3',700);ctx.textAlign='left';
+   const items=u.items||[],itemSize=Math.min(27,(size-8)/Math.max(3,items.length));items.forEach((item,k)=>{const ix=x+(size-items.length*itemSize)/2+k*itemSize,iy=y+size-itemSize;box(ix,iy,itemSize,itemSize,'#15101d');image(item.icon,ix+1,iy+1,itemSize-2,itemSize-2)});
+   ctx.restore();
+  }
+ });
+ ctx.restore();
+ status.textContent=`1920 × 1080 · Nền xuất luôn trong suốt. ${players.length} người chơi${missing.size?` · ${missing.size} icon chưa có: đang hiển thị tên thay thế`:''}.`;
+}
+async function render(){
+ stopAnimation();
+ const token=++generation, paths=[...iconPaths(data)], failed=new Set();let completed=0;
+ ready=false;exportButton.disabled=true;canvas.style.visibility='hidden';
+ window.overlayState={phase:'loading',loaded:0,total:paths.length,missing:[]};
+ const progress=()=>{status.textContent=`Đang tải ảnh ${completed}/${paths.length}…`;};progress();
+ let cursor=0;
+ async function worker(){while(cursor<paths.length&&token===generation){const path=paths[cursor++];const ok=await loadImage(path);if(!ok)failed.add(path);completed++;if(token===generation){window.overlayState.loaded=completed-failed.size;progress()}}}
+ await Promise.all(Array.from({length:Math.min(8,paths.length)},worker));
+ if(token!==generation)return;
+ missing=failed;
+ if(failed.size){window.overlayState={phase:'error',loaded:paths.length-failed.size,total:paths.length,missing:[...failed]};status.textContent=`Chưa tải được ${failed.size}/${paths.length} ảnh. Kiểm tra kết nối rồi bấm “Tải lại ảnh”. Chưa thể xuất PNG.`;return}
+ try{
+  const sample=data.players.map(p=>p.riotIdGameName||p.summonerName||'').join(' ')+'0123456789';
+  await document.fonts.load('600 27px "IBM Plex Sans"',sample);
+  const loaded=await document.fonts.load('700 27px "IBM Plex Sans"',sample);
+  if(!loaded.length)throw new Error('Font unavailable');
+  await document.fonts.ready;
+ }catch{if(token===generation){window.overlayState.phase='error';status.textContent='Chưa tải được font IBM Plex Sans. Bấm “Tải lại ảnh” để thử lại.'}return}
+ if(token!==generation)return;
+ animationTime=Infinity;draw();canvas.style.visibility='visible';ready=true;exportButton.disabled=false;
+ window.overlayState={phase:'ready',loaded:paths.length,total:paths.length,missing:[]};
+ if(canvas.style.display!=='none')playAnimation();
+}
+document.querySelector('#background').onclick=()=>{const el=document.querySelector('.preview');el.style.backgroundImage=el.style.backgroundImage==='none'?'':'none'};
+document.querySelector('#retry').onclick=()=>render();
+exportButton.onclick=()=>{if(!ready)return;const filename=`tft-postmatch-${data.gameId||'overlay'}.png`;try{canvas.toBlob(blob=>{if(!blob){status.textContent='Không thể xuất PNG.';return}const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=filename;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)},'image/png')}catch{status.textContent='Không thể xuất PNG: nguồn ảnh không cho phép CORS.'}};
+document.querySelector('#file').onchange=async e=>{try{const next=JSON.parse(await e.target.files[0].text());if(!Array.isArray(next.players)||next.players.length<1||next.players.length>8)throw Error('JSON cần có từ 1 đến 8 players');data=next;await render()}catch(err){status.textContent='Không thể nạp JSON: '+err.message}};
+if(initial.live){
+ let contentKey='',shown=false;
+ document.body.classList.add('obs');
+ canvas.style.visibility='hidden';
+ async function poll(){try{
+  const response=await fetch('/api/state');if(!response.ok)throw Error('Disconnected');
+  const state=await response.json(),wasShown=shown;shown=state.visible;
+  canvas.style.display=shown?'block':'none';
+  if(!shown)stopAnimation();
+  const nextKey=JSON.stringify([state.data,state.portrait||'']);
+  if(state.data&&contentKey!==nextKey){contentKey=nextKey;data=state.data;winnerPortrait=state.portrait||"";await render()}
+  else if(shown&&!wasShown&&ready)playAnimation();
+ }catch(error){status.textContent='Mất kết nối máy broadcast';}finally{setTimeout(poll,1000)}}
+ poll();
+}else render();
+</script>
+</html>

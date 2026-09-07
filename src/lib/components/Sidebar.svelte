@@ -22,6 +22,7 @@
 			label: 'Broadcast',
 			items: [
 				{ href: '/admin/graphics', label: 'Graphics', icon: MonitorPlayIcon },
+				{ href: '/admin/post-game', label: 'Post Match', icon: MonitorPlayIcon },
 				{ href: '/admin/settings', label: 'Settings', icon: SettingsIcon }
 			]
 		}

@@ -18,6 +18,7 @@ import {
 	isPublicationMediaFilename,
 	preparePublicationMedia
 } from './publication-media.js';
+import { insertTftMatchSnapshot } from '../tft-matches/snapshot-repository.js';
 
 /**
  * @import {
@@ -40,7 +41,7 @@ let writeTail = Promise.resolve();
  *   title: string,
  *   champions: Array<{ catalogChampionId: string, starLevel: number | null }>,
  *   augmentIds: string[],
- *   sourceSnapshot?: import('$lib/tft-match.js').CanonicalTftMatchSnapshot
+ *   sourceSnapshot?: import('../tft-matches/snapshot-repository.js').TftMatchSnapshotSource
  * }} SaveWinnerBoardStateInput
  */
 
@@ -154,16 +155,17 @@ async function validateTournamentScope(transaction, scope) {
 		.limit(1);
 	if (!rosterEntry) throw new Error('Winner must belong to tournament roster');
 
+	const uniqueChampionIds = [...new Set(scope.championIds)];
 	const scopedChampions = await transaction
 		.select({ id: catalogChampions.id })
 		.from(catalogChampions)
 		.where(
 			and(
 				eq(catalogChampions.catalogSnapshotId, activeCatalogSnapshotId),
-				inArray(catalogChampions.id, scope.championIds)
+				inArray(catalogChampions.id, uniqueChampionIds)
 			)
 		);
-	if (scopedChampions.length !== new Set(scope.championIds).size)
+	if (scopedChampions.length !== uniqueChampionIds.length)
 		throw new Error('Champion does not belong to active catalog');
 
 	if (scope.augmentIds.length > 0) {
@@ -281,10 +283,7 @@ function inputFromState(state) {
 async function replaceState(transaction, input) {
 	const now = new Date();
 	const sourceTftMatchSnapshotId = input.sourceSnapshot
-		? await insertTftMatchSnapshot(transaction, {
-				tournamentId: input.tournamentId,
-				snapshot: input.sourceSnapshot
-			})
+		? await insertTftMatchSnapshot(transaction, input.sourceSnapshot)
 		: null;
 	await validateTournamentScope(transaction, validationScope(input));
 	await transaction.delete(winnerBoardState).where(eq(winnerBoardState.id, CURRENT_STATE_ID));
@@ -294,6 +293,7 @@ async function replaceState(transaction, input) {
 		winnerPlayerId: input.winnerPlayerId,
 		sourceTftMatchSnapshotId,
 		title: input.title,
+		sourceTftMatchSnapshotId,
 		createdAt: now,
 		updatedAt: now
 	});

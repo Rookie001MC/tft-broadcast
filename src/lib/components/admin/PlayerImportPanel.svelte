@@ -75,7 +75,7 @@
 		class="flex flex-wrap items-end gap-3"
 	>
 		<label class="label min-w-64 flex-1">
-			<span class="label-text">Player bundle (.zip, max 25 MiB)</span>
+			<span class="label-text">Player bundle (.zip, max 60 MiB)</span>
 			<input
 				class="input"
 				type="file"

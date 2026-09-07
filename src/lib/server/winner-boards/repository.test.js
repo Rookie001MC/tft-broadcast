@@ -83,23 +83,15 @@ const schemaStatements = [
 	)`,
 	`CREATE TABLE tft_match_snapshots (
 		id TEXT PRIMARY KEY NOT NULL,
-		tournament_id TEXT NOT NULL,
 		riot_match_id TEXT NOT NULL,
 		region TEXT NOT NULL,
-		queue_id INTEGER NOT NULL,
+		tournament_id TEXT NOT NULL,
+		selected_player_id TEXT NOT NULL,
+		active_catalog_snapshot_id TEXT NOT NULL,
 		contract_version INTEGER NOT NULL,
-		completed_at INTEGER NOT NULL,
+		payload_json TEXT NOT NULL,
 		fetched_at INTEGER NOT NULL,
 		saved_at INTEGER NOT NULL
-	)`,
-	`CREATE TABLE tft_match_snapshot_participants (
-		id TEXT PRIMARY KEY NOT NULL,
-		snapshot_id TEXT NOT NULL REFERENCES tft_match_snapshots(id) ON DELETE CASCADE,
-		puuid TEXT NOT NULL,
-		placement INTEGER NOT NULL,
-		board_json TEXT NOT NULL,
-		UNIQUE (snapshot_id, puuid),
-		UNIQUE (snapshot_id, placement)
 	)`,
 	`CREATE TABLE winner_board_state (
 		id TEXT PRIMARY KEY NOT NULL,
@@ -107,6 +99,7 @@ const schemaStatements = [
 		winner_player_id TEXT NOT NULL REFERENCES players(id),
 		source_tft_match_snapshot_id TEXT REFERENCES tft_match_snapshots(id) ON DELETE SET NULL,
 		title TEXT NOT NULL,
+		source_tft_match_snapshot_id TEXT REFERENCES tft_match_snapshots(id) ON DELETE SET NULL,
 		created_at INTEGER NOT NULL,
 		updated_at INTEGER NOT NULL
 	)`,
@@ -264,41 +257,51 @@ function validInput() {
 	};
 }
 
-/** @returns {import('$lib/tft-match.js').CanonicalTftMatchSnapshot} */
-function sourceSnapshot() {
+/** @returns {import('../tft-matches/snapshot-repository.js').TftMatchSnapshotSource} */
+function validSourceSnapshot() {
 	return {
-		contractVersion: 1,
-		matchId: 'VN2_winner-source',
-		region: 'VN2',
-		queueId: 1100,
-		completedAt: '2026-08-14T01:00:00.000Z',
-		fetchedAt: '2026-08-14T01:05:00.000Z',
-		participants: Array.from({ length: 8 }, (_, index) => ({
-			puuid: `puuid-${index + 1}`,
-			placement: index + 1,
-			champions:
-				index === 0
-					? [
-							{
-								catalogChampionId: 'champion-2',
-								externalId: 'TFT15_Champion2',
-								displayName: 'Champion 2',
-								iconPath: null,
-								starLevel: 2,
-								displayOrder: 0
-							},
-							{
-								catalogChampionId: 'champion-2',
-								externalId: 'TFT15_Champion2',
-								displayName: 'Champion 2',
-								iconPath: null,
-								starLevel: 1,
-								displayOrder: 1
-							}
-						]
-					: [],
-			omittedUnitCount: index
-		}))
+		snapshot: {
+			contractVersion: 1,
+			source: {
+				provider: 'riot',
+				region: 'VN2',
+				matchId: 'VN2_MATCH_1',
+				dataVersion: '6',
+				fetchedAt: '2026-08-16T04:00:00.000Z'
+			},
+			match: {
+				completedAt: '2026-08-16T03:00:00.000Z',
+				durationSeconds: 1800,
+				gameVersion: 'Version 16.14',
+				queueId: 1100,
+				gameType: 'standard',
+				setNumber: 17,
+				setCoreName: 'TFTSet17'
+			},
+			participants: Array.from({ length: 8 }, (_, index) => ({
+				puuid: index === 0 ? 'winner-one-puuid' : `other-puuid-${index}`,
+				riotId: index === 0 ? { gameName: 'Winner One', tagline: 'VN1' } : null,
+				placement: index + 1,
+				level: 8,
+				champions: [
+					{
+						externalId: `TFT15_Champion${index + 1}`,
+						catalogChampionId: `champion-${index + 1}`,
+						displayName: `Champion ${index + 1}`,
+						iconPath: null,
+						starLevel: 2,
+						displayOrder: 0
+					}
+				]
+			}))
+		},
+		tournamentId: 'tournament-one',
+		selectedPlayerId: 'player-one',
+		selectedPuuid: 'winner-one-puuid',
+		activeCatalogSnapshotId: 'snapshot-active',
+		riotGameName: 'Winner One',
+		riotTagline: 'VN1',
+		region: 'VN2'
 	};
 }
 
@@ -316,6 +319,19 @@ async function readPublishedAsset(mediaApi, url) {
 		publicationId,
 		filename
 	});
+}
+
+/** @param {any} database */
+async function requirePublishedWinnerBoard(database) {
+	const published = await repository.getPublishedWinnerBoard(database);
+	if (!published) throw new Error('Expected a published winner board');
+	return published;
+}
+
+/** @param {string | null | undefined} url */
+function requirePublicationUrl(url) {
+	if (!url) throw new Error('Expected a publication media URL');
+	return url;
 }
 
 /** @param {ReturnType<typeof createClient>} client */
@@ -392,6 +408,133 @@ describe('winner board singleton repository', () => {
 		]);
 		expect(await repository.getGraphicVersion(database)).toBe(0);
 		expect(await repository.getPublishedWinnerBoard(database)).toBeNull();
+		expect((await client.execute('SELECT * FROM tft_match_snapshots')).rows).toEqual([]);
+		expect(
+			(await client.execute('SELECT source_tft_match_snapshot_id FROM winner_board_state')).rows
+		).toEqual([{ source_tft_match_snapshot_id: null }]);
+	});
+
+	it('atomically attaches an immutable snapshot while keeping edited Winner fields independent', async () => {
+		await execute(
+			client,
+			'INSERT INTO tournament_players (tournament_id, player_id, display_order, notes) VALUES (?, ?, ?, ?)',
+			['tournament-one', 'player-two', 1, null]
+		);
+		const saved = await repository.saveWinnerBoardState(database, {
+			...validInput(),
+			title: 'Operator edited title',
+			winnerPlayerId: 'player-two',
+			champions: [
+				{ catalogChampionId: 'champion-3', starLevel: 1 },
+				{ catalogChampionId: 'champion-2', starLevel: 3 }
+			],
+			augmentIds: ['augment-3'],
+			sourceSnapshot: validSourceSnapshot()
+		});
+
+		expect(saved).toMatchObject({
+			title: 'Operator edited title',
+			winner: { id: 'player-two' },
+			champions: [
+				expect.objectContaining({ id: 'champion-3', starLevel: 1, displayOrder: 0 }),
+				expect.objectContaining({ id: 'champion-2', starLevel: 3, displayOrder: 1 })
+			],
+			augments: [expect.objectContaining({ id: 'augment-3' })]
+		});
+		const snapshots = (await client.execute('SELECT * FROM tft_match_snapshots')).rows;
+		expect(snapshots).toHaveLength(1);
+		expect(JSON.parse(/** @type {string} */ (snapshots[0].payload_json))).toEqual(
+			validSourceSnapshot().snapshot
+		);
+		expect(
+			(await client.execute('SELECT source_tft_match_snapshot_id FROM winner_board_state')).rows[0]
+				.source_tft_match_snapshot_id
+		).toBe(snapshots[0].id);
+
+		await repository.saveWinnerBoardState(database, validInput());
+		expect(
+			(await client.execute('SELECT source_tft_match_snapshot_id FROM winner_board_state')).rows
+		).toEqual([{ source_tft_match_snapshot_id: null }]);
+		expect((await client.execute('SELECT id FROM tft_match_snapshots')).rows).toHaveLength(1);
+
+		await repository.resetWinnerBoardState(database);
+		expect((await client.execute('SELECT id FROM tft_match_snapshots')).rows).toHaveLength(1);
+	});
+
+	it('rolls back both sides when hidden snapshot or Winner child insertion fails', async () => {
+		await repository.saveWinnerBoardState(database, validInput());
+		const prior = await repository.getWinnerBoardState(database);
+		const invalidSource = validSourceSnapshot();
+		invalidSource.region = 'EUN1';
+
+		await expect(
+			repository.saveWinnerBoardState(database, {
+				...validInput(),
+				title: 'Must not persist',
+				sourceSnapshot: invalidSource
+			})
+		).rejects.toThrow();
+		expect(await repository.getWinnerBoardState(database)).toEqual(prior);
+		expect((await client.execute('SELECT * FROM tft_match_snapshots')).rows).toEqual([]);
+
+		await client.execute(`CREATE TRIGGER fail_winner_child BEFORE INSERT ON winner_board_state_champions
+			WHEN NEW.catalog_champion_id = 'champion-3' BEGIN SELECT RAISE(ABORT, 'forced child failure'); END`);
+		await expect(
+			repository.saveWinnerBoardState(database, {
+				...validInput(),
+				champions: [{ catalogChampionId: 'champion-3', starLevel: 2 }],
+				sourceSnapshot: validSourceSnapshot()
+			})
+		).rejects.toThrow();
+		expect(await repository.getWinnerBoardState(database)).toEqual(prior);
+		expect((await client.execute('SELECT * FROM tft_match_snapshots')).rows).toEqual([]);
+	});
+
+	it('atomically advances a live API-assisted save', async () => {
+		await repository.saveWinnerBoardState(database, validInput());
+		await repository.setWinnerBoardLive(database, true);
+		const before = await graphicRow(client);
+
+		const saved = await repository.saveWinnerBoardState(database, {
+			...validInput(),
+			title: 'Imported live update',
+			sourceSnapshot: validSourceSnapshot()
+		});
+
+		expect(saved.title).toBe('Imported live update');
+		expect((await client.execute('SELECT * FROM tft_match_snapshots')).rows).toHaveLength(1);
+		expect((await graphicRow(client))?.published_publication_id).not.toBe(
+			before?.published_publication_id
+		);
+		expect(await repository.getGraphicVersion(database)).toBe(2);
+		expect(await repository.getPublishedWinnerBoard(database)).toMatchObject({
+			title: 'Imported live update'
+		});
+	});
+
+	it('rolls back a live snapshot failure and removes prepared media', async () => {
+		await repository.saveWinnerBoardState(database, validInput());
+		await repository.setWinnerBoardLive(database, true);
+		const prior = await repository.getWinnerBoardState(database);
+		const priorGraphic = await graphicRow(client);
+		const priorDirectories = await readdir(path.join(mediaEnvironment.root, 'publications'));
+		const invalidSource = validSourceSnapshot();
+		invalidSource.selectedPuuid = 'missing-puuid';
+
+		await expect(
+			repository.saveWinnerBoardState(database, {
+				...validInput(),
+				title: 'Must roll back live',
+				sourceSnapshot: invalidSource
+			})
+		).rejects.toThrow();
+
+		expect(await repository.getWinnerBoardState(database)).toEqual(prior);
+		expect(await graphicRow(client)).toEqual(priorGraphic);
+		expect((await client.execute('SELECT * FROM tft_match_snapshots')).rows).toEqual([]);
+		expect(await readdir(path.join(mediaEnvironment.root, 'publications'))).toEqual(
+			priorDirectories
+		);
 	});
 
 	it('atomically links one eight-participant source snapshot and preserves duplicate slot order', async () => {
@@ -502,45 +645,29 @@ describe('winner board singleton repository', () => {
 		expect(state.augments).toHaveLength(3);
 	});
 
-	it('persists repeated champion slots with independent stars and source links', async () => {
-		const state = await repository.saveWinnerBoardState(database, {
+	it('persists and publishes duplicate champion instances with independent stars', async () => {
+		const input = {
 			...validInput(),
 			champions: [
-				{ catalogChampionId: 'champion-2', starLevel: 2 },
-				{ catalogChampionId: 'champion-2', starLevel: 1 }
+				{ catalogChampionId: 'champion-2', starLevel: 1 },
+				{ catalogChampionId: 'champion-2', starLevel: 3 },
+				{ catalogChampionId: 'champion-1', starLevel: null }
 			]
-		});
+		};
 
-		expect(state.champions).toEqual([
-			expect.objectContaining({
-				id: 'champion-2',
-				displayName: 'Champion 2',
-				starLevel: 2,
-				displayOrder: 0
-			}),
-			expect.objectContaining({
-				id: 'champion-2',
-				displayName: 'Champion 2',
-				starLevel: 1,
-				displayOrder: 1
-			})
+		const saved = await repository.saveWinnerBoardState(database, input);
+		expect(saved.champions).toEqual([
+			expect.objectContaining({ id: 'champion-2', starLevel: 1, displayOrder: 0 }),
+			expect.objectContaining({ id: 'champion-2', starLevel: 3, displayOrder: 1 }),
+			expect.objectContaining({ id: 'champion-1', starLevel: null, displayOrder: 2 })
 		]);
-	});
 
-	it('publishes repeated champion slots independently', async () => {
-		await repository.saveWinnerBoardState(database, {
-			...validInput(),
-			champions: [
-				{ catalogChampionId: 'champion-2', starLevel: 2 },
-				{ catalogChampionId: 'champion-2', starLevel: 1 }
-			]
-		});
 		await repository.setWinnerBoardLive(database, true);
-
-		const publication = await repository.getPublishedWinnerBoard(database);
-		expect(publication?.champions).toEqual([
-			expect.objectContaining({ id: 'champion-2', starLevel: 2, displayOrder: 0 }),
-			expect.objectContaining({ id: 'champion-2', starLevel: 1, displayOrder: 1 })
+		const published = await requirePublishedWinnerBoard(database);
+		expect(published.champions).toEqual([
+			expect.objectContaining({ id: 'champion-2', starLevel: 1, displayOrder: 0 }),
+			expect.objectContaining({ id: 'champion-2', starLevel: 3, displayOrder: 1 }),
+			expect.objectContaining({ id: 'champion-1', starLevel: null, displayOrder: 2 })
 		]);
 	});
 
@@ -557,7 +684,7 @@ describe('winner board singleton repository', () => {
 		await repository.saveWinnerBoardState(database, validInput());
 		await repository.setWinnerBoardLive(database, true);
 
-		const published = await repository.getPublishedWinnerBoard(database);
+		const published = await requirePublishedWinnerBoard(database);
 		expect(published).toMatchObject({ title: 'TFT Champion', winner: { id: 'player-one' } });
 		expect((await graphicRow(client))?.published_publication_id).toBe(published.id);
 		expect(await repository.getGraphicVersion(database)).toBe(1);
@@ -592,7 +719,7 @@ describe('winner board singleton repository', () => {
 
 		await repository.saveWinnerBoardState(database, validInput());
 		await repository.setWinnerBoardLive(database, true);
-		const first = await repository.getPublishedWinnerBoard(database);
+		const first = await requirePublishedWinnerBoard(database);
 		expect(first).toMatchObject({
 			winner: { imagePath: expect.stringContaining(`/publications/${first.id}/`) },
 			champions: expect.arrayContaining([
@@ -609,9 +736,9 @@ describe('winner board singleton repository', () => {
 			])
 		});
 		const firstUrls = [
-			first.winner.imagePath,
-			first.champions[0].iconPath,
-			first.augments[0].iconPath
+			requirePublicationUrl(first.winner.imagePath),
+			requirePublicationUrl(first.champions[0]?.iconPath),
+			requirePublicationUrl(first.augments[0]?.iconPath)
 		];
 		const mediaApi = await import('./publication-media.js');
 		for (const url of firstUrls) {
@@ -648,7 +775,7 @@ describe('winner board singleton repository', () => {
 		}
 
 		await repository.saveWinnerBoardState(database, { ...validInput(), title: 'Next champion' });
-		const second = await repository.getPublishedWinnerBoard(database);
+		const second = await requirePublishedWinnerBoard(database);
 		expect(second.id).not.toBe(first.id);
 		expect(second).toMatchObject({
 			title: 'Next champion',
@@ -670,9 +797,9 @@ describe('winner board singleton repository', () => {
 			])
 		});
 		const secondUrls = [
-			second.winner.imagePath,
-			second.champions[0].iconPath,
-			second.augments[0].iconPath
+			requirePublicationUrl(second.winner.imagePath),
+			requirePublicationUrl(second.champions[0]?.iconPath),
+			requirePublicationUrl(second.augments[0]?.iconPath)
 		];
 		expect(secondUrls).not.toEqual(firstUrls);
 		for (const url of secondUrls) {
@@ -712,7 +839,7 @@ describe('winner board singleton repository', () => {
 	it('rejects stored JSON whose payload ID does not match the referenced publication row', async () => {
 		await repository.saveWinnerBoardState(database, validInput());
 		await repository.setWinnerBoardLive(database, true);
-		const publication = await repository.getPublishedWinnerBoard(database);
+		const publication = await requirePublishedWinnerBoard(database);
 		const stored = JSON.parse(
 			/** @type {string} */ (
 				(

@@ -1,9 +1,20 @@
 import { RiotApi, TftApi } from 'twisted';
 
+const RUNTIME_GATEWAY_FACTORY = Symbol.for('tft-match-v1.gateway-factory');
+const AUTH_MESSAGE = 'The Riot API key is unavailable or invalid.';
+const ACCOUNT_NOT_FOUND_MESSAGE = "No Riot account was found for this player's Riot ID.";
+const RATE_LIMIT_MESSAGE = 'Riot is temporarily limiting requests. Please try again shortly.';
+const TEMPORARY_MESSAGE = 'Riot is temporarily unavailable. Please try again.';
+
 export class TftMatchGatewayError extends Error {
-	/** @param {string} category @param {number} status @param {string} operatorMessage */
-	constructor(category, status, operatorMessage) {
-		super(operatorMessage);
+	/**
+	 * @param {'auth' | 'not_found' | 'rate_limit' | 'service' | 'timeout' | 'transport'} category
+	 * @param {number | null} status
+	 * @param {string} operatorMessage
+	 * @param {unknown} [cause]
+	 */
+	constructor(category, status, operatorMessage, cause) {
+		super(operatorMessage, cause === undefined ? undefined : { cause });
 		this.name = 'TftMatchGatewayError';
 		this.category = category;
 		this.status = status;
@@ -12,113 +23,134 @@ export class TftMatchGatewayError extends Error {
 }
 
 /** @param {unknown} error */
-function gatewayError(error) {
-	const caught = /** @type {any} */ (error);
-	const status =
-		typeof caught?.status === 'number'
-			? caught.status
-			: caught?.response?.status
-				? Number(caught.response.status)
-				: 503;
-	if (status === 401 || status === 403)
-		return new TftMatchGatewayError(
-			'authentication',
-			status,
-			'The Riot API key is unavailable or invalid.'
-		);
-	if (status === 404)
-		return new TftMatchGatewayError(
-			'not_found',
-			status,
-			'Riot could not find the requested player or match.'
-		);
-	if (status === 429)
-		return new TftMatchGatewayError(
-			'rate_limited',
-			status,
-			'Riot is temporarily limiting requests. Please try again.'
-		);
-	return new TftMatchGatewayError(
-		'temporary',
-		status >= 500 ? status : 503,
-		'Riot match data is temporarily unavailable. Please try again.'
-	);
+function errorStatus(error) {
+	if (!error || typeof error !== 'object') return null;
+	const record = /** @type {Record<string, any>} */ (error);
+	for (const candidate of [
+		record.status,
+		record.statusCode,
+		record.response?.status,
+		record.error?.statusCode
+	]) {
+		if (typeof candidate === 'number') return candidate;
+	}
+	return null;
 }
 
-/** @param {unknown} response */
-/** @param {unknown} response @returns {any} */
-function unwrap(response) {
-	if (!response || typeof response !== 'object' || !('response' in response))
-		throw new TftMatchGatewayError(
-			'temporary',
-			503,
-			'Riot match data is temporarily unavailable. Please try again.'
-		);
-	return response.response;
+/** @param {unknown} error @param {boolean} [accountLookup] */
+function translateGatewayError(error, accountLookup = false) {
+	if (error instanceof TftMatchGatewayError) return error;
+	const status = errorStatus(error);
+	if (status === 401 || status === 403)
+		return new TftMatchGatewayError('auth', status, AUTH_MESSAGE, error);
+	if (accountLookup && status === 404)
+		return new TftMatchGatewayError('not_found', status, ACCOUNT_NOT_FOUND_MESSAGE, error);
+	if (status === 429)
+		return new TftMatchGatewayError('rate_limit', status, RATE_LIMIT_MESSAGE, error);
+	if (status !== null && status >= 500)
+		return new TftMatchGatewayError('service', status, TEMPORARY_MESSAGE, error);
+	if (error instanceof Error && error.name === 'AbortError')
+		return new TftMatchGatewayError('timeout', status, TEMPORARY_MESSAGE, error);
+	return new TftMatchGatewayError('transport', status, TEMPORARY_MESSAGE, error);
+}
+
+/** @param {unknown} value */
+function requireResponse(value) {
+	if (!value || typeof value !== 'object' || !('response' in value)) {
+		throw new TftMatchGatewayError('transport', null, TEMPORARY_MESSAGE);
+	}
+	return value.response;
 }
 
 /**
- * @param {{ riotApi: any, tftApi: any, accountRegionGroup: string, matchRegionGroup: string }} input
+ * @typedef {{
+ *   puuid: string,
+ *   matches: Array<
+ *     | { matchId: string, payload: unknown, error: null }
+ *     | { matchId: string, payload: null, error: string }
+ *   >
+ * }} TftGatewayHistory
+ * @typedef {{
+ *   fetchRecentMatches(input: { gameName: string, tagline: string }): Promise<TftGatewayHistory>
+ * }} TftMatchGateway
  */
-export function createTftMatchGateway(input) {
+
+/**
+ * @param {{
+ *   riotApi: any,
+ *   tftApi: any,
+ *   accountRegionGroup: any,
+ *   matchRegionGroup: any
+ * }} dependencies
+ * @returns {TftMatchGateway}
+ */
+export function createTftMatchGateway(dependencies) {
 	return {
-		/** @param {{ gameName: string, tagline: string }} player */
-		async fetchRecentMatches(player) {
-			let puuid;
-			let matchIds;
+		async fetchRecentMatches({ gameName, tagline }) {
+			let account;
 			try {
-				const account = unwrap(
-					await input.riotApi.Account.getByRiotId(
-						player.gameName,
-						player.tagline,
-						input.accountRegionGroup
+				account = requireResponse(
+					await dependencies.riotApi.Account.getByRiotId(
+						gameName,
+						tagline,
+						dependencies.accountRegionGroup
 					)
 				);
-				puuid = typeof account?.puuid === 'string' ? account.puuid.trim() : '';
-				if (!puuid)
-					throw new TftMatchGatewayError(
-						'not_found',
-						404,
-						'Riot could not find the requested player or match.'
-					);
-				const listed = unwrap(
-					await input.tftApi.Match.list(puuid, input.matchRegionGroup, { count: 10 })
-				);
-				if (!Array.isArray(listed))
-					throw new TftMatchGatewayError(
-						'temporary',
-						503,
-						'Riot match data is temporarily unavailable. Please try again.'
-					);
-				matchIds = listed
-					.filter((matchId) => typeof matchId === 'string' && matchId.trim())
-					.slice(0, 10);
 			} catch (error) {
-				if (error instanceof TftMatchGatewayError) throw error;
-				throw gatewayError(error);
+				throw translateGatewayError(error, true);
+			}
+			const accountRecord = /** @type {Record<string, unknown> | null} */ (
+				account && typeof account === 'object' ? account : null
+			);
+			const puuid =
+				accountRecord && typeof accountRecord.puuid === 'string' ? accountRecord.puuid.trim() : '';
+			if (!puuid) throw new TftMatchGatewayError('transport', null, TEMPORARY_MESSAGE);
+
+			let listedMatchIds;
+			try {
+				listedMatchIds = requireResponse(
+					await dependencies.tftApi.Match.list(puuid, dependencies.matchRegionGroup, {
+						count: 10
+					})
+				);
+			} catch (error) {
+				throw translateGatewayError(error);
+			}
+			if (
+				!Array.isArray(listedMatchIds) ||
+				!listedMatchIds.every((matchId) => typeof matchId === 'string' && matchId.trim())
+			) {
+				throw new TftMatchGatewayError('transport', null, TEMPORARY_MESSAGE);
 			}
 
 			const matches = [];
-			for (const matchId of matchIds) {
+			for (const matchId of listedMatchIds.slice(0, 10)) {
 				try {
+					const payload = requireResponse(
+						await dependencies.tftApi.Match.get(matchId, dependencies.matchRegionGroup)
+					);
+					matches.push({ matchId, payload, error: null });
+				} catch (error) {
 					matches.push({
 						matchId,
-						payload: unwrap(await input.tftApi.Match.get(matchId, input.matchRegionGroup)),
-						error: null
+						payload: null,
+						error: translateGatewayError(error).operatorMessage
 					});
-				} catch (error) {
-					matches.push({ matchId, payload: null, error: gatewayError(error).operatorMessage });
 				}
 			}
+
 			return { puuid, matches };
 		}
 	};
 }
 
-/** @param {{ apiKey: string, region: string, accountRegionGroup: string, matchRegionGroup: string }} config */
+/**
+ * @param {{ apiKey: string, region: string, accountRegionGroup: any, matchRegionGroup: any }} config
+ * @returns {TftMatchGateway}
+ */
 export function createRuntimeTftMatchGateway(config) {
-	const runtime = /** @type {any} */ (globalThis);
-	const factory = runtime[Symbol.for('tft-match-v1.gateway-factory')];
+	const registry = /** @type {Record<symbol, unknown>} */ (/** @type {unknown} */ (globalThis));
+	const factory = registry[RUNTIME_GATEWAY_FACTORY];
 	if (typeof factory === 'function') {
 		return factory({
 			region: config.region,

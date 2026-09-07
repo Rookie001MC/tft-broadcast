@@ -2,7 +2,7 @@
 
 An internal, manual-first broadcast tool for VNUHCM — University of Science Esports Club. Operators prepare a tournament-scoped winner board in `/admin`, review the exact 1920×1080 output, and deliberately publish or hide the public `/gfx` browser source used by OBS or vMix.
 
-The MVP does not query Riot match history. It uses pinned CommunityDragon or Data Dragon static catalogs, reusable local player records, and controlled local player images. `RIOT_API_KEY` is reserved for later experiments and is currently unused.
+The manual Winner workflow uses pinned CommunityDragon or Data Dragon static catalogs, reusable local player records, and controlled local player images. Operators may also import a validated champion board from recent Riot TFT match data when the optional server-side API integration is configured.
 
 ## What is included
 
@@ -26,6 +26,10 @@ pnpm dev
 ```
 
 Set `BETTER_AUTH_SECRET` in `.env` to a high-entropy value of at least 32 characters before starting. Visit `http://127.0.0.1:5173/setup` once to create the operator. Subsequent setup requests are redirected to login.
+
+`RIOT_API_KEY` is optional and remains server-only. To enable TFT match imports, set the key and select one platform region under `/admin/settings`. The manual Winner flow remains fully available without either prerequisite, and the key is never serialized to the browser. Changing the persisted region takes effect without a server restart and invalidates only pending process-local match previews.
+
+Match discovery resolves the selected roster player's account once, requests exactly the ten newest match IDs, then retrieves their details sequentially. It does not use a date range or backfill older sets. Discovery results are disposable process-local previews that expire after 15 minutes; only the original Winner **Save board** action persists the selected validated snapshot.
 
 The default environment is:
 

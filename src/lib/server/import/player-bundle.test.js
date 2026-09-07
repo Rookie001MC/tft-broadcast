@@ -147,6 +147,33 @@ describe('normalizeRiotId', () => {
 });
 
 describe('inspectPlayerBundle', () => {
+	test('matches Vietnamese and spaced Riot IDs to their original image names', async () => {
+		const ids = [
+			'Cân 5 Câu 2#1405',
+			'Đạt ơi cứu Tuấn#Bong',
+			'I am KIRA#2907',
+			'i miss her#vhdz',
+			'Nguyên Kĩ Năng#kanai',
+			'PĐKquilão#Khoa',
+			'PTIT Myx#2810',
+			'Puck Pooka#2203'
+		];
+		const entries = Object.fromEntries(
+			ids.map((id) => [`player_images/${id.replace('#', '_')}.png`, ONE_BY_ONE_PNG])
+		);
+		const preview = await inspectPlayerBundle(
+			bundle({
+				'players.csv': csv(ids.map((id) => `${id.split('#')[0]},${id.split('#')[0]},${id}`)),
+				...entries
+			})
+		);
+
+		expect(preview.errors).toEqual([]);
+		expect(preview.warnings).toEqual([]);
+		expect(preview.rows.map((row) => row.riotId)).toEqual(ids);
+		expect(preview.rows.every((row) => row.action === 'create' && row.image)).toBe(true);
+	});
+
 	test('parses quoted CRLF CSV rows and matches image files case-insensitively', async () => {
 		const preview = await inspectPlayerBundle(
 			bundle({
@@ -166,6 +193,22 @@ describe('inspectPlayerBundle', () => {
 				image: expect.objectContaining({ path: 'player_images/earlgreyteemo_SIP.png' })
 			})
 		]);
+	});
+
+	test('matches images named with the original Riot ID hash separator', async () => {
+		const preview = await inspectPlayerBundle(
+			bundle({
+				'players.csv': csv(['Nguyen Van A,Display A,EarlGreyTeemo#sip']),
+				'player_images/EarlGreyTeemo#SIP.png': ONE_BY_ONE_PNG
+			}),
+			[]
+		);
+
+		expect(preview.errors).toEqual([]);
+		expect(preview.rows[0]).toMatchObject({
+			riotId: 'EarlGreyTeemo#sip',
+			image: { path: 'player_images/EarlGreyTeemo#SIP.png' }
+		});
 	});
 
 	test('reports duplicate Riot IDs and duplicate display names using lowercase keys', async () => {

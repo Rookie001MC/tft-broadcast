@@ -1,0 +1,22 @@
+{
+  "protocolVersion": 1,
+  "captureId": "7c895834-7d3b-4fe4-a6b6-13a2ed7a0bdc",
+  "installationId": "e1f2d3c4-b5a6-4789-8abc-def012345678",
+  "sequence": "42",
+  "capturedAt": "2026-09-07T15:22:30.1234567Z",
+  "appVersion": "0.1.0",
+  "observationKind": "event",
+  "sourcePlatform": "vn2",
+  "gameId": "1571626722",
+  "localPlayer": {
+    "puuid": "00000000-0000-0000-0000-000000000001",
+    "gameName": "Demo Player",
+    "tagLine": "VN2"
+  },
+  "context": {
+    "serverId": "tft-broadcast-dev",
+    "eventId": "rehearsal-2026"
+  },
+  "payloadSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "payloadJson": "{\"gameId\":1571626722,\"localPlayer\":{\"puuid\":\"00000000-0000-0000-0000-000000000001\"},\"players\":[]}"
+}

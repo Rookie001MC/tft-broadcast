@@ -17,6 +17,10 @@ export const winnerBoardState = sqliteTable('winner_board_state', {
 		{ onDelete: 'set null' }
 	),
 	title: text('title').notNull(),
+	sourceTftMatchSnapshotId: text('source_tft_match_snapshot_id').references(
+		() => tftMatchSnapshots.id,
+		{ onDelete: 'set null' }
+	),
 	createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
 	updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull()
 });

@@ -34,6 +34,7 @@ export default defineConfig({
 		include: [
 			'@lucide/svelte/icons/external-link',
 			'@lucide/svelte/icons/eye-off',
+			'@lucide/svelte/icons/log-out',
 			'@lucide/svelte/icons/radio'
 		]
 	},

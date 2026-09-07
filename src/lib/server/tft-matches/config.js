@@ -1,49 +1,65 @@
 import { Constants } from 'twisted';
 
-export class TftMatchApiConfigError extends Error {
+import { TftMatchRegionError, parseTftPlatformRegion } from './regions.js';
+
+export class TftMatchConfigurationError extends Error {
 	/** @param {string} operatorMessage */
 	constructor(operatorMessage) {
 		super(operatorMessage);
-		this.name = 'TftMatchApiConfigError';
+		this.name = 'TftMatchConfigurationError';
 		this.operatorMessage = operatorMessage;
 	}
 }
 
-/** @param {unknown} value */
-function trimmed(value) {
-	return typeof value === 'string' ? value.trim() : '';
-}
-
-/** @param {Record<string, string | undefined>} environment */
-export function requireTftMatchApiConfig(environment) {
-	const apiKey = trimmed(environment?.RIOT_API_KEY);
-	if (!apiKey) throw new TftMatchApiConfigError('A Riot API key is required to fetch TFT matches.');
-	const region = trimmed(environment?.RIOT_REGION).toUpperCase();
-	if (!region)
-		throw new TftMatchApiConfigError('A Riot platform region is required to fetch TFT matches.');
-	const platformRegion = /** @type {any} */ (region);
-	if (!Object.values(Constants.Regions).includes(platformRegion))
-		throw new TftMatchApiConfigError('The configured Riot platform region is unsupported.');
+/**
+ * @param {{ environment: Record<string, string | undefined>, region: unknown }} input
+ */
+export function requireTftMatchApiConfig(input) {
+	let region;
 	try {
+		region = parseTftPlatformRegion(input.region);
+	} catch (error) {
+		if (error instanceof TftMatchRegionError) {
+			throw new TftMatchConfigurationError('Select a supported TFT platform region in Settings.');
+		}
+		throw error;
+	}
+
+	const apiKey = input.environment.RIOT_API_KEY?.trim() ?? '';
+	if (!apiKey) {
+		throw new TftMatchConfigurationError('A Riot API key is required to fetch TFT matches.');
+	}
+
+	try {
+		const typedRegion = /** @type {Parameters<typeof Constants.regionToRegionGroup>[0]} */ (region);
 		return {
 			apiKey,
 			region,
-			accountRegionGroup: Constants.regionToRegionGroupForAccountAPI(platformRegion),
-			matchRegionGroup: Constants.regionToRegionGroup(platformRegion)
+			accountRegionGroup: Constants.regionToRegionGroupForAccountAPI(typedRegion),
+			matchRegionGroup: Constants.regionToRegionGroup(typedRegion)
 		};
 	} catch {
-		throw new TftMatchApiConfigError('The configured Riot platform region is unsupported.');
+		throw new TftMatchConfigurationError('The selected TFT platform region is unavailable.');
 	}
 }
 
-/** @param {Record<string, string | undefined>} environment */
-export function getTftMatchApiAvailability(environment) {
+/**
+ * @param {{ environment: Record<string, string | undefined>, region: unknown }} input
+ * @returns {import('$lib/tft-match.js').TftMatchApiAvailability}
+ */
+export function getTftMatchApiAvailability(input) {
+	let safeRegion = null;
 	try {
-		const config = requireTftMatchApiConfig(environment);
-		return { enabled: true, region: config.region, reason: null };
+		safeRegion = parseTftPlatformRegion(input.region);
 	} catch (error) {
-		if (error instanceof TftMatchApiConfigError)
-			return { enabled: false, region: null, reason: error.operatorMessage };
-		throw error;
+		if (!(error instanceof TftMatchRegionError)) throw error;
+	}
+
+	try {
+		requireTftMatchApiConfig(input);
+		return { enabled: true, region: safeRegion, reason: null };
+	} catch (error) {
+		if (!(error instanceof TftMatchConfigurationError)) throw error;
+		return { enabled: false, region: safeRegion, reason: error.operatorMessage };
 	}
 }
