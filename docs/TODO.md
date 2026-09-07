@@ -32,14 +32,16 @@ These blockers must be fixed BEFORE any of the TFT-Match-V1 APIs are implemented
 - [x] Define the immutable eight-player snapshot contract consumed later by the read-only Post-Match scene.
 - [x] Ensure fetch, mapping, validation, and freshness failures preserve the last valid snapshot and every currently published graphic.
 
+## Result after FPT Shop Uni Tour 2026 - Thủ Dầu Một University:
+Success. However there are a few issues:
+- Management is clunky. Update menus are literally filled right at the end of the row, causing insane clunkyness.
+  - Suggestion: Make a seperate `/update` route, or make an update dialog.
+- User Management: Currently there is no way to manage additional operator accounts.
+  - Suggestion: this interface should be added to facilitate easier adding/removing additional operators.
+- Sample `players.zip`: The operators does not know how to structure the CSV and the players images.
+  - Suggestion: A sample ZIP should be provided to make it easier to add player data directly into the admin panel.
+
 ## After TFT-MATCH-V1 — Broadcast Graphics Scenes
-
-### Priority: User Management
-
-Currently there is no way to manage additional operator accounts, this interface should be added to facilitate easier adding/removing additional operators.
-
-### Priority: Sample ZIP
-A sample ZIP should be provided to make it easier to add player data directly into the admin panel.
 
 ### Others
 Detailed design: `docs/superpowers/specs/2026-08-11-broadcast-graphics-scenes-design.md`.
