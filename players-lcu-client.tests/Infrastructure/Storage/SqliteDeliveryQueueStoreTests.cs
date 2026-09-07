@@ -69,6 +69,7 @@ public sealed class SqliteDeliveryQueueStoreTests : IDisposable
     public async Task InitializeAsync_WithFutureSchemaReturnsUnsupportedWithoutDestroyingData()
     {
         await CreateFutureSchemaAsync();
+        var journalModeBefore = await ReadJournalModeAsync();
 
         var result = await CreateStore().InitializeAsync(CancellationToken.None);
 
@@ -78,6 +79,22 @@ public sealed class SqliteDeliveryQueueStoreTests : IDisposable
         Assert.Equal(2L, await ReadSchemaVersionAsync());
         Assert.Equal("preserve-me", await ReadSentinelAsync());
         Assert.False(await TableExistsAsync("delivery_queue"));
+        Assert.Equal(journalModeBefore, await ReadJournalModeAsync());
+    }
+
+    [Fact]
+    public async Task InitializeAsync_WithAdditiveFutureSchemaMetadataReturnsUnsupportedWithoutMutation()
+    {
+        await CreateFutureSchemaWithMetadataAsync();
+        var journalModeBefore = await ReadJournalModeAsync();
+
+        var result = await CreateStore().InitializeAsync(CancellationToken.None);
+
+        Assert.Equal(DeliveryQueueInitializationStatus.UnsupportedSchema, result.Status);
+        Assert.Equal(2L, await ReadSchemaVersionAsync());
+        Assert.Equal("future-metadata", await ReadSchemaMetadataAsync());
+        Assert.Equal("preserve-me", await ReadSentinelAsync());
+        Assert.Equal(journalModeBefore, await ReadJournalModeAsync());
     }
 
     [Fact]
@@ -93,6 +110,77 @@ public sealed class SqliteDeliveryQueueStoreTests : IDisposable
         Assert.Equal(0, result.RecoveredInterruptedSendingCount);
         Assert.DoesNotContain(_rootDirectory, result.Detail);
         Assert.Equal(corruptBytes, await File.ReadAllBytesAsync(DatabasePath));
+    }
+
+    [Fact]
+    public async Task InitializeAsync_WithWeakenedVersionOneConstraintReturnsCorruptWithoutRecovery()
+    {
+        var captureId = await CreatePersistedSendingRowAsync();
+        await RewriteSchemaSqlAsync(
+            "table",
+            "delivery_queue",
+            "delivery_state INTEGER NOT NULL CHECK (delivery_state IN (0, 1, 2, 3, 4, 5))",
+            "delivery_state INTEGER NOT NULL");
+        await SetDeleteJournalModeAsync();
+        var journalModeBefore = await ReadJournalModeAsync();
+
+        var result = await CreateStore().InitializeAsync(CancellationToken.None);
+
+        Assert.Equal(DeliveryQueueInitializationStatus.Corrupt, result.Status);
+        Assert.Equal(QueuedCaptureDeliveryState.Sending, await ReadDeliveryStateAsync(captureId));
+        Assert.Equal(3L, await ReadAttemptCountAsync(captureId));
+        Assert.Equal(journalModeBefore, await ReadJournalModeAsync());
+    }
+
+    [Fact]
+    public async Task InitializeAsync_WithMissingRequiredIndexReturnsCorruptWithoutRecovery()
+    {
+        var captureId = await CreatePersistedSendingRowAsync();
+        await ExecuteDatabaseCommandAsync("DROP INDEX ix_delivery_queue_eligible;");
+
+        var result = await CreateStore().InitializeAsync(CancellationToken.None);
+
+        Assert.Equal(DeliveryQueueInitializationStatus.Corrupt, result.Status);
+        Assert.Equal(QueuedCaptureDeliveryState.Sending, await ReadDeliveryStateAsync(captureId));
+        Assert.Equal(3L, await ReadAttemptCountAsync(captureId));
+    }
+
+    [Fact]
+    public async Task InitializeAsync_WithRecoveryChangingTriggerReturnsCorruptWithoutFiringTrigger()
+    {
+        var captureId = await CreatePersistedSendingRowAsync();
+        await ExecuteDatabaseCommandAsync("""
+            CREATE TRIGGER mutate_attempt_on_recovery
+            AFTER UPDATE OF delivery_state ON delivery_queue
+            WHEN OLD.delivery_state = 1 AND NEW.delivery_state = 0
+            BEGIN
+                UPDATE delivery_queue
+                SET attempt_count = attempt_count + 1
+                WHERE capture_id = NEW.capture_id;
+            END;
+            """);
+
+        var result = await CreateStore().InitializeAsync(CancellationToken.None);
+
+        Assert.Equal(DeliveryQueueInitializationStatus.Corrupt, result.Status);
+        Assert.Equal(QueuedCaptureDeliveryState.Sending, await ReadDeliveryStateAsync(captureId));
+        Assert.Equal(3L, await ReadAttemptCountAsync(captureId));
+    }
+
+    [Fact]
+    public async Task InitializeAsync_WithIndexDefinitionContentMismatchReturnsCorruptWithoutRecovery()
+    {
+        var captureId = await CreatePersistedSendingRowAsync();
+        await ReplaceSchemaSqlAsync(
+            "index",
+            "ix_delivery_queue_eligible",
+            "CREATE INDEX ix_delivery_queue_eligible ON delivery_queue (attempt_count)");
+
+        var result = await CreateStore().InitializeAsync(CancellationToken.None);
+
+        Assert.Equal(DeliveryQueueInitializationStatus.Corrupt, result.Status);
+        Assert.Equal(QueuedCaptureDeliveryState.Sending, await ReadDeliveryStateAsync(captureId));
+        Assert.Equal(3L, await ReadAttemptCountAsync(captureId));
     }
 
     [Fact]
@@ -204,6 +292,26 @@ public sealed class SqliteDeliveryQueueStoreTests : IDisposable
         await command.ExecuteNonQueryAsync();
     }
 
+    private async Task CreateFutureSchemaWithMetadataAsync()
+    {
+        Directory.CreateDirectory(_rootDirectory);
+        await using var connection = new SqliteConnection(ConnectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            CREATE TABLE relay_schema (
+                singleton INTEGER NOT NULL PRIMARY KEY CHECK (singleton = 1),
+                schema_version INTEGER NOT NULL CHECK (schema_version > 0),
+                metadata TEXT NOT NULL
+            );
+            INSERT INTO relay_schema (singleton, schema_version, metadata)
+            VALUES (1, 2, 'future-metadata');
+            CREATE TABLE future_data (value TEXT NOT NULL);
+            INSERT INTO future_data (value) VALUES ('preserve-me');
+            """;
+        await command.ExecuteNonQueryAsync();
+    }
+
     private async Task SeedInterruptedAndAcknowledgedRowsAsync(Guid interruptedCaptureId, Guid acknowledgedCaptureId)
     {
         await using var connection = new SqliteConnection(ConnectionString);
@@ -249,6 +357,92 @@ public sealed class SqliteDeliveryQueueStoreTests : IDisposable
         await command.ExecuteNonQueryAsync();
     }
 
+    private async Task<Guid> CreatePersistedSendingRowAsync()
+    {
+        var store = CreateStore();
+        await store.InitializeAsync(CancellationToken.None);
+        var item = CreateItem("{\"gameId\":\"schema-validation\"}");
+        await store.AdmitAsync(item);
+        await using var connection = new SqliteConnection(ConnectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            UPDATE delivery_queue
+            SET delivery_state = 1,
+                attempt_count = 3,
+                last_attempted_at_utc_ms = 1788794550123,
+                last_attempt_outcome = 1,
+                last_attempt_safe_code = 'receiver-unavailable',
+                next_attempt_at_utc_ms = 1788794610456
+            WHERE capture_id = $captureId;
+            """;
+        command.Parameters.AddWithValue("$captureId", item.Envelope.CaptureId.ToString("N"));
+        Assert.Equal(1, await command.ExecuteNonQueryAsync());
+        return item.Envelope.CaptureId;
+    }
+
+    private async Task RewriteSchemaSqlAsync(
+        string objectType,
+        string objectName,
+        string oldValue,
+        string newValue)
+    {
+        await using var connection = new SqliteConnection(ConnectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            PRAGMA writable_schema = ON;
+            UPDATE sqlite_schema
+            SET sql = replace(sql, $oldValue, $newValue)
+            WHERE type = $objectType AND name = $objectName;
+            PRAGMA writable_schema = OFF;
+            PRAGMA schema_version = 999;
+            """;
+        command.Parameters.AddWithValue("$oldValue", oldValue);
+        command.Parameters.AddWithValue("$newValue", newValue);
+        command.Parameters.AddWithValue("$objectType", objectType);
+        command.Parameters.AddWithValue("$objectName", objectName);
+        await command.ExecuteNonQueryAsync();
+    }
+
+    private async Task ReplaceSchemaSqlAsync(string objectType, string objectName, string newSql)
+    {
+        await using var connection = new SqliteConnection(ConnectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            PRAGMA writable_schema = ON;
+            UPDATE sqlite_schema
+            SET sql = $newSql
+            WHERE type = $objectType AND name = $objectName;
+            PRAGMA writable_schema = OFF;
+            PRAGMA schema_version = 999;
+            """;
+        command.Parameters.AddWithValue("$newSql", newSql);
+        command.Parameters.AddWithValue("$objectType", objectType);
+        command.Parameters.AddWithValue("$objectName", objectName);
+        await command.ExecuteNonQueryAsync();
+    }
+
+    private async Task ExecuteDatabaseCommandAsync(string commandText)
+    {
+        await using var connection = new SqliteConnection(ConnectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = commandText;
+        await command.ExecuteNonQueryAsync();
+    }
+
+    private async Task SetDeleteJournalModeAsync()
+    {
+        SqliteConnection.ClearAllPools();
+        await using var connection = new SqliteConnection(ConnectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "PRAGMA journal_mode = DELETE;";
+        Assert.Equal("delete", (string)(await command.ExecuteScalarAsync())!);
+    }
+
     private async Task SetDeliveryStateAsync(Guid captureId, QueuedCaptureDeliveryState state)
     {
         await using var connection = new SqliteConnection(ConnectionString);
@@ -268,6 +462,16 @@ public sealed class SqliteDeliveryQueueStoreTests : IDisposable
         command.CommandText = "SELECT delivery_state FROM delivery_queue WHERE capture_id = $captureId;";
         command.Parameters.AddWithValue("$captureId", captureId.ToString("N"));
         return (QueuedCaptureDeliveryState)Convert.ToInt32(await command.ExecuteScalarAsync());
+    }
+
+    private async Task<long> ReadAttemptCountAsync(Guid captureId)
+    {
+        await using var connection = new SqliteConnection(ConnectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT attempt_count FROM delivery_queue WHERE capture_id = $captureId;";
+        command.Parameters.AddWithValue("$captureId", captureId.ToString("N"));
+        return (long)(await command.ExecuteScalarAsync())!;
     }
 
     private async Task<object?[]> ReadQueueFieldsExceptStateAsync(Guid captureId)
@@ -330,6 +534,24 @@ public sealed class SqliteDeliveryQueueStoreTests : IDisposable
         await connection.OpenAsync();
         await using var command = connection.CreateCommand();
         command.CommandText = "SELECT value FROM future_data LIMIT 1;";
+        return (string)(await command.ExecuteScalarAsync())!;
+    }
+
+    private async Task<string> ReadSchemaMetadataAsync()
+    {
+        await using var connection = new SqliteConnection(ConnectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT metadata FROM relay_schema WHERE singleton = 1;";
+        return (string)(await command.ExecuteScalarAsync())!;
+    }
+
+    private async Task<string> ReadJournalModeAsync()
+    {
+        await using var connection = new SqliteConnection(ConnectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "PRAGMA journal_mode;";
         return (string)(await command.ExecuteScalarAsync())!;
     }
 
