@@ -33,6 +33,8 @@ These blockers must be fixed BEFORE any of the TFT-Match-V1 APIs are implemented
 - [x] Ensure fetch, mapping, validation, and freshness failures preserve the last valid snapshot and every currently published graphic.
 
 ## Result after FPT Shop Uni Tour 2026 - Thủ Dầu Một University:
+Agreed implementation backlog: [TDMU Post-Event Operator Workflow TODO (2026-09-07)](2026-09-07-tdmu-post-event-TODO.md).
+
 Success. However there are a few issues:
 - Management is clunky. Update menus are literally filled right at the end of the row, causing insane clunkyness.
   - Suggestion: Make a seperate `/update` route, or make an update dialog.
@@ -43,6 +45,19 @@ Success. However there are a few issues:
 - The ZIP import preview success section is still displaying the recent result even if navigating out of the page, causing confusion whether the recent import is working or not.
   - Suggestion: 10 sec delay on disappearing the status, also disappear the status when navigating (Suggestions are welcome.)
 - Error messages on the ZIP import is not clear which section of the ZIP is not correct.
+
+## LCU TFT End of Game — Player PC Relay
+
+Agreed direction: Windows 10/11 x64, C# + Avalonia, a portable self-contained executable under `apps/player-relay/`, automatic capture/upload, and configurable Host/Port/auth token (default `127.0.0.1:5173`). The coworker owns server ingestion, data interpretation, and web integration.
+
+- Specification: [TFT Player Relay Design (2026-09-07)](superpowers/specs/2026-09-07-tft-player-relay-design.md).
+- Detailed plan: [TFT Player Relay Implementation Plan (2026-09-07)](superpowers/plans/2026-09-07-tft-player-relay.md).
+
+- [ ] Coordinate and freeze the proposed receiver contract.
+- [ ] Verify actual Windows LCU capture and recovery behavior.
+- [ ] Implement desktop capture, durable queue, delivery, and status UI.
+- [ ] Verify clean-machine packaging, resource bounds, and real receiver integration.
+- [ ] Rehearse on venue Player PCs and the production LAN/VLAN.
 
 ## After TFT-MATCH-V1 — Broadcast Graphics Scenes
 
