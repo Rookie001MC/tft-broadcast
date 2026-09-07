@@ -5,6 +5,40 @@ using System.Threading.Tasks;
 namespace players_lcu_client.Core.Delivery;
 
 /// <summary>
+/// The payload-free outcome of preparing the durable delivery queue for this process instance.
+/// </summary>
+public enum DeliveryQueueInitializationStatus
+{
+    /// <summary>
+    /// The supported schema is ready and interrupted sends, if any, were recovered.
+    /// </summary>
+    Ready,
+
+    /// <summary>
+    /// The database uses a schema version that this application must not modify.
+    /// </summary>
+    UnsupportedSchema,
+
+    /// <summary>
+    /// The database or its supported schema failed integrity validation and was preserved.
+    /// </summary>
+    Corrupt,
+
+    /// <summary>
+    /// Local durable storage could not be opened or prepared.
+    /// </summary>
+    StorageUnavailable,
+}
+
+/// <summary>
+/// A safe initialization result that contains no capture payload, path, or credential data.
+/// </summary>
+public sealed record DeliveryQueueInitialization(
+    DeliveryQueueInitializationStatus Status,
+    int RecoveredInterruptedSendingCount,
+    string Detail);
+
+/// <summary>
 /// The durable outcome of attempting to admit one immutable capture to the delivery queue.
 /// </summary>
 public enum DeliveryQueueAdmissionOutcome
@@ -61,6 +95,12 @@ public sealed record DeliveryQueueAdmission(
 /// </remarks>
 public interface IDeliveryQueueStore
 {
+    /// <summary>
+    /// Atomically creates or validates the queue schema and recovers sends interrupted before this
+    /// store instance started. A successful call is idempotent for the lifetime of the instance.
+    /// </summary>
+    Task<DeliveryQueueInitialization> InitializeAsync(CancellationToken cancellationToken);
+
     /// <summary>
     /// Atomically admits a new immutable capture. The supplied item must be in
     /// <see cref="QueuedCaptureDeliveryState.Pending"/> with no delivery attempts or receipt.

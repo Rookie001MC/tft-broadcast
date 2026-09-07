@@ -1,6 +1,6 @@
 using System;
 using System.Buffers;
-using System.Globalization;
+using System.Collections.Generic;
 using System.IO;
 using System.Security.Cryptography;
 using System.Text;
@@ -33,6 +33,8 @@ public sealed class SqliteDeliveryQueueStore : IDeliveryQueueStore
 
     private readonly string _databasePath;
     private readonly string _connectionString;
+    private readonly SemaphoreSlim _initializationGate = new(1, 1);
+    private DeliveryQueueInitialization? _readyInitialization;
 
     /// <summary>
     /// Creates the queue under the current user's local application-data directory.
@@ -61,6 +63,90 @@ public sealed class SqliteDeliveryQueueStore : IDeliveryQueueStore
     }
 
     /// <inheritdoc />
+    public async Task<DeliveryQueueInitialization> InitializeAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var readyInitialization = Volatile.Read(ref _readyInitialization);
+        if (readyInitialization is not null)
+        {
+            return readyInitialization;
+        }
+
+        await _initializationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            readyInitialization = Volatile.Read(ref _readyInitialization);
+            if (readyInitialization is not null)
+            {
+                return readyInitialization;
+            }
+
+            var initialization = await InitializeCoreAsync(cancellationToken).ConfigureAwait(false);
+            if (initialization.Status == DeliveryQueueInitializationStatus.Ready)
+            {
+                Volatile.Write(ref _readyInitialization, initialization);
+            }
+
+            return initialization;
+        }
+        finally
+        {
+            _initializationGate.Release();
+        }
+    }
+
+    private async Task<DeliveryQueueInitialization> InitializeCoreAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            EnsureParentDirectory();
+
+            await using var connection = new SqliteConnection(_connectionString);
+            await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+            await ConfigureConnectionAsync(connection, cancellationToken).ConfigureAwait(false);
+            var recoveredCount = await InitializeSchemaAndRecoverAsync(connection, cancellationToken).ConfigureAwait(false);
+
+            return new DeliveryQueueInitialization(
+                DeliveryQueueInitializationStatus.Ready,
+                recoveredCount,
+                "The local delivery queue is ready.");
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (UnsupportedQueueSchemaException)
+        {
+            return new DeliveryQueueInitialization(
+                DeliveryQueueInitializationStatus.UnsupportedSchema,
+                0,
+                "The local delivery queue schema is not supported by this application version.");
+        }
+        catch (CorruptQueueException)
+        {
+            return new DeliveryQueueInitialization(
+                DeliveryQueueInitializationStatus.Corrupt,
+                0,
+                "The local delivery queue is corrupt and was preserved for recovery.");
+        }
+        catch (SqliteException exception) when (IsCorruptSqliteException(exception))
+        {
+            return new DeliveryQueueInitialization(
+                DeliveryQueueInitializationStatus.Corrupt,
+                0,
+                "The local delivery queue is corrupt and was preserved for recovery.");
+        }
+        catch (Exception exception) when (IsExpectedStorageException(exception))
+        {
+            return new DeliveryQueueInitialization(
+                DeliveryQueueInitializationStatus.StorageUnavailable,
+                0,
+                "The local delivery queue could not be initialized.");
+        }
+    }
+
+    /// <inheritdoc />
     public async Task<DeliveryQueueAdmission> AdmitAsync(
         DeliveryQueueItem item,
         CancellationToken cancellationToken = default)
@@ -73,14 +159,20 @@ public sealed class SqliteDeliveryQueueStore : IDeliveryQueueStore
             return new DeliveryQueueAdmission(DeliveryQueueAdmissionOutcome.Invalid, null, detail);
         }
 
+        var initialization = await InitializeAsync(cancellationToken).ConfigureAwait(false);
+        if (initialization.Status != DeliveryQueueInitializationStatus.Ready)
+        {
+            return new DeliveryQueueAdmission(
+                DeliveryQueueAdmissionOutcome.StorageUnavailable,
+                null,
+                initialization.Detail);
+        }
+
         try
         {
-            EnsureParentDirectory();
-
             await using var connection = new SqliteConnection(_connectionString);
             await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
             await ConfigureConnectionAsync(connection, cancellationToken).ConfigureAwait(false);
-            await EnsureSchemaAsync(connection, cancellationToken).ConfigureAwait(false);
 
             await BeginImmediateAsync(connection, cancellationToken).ConfigureAwait(false);
             var transactionOpen = true;
@@ -369,27 +461,32 @@ public sealed class SqliteDeliveryQueueStore : IDeliveryQueueStore
         await ExecuteNonQueryAsync(connection, "PRAGMA synchronous = FULL;", cancellationToken).ConfigureAwait(false);
     }
 
-    private static async Task EnsureSchemaAsync(SqliteConnection connection, CancellationToken cancellationToken)
+    private static async Task<int> InitializeSchemaAndRecoverAsync(
+        SqliteConnection connection,
+        CancellationToken cancellationToken)
     {
         await BeginImmediateAsync(connection, cancellationToken).ConfigureAwait(false);
         var transactionOpen = true;
 
         try
         {
-            await ExecuteNonQueryAsync(connection, """
-                CREATE TABLE IF NOT EXISTS relay_schema (
-                    singleton INTEGER NOT NULL PRIMARY KEY CHECK (singleton = 1),
-                    schema_version INTEGER NOT NULL CHECK (schema_version > 0)
-                );
-                """, cancellationToken).ConfigureAwait(false);
+            await ValidateDatabaseIntegrityAsync(connection, cancellationToken).ConfigureAwait(false);
+            var schemaTableExists = await TableExistsAsync(connection, "relay_schema", cancellationToken).ConfigureAwait(false);
 
-            var existingVersion = await ExecuteScalarAsync(
-                connection,
-                "SELECT schema_version FROM relay_schema WHERE singleton = 1;",
-                cancellationToken).ConfigureAwait(false);
-
-            if (existingVersion is null || existingVersion is DBNull)
+            if (!schemaTableExists)
             {
+                var userTableCount = await CountUserTablesAsync(connection, cancellationToken).ConfigureAwait(false);
+                if (userTableCount != 0)
+                {
+                    throw new CorruptQueueException();
+                }
+
+                await ExecuteNonQueryAsync(connection, """
+                    CREATE TABLE relay_schema (
+                        singleton INTEGER NOT NULL PRIMARY KEY CHECK (singleton = 1),
+                        schema_version INTEGER NOT NULL CHECK (schema_version > 0)
+                    );
+                    """, cancellationToken).ConfigureAwait(false);
                 await ApplyVersionOneSchemaAsync(connection, cancellationToken).ConfigureAwait(false);
                 await ExecuteNonQueryAsync(
                     connection,
@@ -399,20 +496,41 @@ public sealed class SqliteDeliveryQueueStore : IDeliveryQueueStore
             }
             else
             {
-                var schemaVersion = Convert.ToInt32(existingVersion, CultureInfo.InvariantCulture);
+                await ValidateTableColumnsAsync(
+                    connection,
+                    "relay_schema",
+                    ["singleton", "schema_version"],
+                    cancellationToken).ConfigureAwait(false);
+
+                var existingVersion = await ExecuteScalarAsync(
+                    connection,
+                    "SELECT schema_version FROM relay_schema WHERE singleton = 1;",
+                    cancellationToken).ConfigureAwait(false);
+                if (existingVersion is not long schemaVersion)
+                {
+                    throw new CorruptQueueException();
+                }
+
                 if (schemaVersion > CurrentSchemaVersion)
                 {
-                    throw new InvalidOperationException("The delivery queue was created by a newer application version.");
+                    throw new UnsupportedQueueSchemaException();
                 }
 
                 if (schemaVersion != CurrentSchemaVersion)
                 {
-                    throw new InvalidOperationException("The delivery queue has an unsupported schema version.");
+                    throw new UnsupportedQueueSchemaException();
                 }
+
+                await ValidateVersionOneSchemaAsync(connection, cancellationToken).ConfigureAwait(false);
             }
 
+            var recoveredCount = await ExecuteNonQueryWithRowCountAsync(
+                connection,
+                "UPDATE delivery_queue SET delivery_state = 0 WHERE delivery_state = 1;",
+                cancellationToken).ConfigureAwait(false);
             await CommitAsync(connection, cancellationToken).ConfigureAwait(false);
             transactionOpen = false;
+            return recoveredCount;
         }
         catch
         {
@@ -422,6 +540,106 @@ public sealed class SqliteDeliveryQueueStore : IDeliveryQueueStore
             }
 
             throw;
+        }
+    }
+
+    private static async Task ValidateDatabaseIntegrityAsync(
+        SqliteConnection connection,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = "PRAGMA quick_check;";
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false) ||
+            !string.Equals(reader.GetString(0), "ok", StringComparison.Ordinal))
+        {
+            throw new CorruptQueueException();
+        }
+
+        if (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            throw new CorruptQueueException();
+        }
+    }
+
+    private static async Task<long> CountUserTablesAsync(
+        SqliteConnection connection,
+        CancellationToken cancellationToken)
+    {
+        var value = await ExecuteScalarAsync(
+            connection,
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%';",
+            cancellationToken).ConfigureAwait(false);
+        return value is long count ? count : throw new CorruptQueueException();
+    }
+
+    private static async Task<bool> TableExistsAsync(
+        SqliteConnection connection,
+        string tableName,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = $tableName;";
+        AddParameter(command, "$tableName", tableName);
+        var value = await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
+        return value is long count && count == 1;
+    }
+
+    private static async Task ValidateVersionOneSchemaAsync(
+        SqliteConnection connection,
+        CancellationToken cancellationToken)
+    {
+        await ValidateTableColumnsAsync(
+            connection,
+            "delivery_queue",
+            [
+                "capture_id", "installation_id", "protocol_version", "sequence",
+                "captured_at_utc_ticks", "queued_at_utc_ticks", "app_version", "observation_kind",
+                "source_platform", "source_platform_key", "game_id", "local_player_puuid",
+                "local_player_game_name", "local_player_tag_line", "local_player_puuid_key",
+                "envelope_server_id", "envelope_event_id", "destination_profile_id",
+                "destination_server_id", "destination_event_id", "payload_sha256", "payload_json",
+                "payload_bytes", "delivery_state", "attempt_count", "last_attempted_at_utc_ms",
+                "last_attempt_outcome", "last_attempt_safe_code", "next_attempt_at_utc_ms",
+                "acknowledged_at_utc_ms", "acknowledgment_status",
+            ],
+            cancellationToken).ConfigureAwait(false);
+        await ValidateTableColumnsAsync(
+            connection,
+            "delivery_attempts",
+            [
+                "capture_id", "attempt_number", "attempted_at_utc_ms", "outcome", "safe_code",
+                "retry_not_before_utc_ms",
+            ],
+            cancellationToken).ConfigureAwait(false);
+
+        await using var command = connection.CreateCommand();
+        command.CommandText = "PRAGMA foreign_key_check;";
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        if (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            throw new CorruptQueueException();
+        }
+    }
+
+    private static async Task ValidateTableColumnsAsync(
+        SqliteConnection connection,
+        string tableName,
+        IEnumerable<string> expectedColumns,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = $"PRAGMA table_info(\"{tableName}\");";
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        var actualColumns = new HashSet<string>(StringComparer.Ordinal);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            actualColumns.Add(reader.GetString(1));
+        }
+
+        if (!actualColumns.SetEquals(expectedColumns))
+        {
+            throw new CorruptQueueException();
         }
     }
 
@@ -759,6 +977,16 @@ public sealed class SqliteDeliveryQueueStore : IDeliveryQueueStore
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }
 
+    private static async Task<int> ExecuteNonQueryWithRowCountAsync(
+        SqliteConnection connection,
+        string commandText,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = commandText;
+        return await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+    }
+
     private static async Task<object?> ExecuteScalarAsync(
         SqliteConnection connection,
         string commandText,
@@ -777,6 +1005,9 @@ public sealed class SqliteDeliveryQueueStore : IDeliveryQueueStore
         ArgumentException or
         InvalidOperationException;
 
+    private static bool IsCorruptSqliteException(SqliteException exception) =>
+        exception.SqliteErrorCode is 11 or 26;
+
     private static string GetDefaultDatabasePath()
     {
         var localApplicationData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
@@ -787,4 +1018,8 @@ public sealed class SqliteDeliveryQueueStore : IDeliveryQueueStore
 
         return Path.Combine(localApplicationData, "TftPlayerRelay", "delivery-queue.db");
     }
+
+    private sealed class UnsupportedQueueSchemaException : Exception;
+
+    private sealed class CorruptQueueException : Exception;
 }
