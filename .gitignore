@@ -36,3 +36,5 @@ test-results
 /players-lcu-client/bin/
 /players-lcu-client/obj/
 /players-lcu-client/artifacts/
+/players-lcu-client.tests/bin/
+/players-lcu-client.tests/obj/

@@ -64,13 +64,13 @@ public sealed record RelayDestination
             return false;
         }
 
-        if (!RelayHost.TryCreate(host, out var parsedHost))
+        if (!RelayHost.TryCreate(host, out var parsedHost) || parsedHost is null)
         {
             error = RelayDestinationValidationError.InvalidHost;
             return false;
         }
 
-        if (!RelayPort.TryParse(port, out var parsedPort))
+        if (!RelayPort.TryParse(port, out var parsedPort) || parsedPort is null)
         {
             error = RelayDestinationValidationError.InvalidPort;
             return false;
@@ -142,7 +142,9 @@ public sealed record RelayDestination
     private static RelayDestination CreateDefault()
     {
         if (!RelayHost.TryCreate("127.0.0.1", out var host)
-            || !RelayPort.TryCreate(5173, out var port))
+            || host is null
+            || !RelayPort.TryCreate(5173, out var port)
+            || port is null)
         {
             throw new InvalidOperationException("The built-in relay destination is invalid.");
         }

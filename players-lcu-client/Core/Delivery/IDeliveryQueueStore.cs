@@ -20,6 +20,12 @@ public enum DeliveryQueueAdmissionOutcome
     Duplicate,
 
     /// <summary>
+    /// A previously retained capture ID was submitted with different immutable content. The
+    /// original capture remains unchanged and the caller must surface the conflict safely.
+    /// </summary>
+    CaptureIdConflict,
+
+    /// <summary>
     /// The queue limit prevented admission; existing queued records were preserved.
     /// </summary>
     CapacityReached,
