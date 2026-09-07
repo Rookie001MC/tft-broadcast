@@ -23,5 +23,8 @@
       <PrivateAssets Condition="'$(Configuration)' != 'Debug'">All</PrivateAssets>
     </PackageReference>
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.2.1" />
+    <PackageReference Include="Thresh.Extensions" Version="1.0.0" />
+    <!-- Override Avalonia.FreeDesktop's vulnerable transitive 0.21.2 dependency. -->
+    <PackageReference Include="Tmds.DBus.Protocol" Version="0.21.3" />
   </ItemGroup>
 </Project>
