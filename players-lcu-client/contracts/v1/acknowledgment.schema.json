@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tft-broadcast.local/contracts/player-relay/v1/acknowledgment.schema.json",
+  "title": "TFT Player Relay v1 durable capture acknowledgment",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["captureId", "status", "receivedAt"],
+  "properties": {
+    "captureId": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "status": { "enum": ["stored", "duplicate"] },
+    "receivedAt": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]{1,7})?Z$"
+    }
+  }
+}
