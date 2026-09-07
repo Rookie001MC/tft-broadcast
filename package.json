@@ -62,6 +62,7 @@
 		"zod": "^4.4.3"
 	},
 	"dependencies": {
+		"@hasagi/core": "^0.10.0",
 		"@libsql/client": "^0.17.4",
 		"@lucide/svelte": "^1.28.0",
 		"csv-parse": "^7.0.1",
