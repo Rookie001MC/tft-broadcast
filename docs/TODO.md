@@ -34,6 +34,14 @@ These blockers must be fixed BEFORE any of the TFT-Match-V1 APIs are implemented
 
 ## After TFT-MATCH-V1 — Broadcast Graphics Scenes
 
+### Priority: User Management
+
+Currently there is no way to manage additional operator accounts, this interface should be added to facilitate easier adding/removing additional operators.
+
+### Priority: Sample ZIP
+A sample ZIP should be provided to make it easier to add player data directly into the admin panel.
+
+### Others
 Detailed design: `docs/superpowers/specs/2026-08-11-broadcast-graphics-scenes-design.md`.
 
 - [ ] Extract Tournament Selection into a reusable, route-agnostic `TournamentSelector` component for every current and future GFX control page.
