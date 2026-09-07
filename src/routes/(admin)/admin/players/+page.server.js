@@ -153,7 +153,7 @@ export const actions = {
 				});
 			}
 			if (rawFile.size > MAX_BUNDLE_BYTES) {
-				return fail(400, { action: 'previewBundle', message: 'ZIP file is too large.' });
+				return fail(400, { action: 'previewBundle', message: 'ZIP file exceeds the 60 MiB limit.' });
 			}
 			const existingPlayers = await db.select().from(players);
 			const { token, preview } = await stagePlayerImport({

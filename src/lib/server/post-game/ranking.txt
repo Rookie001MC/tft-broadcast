@@ -1,0 +1,29 @@
+function drawRanking(){
+ ctx.clearRect(0,0,1920,1080);
+ const players=[...data.players].sort((a,b)=>a.ffaStanding-b.ffaStanding);
+ if(!players.length)return;
+ const winner=players[0],left=180,right=980,w=760,top=190;
+ function label(p,x,y,width,first=false){
+  if(first){const gradient=ctx.createLinearGradient(x,y,x+width,y+88);gradient.addColorStop(0,'#830f21');gradient.addColorStop(.55,'#d7203e');gradient.addColorStop(1,'#fa655c');box(x,y,width,88,gradient)}else box(x,y,width,88,'#ffffff');
+  const color=first?'#ffffff':'#201d28';
+  text(String(p.ffaStanding).padStart(2,'0'),x+22,y+58,36,color,700,70);
+  box(x+96,y+23,2,42,first?'#ffffff55':'#dedde3');
+  ctx.textAlign='center';text(p.riotIdGameName||p.summonerName||'—',x+width/2+38,y+57,31,color,700,width-150);ctx.textAlign='left';
+ }
+ motion(0,-72);label(winner,left,top,w,true);ctx.restore();
+ motion(280,0,48);
+ const portrait=images.get(winnerPortrait);
+ if(portrait){const iw=portrait.naturalWidth,ih=portrait.naturalHeight,ratio=Math.min((w-40)/iw,394/ih),pw=iw*ratio,ph=ih*ratio;ctx.drawImage(portrait,left+(w-pw)/2,top+128+(394-ph)/2,pw,ph)}
+ ctx.restore();
+ const units=winner.boardPieces||[],gap=8,size=Math.min(76,(w-40-gap*Math.max(0,units.length-1))/Math.max(1,units.length));
+ const start=left+(w-(units.length*size+Math.max(0,units.length-1)*gap))/2;
+ units.forEach((u,i)=>{const x=start+i*(size+gap),y=top+582+(88-size)/2;
+  motion(620+i*24,0,28);
+  box(x-2,y-2,size+4,size+4,palette[Math.min(6,Number(u.price)||0)]);
+  const im=images.get(u.icon);if(im){const side=Math.min(im.naturalWidth,im.naturalHeight);ctx.drawImage(im,(im.naturalWidth-side)/2,(im.naturalHeight-side)/2,side,side,x,y,size,size)}
+  const stars='★'.repeat(Math.min(4,Math.max(0,Number(u.level)||0)));ctx.font='700 16px "IBM Plex Sans"';ctx.textAlign='center';ctx.lineWidth=3;ctx.strokeStyle='#211b29';ctx.strokeText(stars,x+size/2,y+8);text(stars,x+size/2,y+8,16,u.level>=3?'#ffdb65':'#ffffff',700);ctx.textAlign='left';
+  const items=u.items||[],s=Math.min(22,size/Math.max(3,items.length));items.forEach((it,j)=>{box(x+j*s,y+size-s,s,s,'#211b29');image(it.icon,x+j*s+1,y+size-s+1,s-2,s-2)});
+  ctx.restore();
+ });
+ players.slice(1).forEach((p,i)=>{motion(1000+i*80,100);label(p,right,top+i*100,w);ctx.restore()});
+}
