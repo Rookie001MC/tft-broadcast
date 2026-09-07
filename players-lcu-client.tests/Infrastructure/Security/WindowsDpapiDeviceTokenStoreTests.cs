@@ -39,7 +39,33 @@ public sealed class WindowsDpapiDeviceTokenStoreTests : IDisposable
     }
 
     [Fact]
-    public void Windows_SaveThenLoad_RoundTripsCurrentUserProtectedTokenWithoutPlaintext()
+    public void MissingRoot_ReturnsTypedAvailabilityWithoutCreatingStorage()
+    {
+#pragma warning disable CA1416 // The store itself verifies the Windows-only API at runtime.
+        var store = new WindowsDpapiDeviceTokenStore(null!, "device-token.dat");
+        Assert.True(DeviceToken.TryCreate(TestTokenText, out var token, out _));
+        Assert.NotNull(token);
+
+        var load = store.Load();
+        var save = store.Save(token);
+
+        if (OperatingSystem.IsWindows())
+        {
+            Assert.Equal(DeviceTokenLoadStatus.StorageUnavailable, load.Status);
+            Assert.Equal(DeviceTokenSaveStatus.StorageUnavailable, save.Status);
+        }
+        else
+        {
+            Assert.Equal(DeviceTokenLoadStatus.Unavailable, load.Status);
+            Assert.Equal(DeviceTokenSaveStatus.Unavailable, save.Status);
+        }
+
+        Assert.False(File.Exists(store.TokenPath));
+#pragma warning restore CA1416
+    }
+
+    [Fact]
+    public void Windows_FreshInstanceLoad_RoundTripsCurrentUserProtectedTokenWithoutPlaintext()
     {
         if (!OperatingSystem.IsWindows())
         {
@@ -53,7 +79,8 @@ public sealed class WindowsDpapiDeviceTokenStoreTests : IDisposable
         Assert.NotNull(expectedToken);
 
         var saved = store.Save(expectedToken);
-        var loaded = store.Load();
+        var restartedStore = new WindowsDpapiDeviceTokenStore(_rootDirectory);
+        var loaded = restartedStore.Load();
 
         Assert.Equal(DeviceTokenSaveStatus.Saved, saved.Status);
         Assert.True(saved.IsSuccess);
@@ -65,7 +92,7 @@ public sealed class WindowsDpapiDeviceTokenStoreTests : IDisposable
 
         var expectedBytes = expectedToken.EncodeUtf8();
         var actualBytes = loaded.Token.EncodeUtf8();
-        var persistedBytes = File.ReadAllBytes(store.TokenPath);
+        var persistedBytes = File.ReadAllBytes(restartedStore.TokenPath);
         try
         {
             Assert.Equal(expectedBytes, actualBytes);
@@ -78,6 +105,130 @@ public sealed class WindowsDpapiDeviceTokenStoreTests : IDisposable
             CryptographicOperations.ZeroMemory(actualBytes);
             CryptographicOperations.ZeroMemory(persistedBytes);
         }
+    }
+
+    [Fact]
+    public void Windows_EmptyCredentialDocument_ReturnsUnreadable()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+#pragma warning disable CA1416 // The runtime guard above makes this Windows-only test safe.
+        var store = new WindowsDpapiDeviceTokenStore(_rootDirectory);
+#pragma warning restore CA1416
+        Directory.CreateDirectory(_rootDirectory);
+        File.WriteAllBytes(store.TokenPath, []);
+
+        var load = store.Load();
+
+        Assert.Equal(DeviceTokenLoadStatus.Unreadable, load.Status);
+        Assert.True(File.Exists(store.TokenPath));
+    }
+
+    [Fact]
+    public void Windows_OversizedCredentialDocument_ReturnsUnreadable()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+#pragma warning disable CA1416 // The runtime guard above makes this Windows-only test safe.
+        var store = new WindowsDpapiDeviceTokenStore(_rootDirectory);
+#pragma warning restore CA1416
+        Directory.CreateDirectory(_rootDirectory);
+        File.WriteAllBytes(store.TokenPath, new byte[(64 * 1024) + 9]);
+
+        var load = store.Load();
+
+        Assert.Equal(DeviceTokenLoadStatus.Unreadable, load.Status);
+        Assert.True(File.Exists(store.TokenPath));
+    }
+
+    [Fact]
+    public void Windows_UnsupportedCredentialDocument_ReturnsUnreadable()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+#pragma warning disable CA1416 // The runtime guard above makes this Windows-only test safe.
+        var store = new WindowsDpapiDeviceTokenStore(_rootDirectory);
+#pragma warning restore CA1416
+        Directory.CreateDirectory(_rootDirectory);
+        File.WriteAllBytes(store.TokenPath, "TPLR\x02\x00\x00\x00not-a-dpapi-payload"u8.ToArray());
+
+        var load = store.Load();
+
+        Assert.Equal(DeviceTokenLoadStatus.Unreadable, load.Status);
+        Assert.True(File.Exists(store.TokenPath));
+    }
+
+    [Fact]
+    public void Windows_FailedReplacement_PreservesExistingCredential()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+#pragma warning disable CA1416 // The runtime guard above makes this Windows-only test safe.
+        var store = new WindowsDpapiDeviceTokenStore(_rootDirectory);
+#pragma warning restore CA1416
+        Assert.True(DeviceToken.TryCreate(TestTokenText, out var originalToken, out _));
+        Assert.True(DeviceToken.TryCreate("replacement-device-token", out var replacementToken, out _));
+        Assert.NotNull(originalToken);
+        Assert.NotNull(replacementToken);
+        Assert.Equal(DeviceTokenSaveStatus.Saved, store.Save(originalToken).Status);
+
+        using (var heldFile = new FileStream(store.TokenPath, FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            var replacement = store.Save(replacementToken);
+            Assert.Equal(DeviceTokenSaveStatus.StorageUnavailable, replacement.Status);
+        }
+
+        var restartedStore = new WindowsDpapiDeviceTokenStore(_rootDirectory);
+        var loaded = restartedStore.Load();
+        Assert.Equal(DeviceTokenLoadStatus.Available, loaded.Status);
+        Assert.NotNull(loaded.Token);
+
+        var expectedBytes = originalToken.EncodeUtf8();
+        var actualBytes = loaded.Token.EncodeUtf8();
+        try
+        {
+            Assert.Equal(expectedBytes, actualBytes);
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(expectedBytes);
+            CryptographicOperations.ZeroMemory(actualBytes);
+        }
+    }
+
+    [Fact]
+    public void Windows_InaccessibleRoot_ReturnsStorageUnavailable()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var rootFile = Path.Combine(_rootDirectory, "not-a-directory");
+        Directory.CreateDirectory(_rootDirectory);
+        File.WriteAllText(rootFile, "not a directory");
+#pragma warning disable CA1416 // The runtime guard above makes this Windows-only test safe.
+        var store = new WindowsDpapiDeviceTokenStore(rootFile);
+#pragma warning restore CA1416
+        Assert.True(DeviceToken.TryCreate(TestTokenText, out var token, out _));
+        Assert.NotNull(token);
+
+        var save = store.Save(token);
+
+        Assert.Equal(DeviceTokenSaveStatus.StorageUnavailable, save.Status);
+        Assert.True(File.Exists(rootFile));
     }
 
     public void Dispose()

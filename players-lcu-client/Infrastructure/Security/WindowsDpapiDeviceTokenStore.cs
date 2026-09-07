@@ -22,14 +22,14 @@ public sealed class WindowsDpapiDeviceTokenStore : IDeviceTokenStore
     private static readonly byte[] PurposeEntropy = Encoding.UTF8.GetBytes("TftPlayerRelay.DeviceToken/v1");
 
     private readonly object _gate = new();
-    private readonly string _rootDirectory;
-    private readonly string _tokenPath;
+    private readonly string? _rootDirectory;
+    private readonly string? _tokenPath;
 
     /// <summary>
     /// Initializes a store at <c>%LOCALAPPDATA%/TftPlayerRelay/device-token.dat</c>.
     /// </summary>
     public WindowsDpapiDeviceTokenStore()
-        : this(GetDefaultRootDirectory(), DefaultFileName)
+        : this(TryGetDefaultRootDirectory(), DefaultFileName)
     {
     }
 
@@ -42,12 +42,17 @@ public sealed class WindowsDpapiDeviceTokenStore : IDeviceTokenStore
     {
     }
 
-    internal WindowsDpapiDeviceTokenStore(string rootDirectory, string fileName)
+    internal WindowsDpapiDeviceTokenStore(string? rootDirectory, string fileName)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(rootDirectory);
         ArgumentException.ThrowIfNullOrWhiteSpace(fileName);
 
-        if (!Path.IsPathFullyQualified(rootDirectory)
+        if (rootDirectory is null)
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(rootDirectory)
+            || !Path.IsPathFullyQualified(rootDirectory)
             || Path.IsPathRooted(fileName)
             || fileName.IndexOfAny([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar]) >= 0)
         {
@@ -59,7 +64,7 @@ public sealed class WindowsDpapiDeviceTokenStore : IDeviceTokenStore
     }
 
     /// <summary>Gets the resolved path containing only DPAPI-protected credential data.</summary>
-    public string TokenPath => _tokenPath;
+    public string TokenPath => _tokenPath ?? string.Empty;
 
     /// <inheritdoc />
     public DeviceTokenLoadResult Load()
@@ -67,6 +72,12 @@ public sealed class WindowsDpapiDeviceTokenStore : IDeviceTokenStore
         if (!OperatingSystem.IsWindows())
         {
             return DeviceTokenLoadResult.Unavailable();
+        }
+
+        var tokenPath = _tokenPath;
+        if (tokenPath is null)
+        {
+            return DeviceTokenLoadResult.StorageUnavailable();
         }
 
         lock (_gate)
@@ -77,7 +88,7 @@ public sealed class WindowsDpapiDeviceTokenStore : IDeviceTokenStore
 
             try
             {
-                document = ReadBoundedDocument();
+                document = ReadBoundedDocument(tokenPath);
                 if (!TryExtractProtectedToken(document, out protectedToken)
                     || protectedToken is null)
                 {
@@ -104,6 +115,10 @@ public sealed class WindowsDpapiDeviceTokenStore : IDeviceTokenStore
             catch (DirectoryNotFoundException)
             {
                 return DeviceTokenLoadResult.NotFound();
+            }
+            catch (InvalidDataException)
+            {
+                return DeviceTokenLoadResult.Unreadable();
             }
             catch (CryptographicException)
             {
@@ -136,6 +151,13 @@ public sealed class WindowsDpapiDeviceTokenStore : IDeviceTokenStore
             return DeviceTokenSaveResult.Unavailable();
         }
 
+        var rootDirectory = _rootDirectory;
+        var tokenPath = _tokenPath;
+        if (rootDirectory is null || tokenPath is null)
+        {
+            return DeviceTokenSaveResult.StorageUnavailable();
+        }
+
         lock (_gate)
         {
             byte[]? plaintextToken = null;
@@ -155,12 +177,12 @@ public sealed class WindowsDpapiDeviceTokenStore : IDeviceTokenStore
                     return DeviceTokenSaveResult.StorageUnavailable();
                 }
 
-                Directory.CreateDirectory(_rootDirectory);
+                Directory.CreateDirectory(rootDirectory);
                 temporaryPath = Path.Combine(
-                    _rootDirectory,
-                    $".{Path.GetFileName(_tokenPath)}.{Guid.NewGuid():N}.tmp");
+                    rootDirectory,
+                    $".{Path.GetFileName(tokenPath)}.{Guid.NewGuid():N}.tmp");
                 WriteDurableDocument(temporaryPath, protectedToken);
-                ReplaceAtomically(temporaryPath, _tokenPath);
+                ReplaceAtomically(temporaryPath, tokenPath);
                 temporaryPath = null;
                 return DeviceTokenSaveResult.Saved();
             }
@@ -189,10 +211,10 @@ public sealed class WindowsDpapiDeviceTokenStore : IDeviceTokenStore
         }
     }
 
-    private byte[] ReadBoundedDocument()
+    private static byte[] ReadBoundedDocument(string tokenPath)
     {
         using var stream = new FileStream(
-            _tokenPath,
+            tokenPath,
             FileMode.Open,
             FileAccess.Read,
             FileShare.Read | FileShare.Delete,
@@ -289,15 +311,24 @@ public sealed class WindowsDpapiDeviceTokenStore : IDeviceTokenStore
         NotSupportedException or
         ArgumentException;
 
-    private static string GetDefaultRootDirectory()
+    private static string? TryGetDefaultRootDirectory()
     {
-        var localApplicationData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        if (string.IsNullOrWhiteSpace(localApplicationData))
+        try
         {
-            throw new InvalidOperationException("The current user has no local application-data directory.");
+            var localApplicationData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            return string.IsNullOrWhiteSpace(localApplicationData)
+                ? null
+                : Path.Combine(localApplicationData, "TftPlayerRelay");
+        }
+        catch (Exception exception) when (exception is
+            IOException or
+            UnauthorizedAccessException or
+            NotSupportedException or
+            ArgumentException)
+        {
+            return null;
         }
 
-        return Path.Combine(localApplicationData, "TftPlayerRelay");
     }
 
     private static void Zero(byte[]? buffer)
