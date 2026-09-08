@@ -7,6 +7,15 @@
 	let { data, form } = $props();
 	let busy = $state(false);
 	let editingAugments = $state(false);
+	let copyMessage = $state('');
+	async function copyRelayUrl() {
+		try {
+			await navigator.clipboard.writeText(data.relay.url);
+			copyMessage = 'Đã copy URL.';
+		} catch {
+			copyMessage = 'Hãy chọn URL bên trên và copy thủ công.';
+		}
+	}
 	let augmentCount = $derived(data.selectedAugments.length === 4 ? 4 : 3);
 	/** @type {import('@sveltejs/kit').SubmitFunction} */
 	function submit() {
@@ -35,6 +44,72 @@
 			Import EOG, kiểm tra đội hình và phát bảng kết quả lên OBS.
 		</p>
 	</div>
+	<section class="card preset-outlined-surface-200-800 bg-surface-50-950 p-6">
+		<h2 class="h3">Player LCU Relay</h2>
+		<p class="mt-3" role="status">
+			{#if data.relay.passwordState === 'configured'}
+				<span class="badge preset-filled-success-500">Relay password configured</span>
+			{:else if data.relay.passwordState === 'waiting'}
+				<span class="badge preset-filled-warning-500">Waiting for first Player LCU client</span>
+			{:else}
+				<span class="badge preset-filled-error-500">Relay storage unavailable</span>
+			{/if}
+		</p>
+		<label class="mt-4 label-text block" for="relay-url">Broadcast relay URL</label>
+		<div class="mt-2 flex flex-wrap gap-3">
+			<input
+				class="input min-w-0 flex-1"
+				id="relay-url"
+				readonly
+				value={data.relay.url}
+				onfocus={(event) => event.currentTarget.select()}
+			/>
+			<button type="button" class="btn preset-tonal-primary" onclick={copyRelayUrl}>Copy URL</button
+			>
+		</div>
+		<p class="mt-2 text-sm" role="status">{copyMessage}</p>
+		<p class="mt-2 text-sm text-surface-600-400">
+			Mở trang admin bằng IP LAN của máy broadcast để lấy URL dùng trên máy tuyển thủ.
+		</p>
+		{#if data.relay.passwordState === 'unavailable'}
+			<p class="mt-4 text-sm">
+				Không đọc được trạng thái lưu trữ relay. Kiểm tra quyền truy cập và dữ liệu trên máy
+				broadcast.
+			</p>
+		{:else}
+			<p class="mt-4 text-sm">
+				Receipt đã lưu (tối đa 1.000): <strong>{data.relay.receiptCount}</strong>
+			</p>
+			{#if data.relay.latestReceipt}
+				<dl class="mt-3 grid gap-2 text-sm sm:grid-cols-3">
+					<div>
+						<dt class="text-surface-600-400">Game gần nhất</dt>
+						<dd class="break-all">{data.relay.latestReceipt.gameId}</dd>
+					</div>
+					<div>
+						<dt class="text-surface-600-400">Capture ID</dt>
+						<dd class="break-all">{data.relay.latestReceipt.captureId}</dd>
+					</div>
+					<div>
+						<dt class="text-surface-600-400">Thời gian nhận (UTC)</dt>
+						<dd>
+							<time datetime={data.relay.latestReceipt.receivedAt}
+								>{data.relay.latestReceipt.receivedAt}</time
+							>
+						</dd>
+					</div>
+				</dl>
+			{:else}
+				<p class="mt-2 text-sm text-surface-600-400">Chưa nhận capture từ Player LCU client.</p>
+			{/if}
+		{/if}
+		<ol class="mt-5 list-decimal space-y-2 pl-5 text-sm">
+			<li>Mở TFT Player Relay trên một máy tuyển thủ, nhập địa chỉ máy broadcast ở trên.</li>
+			<li>Nhập hoặc Generate mật khẩu relay, rồi Save settings để khởi tạo relay.</li>
+			<li>Copy cùng mật khẩu sang tất cả Player LCU client còn lại và Save settings.</li>
+			<li>Dùng Test connection trước trận; sau trận kiểm tra game/capture vừa nhận tại đây.</li>
+		</ol>
+	</section>
 	<section class="card preset-outlined-surface-200-800 bg-surface-50-950 p-6">
 		<h2 class="h3">Import JSON file</h2>
 		<form
@@ -183,7 +258,10 @@
 		</p>
 	</section>
 	<details class="card preset-outlined-surface-200-800 bg-surface-50-950 p-6">
-		<summary class="cursor-pointer font-semibold">Kết nối collector máy tuyển thủ</summary>
+		<summary class="cursor-pointer font-semibold">Legacy direct collector</summary>
+		<p class="mt-2 text-sm text-surface-600-400">
+			EOG_INGEST_TOKEN chỉ dành cho direct collector cũ, không cấu hình Player Relay.
+		</p>
 		<p class="mt-2 text-sm text-surface-600-400">
 			server_url: địa chỉ máy broadcast (ví dụ http://IP-MAY-BROADCAST:5173).
 		</p>

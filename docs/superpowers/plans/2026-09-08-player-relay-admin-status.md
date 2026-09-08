@@ -34,7 +34,7 @@
 - `latestReceipt` is `null` or `{ gameId, captureId, receivedAt }`; it excludes capture payloads.
 - The post-game `load` returns `relay: { url, passwordState, receiptCount, latestReceipt }` only after `requireAdmin(event)` succeeds.
 
-- [ ] **Step 1: Implement the bounded, payload-free status reader.**
+- [x] **Step 1: Implement the bounded, payload-free status reader.**
 
 ```js
 export async function readRelayOperatorStatus(mediaRoot) {
@@ -47,7 +47,7 @@ export async function readRelayOperatorStatus(mediaRoot) {
 
 Check only that the verifier document is valid enough to contain its expected format, salt, and verifier strings. Enumerate at most 1,000 `.json` receipt files, read only the newest candidate, and return only its `capture.gameId`, `capture.captureId`, and `receivedAt` values. Missing files return `waiting`/empty activity; malformed or inaccessible data returns `unavailable` without throwing into the admin page.
 
-- [ ] **Step 2: Add relay status to the authenticated post-game load.**
+- [x] **Step 2: Add relay status to the authenticated post-game load.**
 
 ```js
 requireAdmin(event);
@@ -60,11 +60,11 @@ return {
 
 Keep `collectorToken` for the legacy collector details block. Do not put it in the new relay data object.
 
-- [ ] **Step 3: Replace the misleading collector guidance with operator-facing relay UI.**
+- [x] **Step 3: Replace the misleading collector guidance with operator-facing relay UI.**
 
 Render a Player LCU Relay card above file import with a color-coded password state, copyable broadcast URL, receipt count, last game/capture/time, and four-step desktop setup instructions. Keep the existing page invalidation timer. Rename the old details summary to `Legacy direct collector` and state that `EOG_INGEST_TOKEN` does not configure Player Relay.
 
-- [ ] **Step 4: Validate and commit the task.**
+- [x] **Step 4: Validate and commit the task.**
 
 Run:
 
@@ -82,6 +82,11 @@ git commit -m "feat: add player relay admin status"
 ```
 
 ## Plan self-review
+
+- Implementation executed inline; automated tests intentionally skipped as requested.
+- Used installed local CLI binaries because pnpm is unavailable on PATH. Prettier and git diff checks passed; Svelte autofixer returned no issues or suggestions.
+- SvelteKit sync and svelte-check completed: 38 errors in 8 unrelated files, with no diagnostics in the changed relay/admin files.
+- Manual helper inspection confirmed missing storage, configured password, receipt metadata-only output, and malformed receipt fallback. Temporary inspection data was removed.
 
 - Spec coverage: the task adds password-safe configuration state, broadcast URL, receipt activity, setup guidance, legacy collector separation, bounded reads, and no new public endpoint.
 - Placeholder scan: no deferred work or unspecified handling remains.

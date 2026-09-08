@@ -1,6 +1,7 @@
 import { fail } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
 import { requireAdmin } from '$lib/server/auth/guards.js';
+import { readRelayOperatorStatus } from '$lib/server/player-relay/status.js';
 import { changeState, getState, sceneState } from '$lib/server/post-game/store.js';
 import { db } from '$lib/server/db';
 import { catalogAugments, catalogSnapshots } from '$lib/server/db/schema/catalog.js';
@@ -23,7 +24,9 @@ async function augmentOptions() {
 export async function load(event) {
 	requireAdmin(event);
 	const s = await getState();
+	const relay = await readRelayOperatorStatus(env.MEDIA_ROOT || 'media');
 	return {
+		relay: { ...relay, url: event.url.origin },
 		gameId: s.draft?.gameId,
 		augmentOptions: await augmentOptions(),
 		selectedAugments:
