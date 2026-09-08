@@ -48,8 +48,8 @@ export const actions = {
 		try {
 			const form = await event.request.formData();
 			const options = await augmentOptions();
-			const count = Number(form.get('augmentCount'));
-			if (count !== 3 && count !== 4) throw Error('Chọn 3 hoặc 4 lõi.');
+			const count = Number(form.get('augmentCount') ?? NaN);
+			if (count !== 0 && count !== 3 && count !== 4) throw Error('Chọn 0, 3 hoặc 4 lõi.');
 			const augments = Array.from({ length: count }, (_, i) => {
 				const id = String(form.get(`augment${i}`) || '');
 				if (!id) return null;

@@ -16,7 +16,9 @@
 			copyMessage = 'Hãy chọn URL bên trên và copy thủ công.';
 		}
 	}
-	let augmentCount = $derived(data.selectedAugments.length === 4 ? 4 : 3);
+	let augmentCount = $derived(
+		data.selectedAugments.length === 0 ? 0 : data.selectedAugments.length === 4 ? 4 : 3
+	);
 	/** @type {import('@sveltejs/kit').SubmitFunction} */
 	function submit() {
 		busy = true;
@@ -165,7 +167,9 @@
 					onchange={() => (editingAugments = true)}
 					disabled={busy || !data.gameId}
 				>
-					<option value={3}>3 lõi</option><option value={4}>4 lõi</option>
+					<option value={0}>0 lõi</option><option value={3}>3 lõi</option><option value={4}
+						>4 lõi</option
+					>
 				</select>
 			</label>
 			<div class="grid gap-3 md:grid-cols-2">
