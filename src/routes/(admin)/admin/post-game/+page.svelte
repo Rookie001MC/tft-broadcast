@@ -105,6 +105,51 @@
 				<p class="mt-2 text-sm text-surface-600-400">Chưa nhận capture từ Player LCU client.</p>
 			{/if}
 		{/if}
+		<div class="mt-6 space-y-3">
+			<h3 class="h4">Theo dõi dữ liệu Player Relay</h3>
+			<p class="text-sm text-surface-600-400">
+				25 capture gần nhất · tự cập nhật mỗi 3 giây. Tạm dừng cập nhật khi đang chỉnh lõi hoặc lưu
+				form.
+			</p>
+			{#if data.relay.recentReceipts.length}
+				<div class="overflow-x-auto">
+					<table class="table w-full text-sm">
+						<thead
+							><tr
+								><th>Tuyển thủ / Client</th><th>Game</th><th>Trạng thái</th><th
+									>Server nhận (UTC)</th
+								><th>Capture ID</th></tr
+							></thead
+						>
+						<tbody>
+							{#each data.relay.recentReceipts as receipt (receipt.captureId)}
+								<tr>
+									<td
+										><div>{receipt.playerName || 'Chưa có tên tuyển thủ'}</div>
+										<div class="mt-1 font-mono text-xs text-surface-600-400">
+											{receipt.installationId || 'Client ID không có trong receipt'}
+										</div></td
+									>
+									<td>{receipt.gameId}</td>
+									<td><span class="badge preset-filled-success-500">Server đã nhận</span></td>
+									<td><time datetime={receipt.receivedAt}>{receipt.receivedAt}</time></td>
+									<td class="font-mono text-xs">{receipt.captureId}</td>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+				</div>
+			{:else if data.relay.passwordState !== 'unavailable'}
+				<p class="rounded-container preset-tonal-warning p-3 text-sm">
+					Đang chờ dữ liệu từ Player Relay. Chưa có capture nào được server xác nhận.
+				</p>
+			{/if}
+			<p class="text-sm text-surface-600-400">
+				“Server đã nhận” xác nhận dữ liệu đã lưu, chưa có nghĩa đã phát lên OBS. Client chưa xuất
+				hiện không có nghĩa đang offline. Lỗi gửi, hàng đợi và retry ở máy tuyển thủ hiện chỉ xem
+				được trên client.
+			</p>
+		</div>
 		<ol class="mt-5 list-decimal space-y-2 pl-5 text-sm">
 			<li>Mở TFT Player Relay trên một máy tuyển thủ, nhập địa chỉ máy broadcast ở trên.</li>
 			<li>Nhập hoặc Generate mật khẩu relay, rồi Save settings để khởi tạo relay.</li>

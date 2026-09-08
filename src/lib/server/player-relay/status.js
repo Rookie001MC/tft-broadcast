@@ -1,7 +1,10 @@
 import { open, opendir, stat } from 'node:fs/promises';
 import path from 'node:path';
 
-/** @typedef {{ gameId: string, captureId: string, receivedAt: string }} ReceiptSummary */
+/** @typedef {{ gameId: string, captureId: string, receivedAt: string, installationId: string, playerName: string }} ReceiptSummary */
+
+/** @type {Map<string, { mtimeMs: number, size: number, summary: ReceiptSummary }>} */
+const receiptCache = new Map();
 
 /** @param {string} filename @param {number} maxBytes */
 async function readJson(filename, maxBytes) {
@@ -36,31 +39,47 @@ async function readVerifierState(filename) {
 	}
 }
 
-/** @param {string} directory @returns {Promise<{ count: number, latest: ReceiptSummary | null }>} */
+/** @param {string} directory @returns {Promise<{ count: number, latest: ReceiptSummary | null, recent: ReceiptSummary[] }>} */
 async function readReceiptSummary(directory) {
 	let entries;
 	try {
 		entries = await opendir(directory);
 	} catch (error) {
 		if (/** @type {NodeJS.ErrnoException} */ (error).code === 'ENOENT')
-			return { count: 0, latest: null };
+			return { count: 0, latest: null, recent: [] };
 		throw error;
 	}
 	let count = 0;
-	let newest = '';
-	let newestTime = -Infinity;
+	const candidates = [];
 	for await (const entry of entries) {
 		if (!entry.isFile() || !entry.name.endsWith('.json')) continue;
 		const filename = path.join(directory, entry.name);
-		const { mtimeMs } = await stat(filename);
-		if (mtimeMs > newestTime) {
-			newest = filename;
-			newestTime = mtimeMs;
-		}
+		const { mtimeMs, size } = await stat(filename);
+		candidates.push({ filename, mtimeMs, size });
 		if (++count === 1000) break;
 	}
-	if (!newest) return { count, latest: null };
-	const receipt = await readJson(newest, 32 * 1024 * 1024);
+	const recent = [];
+	for (const candidate of candidates.sort((a, b) => b.mtimeMs - a.mtimeMs).slice(0, 25)) {
+		const cached = receiptCache.get(candidate.filename);
+		if (cached?.mtimeMs === candidate.mtimeMs && cached.size === candidate.size) {
+			recent.push(cached.summary);
+			continue;
+		}
+		const summary = await readReceiptMetadata(candidate.filename);
+		if (receiptCache.size >= 25) {
+			const oldest = receiptCache.keys().next().value;
+			if (oldest) receiptCache.delete(oldest);
+		}
+		receiptCache.set(candidate.filename, { ...candidate, summary });
+		recent.push(summary);
+	}
+	recent.sort((a, b) => Date.parse(b.receivedAt) - Date.parse(a.receivedAt));
+	return { count, latest: recent[0] ?? null, recent };
+}
+
+/** @param {string} filename @returns {Promise<ReceiptSummary>} */
+async function readReceiptMetadata(filename) {
+	const receipt = await readJson(filename, 32 * 1024 * 1024);
 	const gameId = receipt?.capture?.gameId;
 	const captureId = receipt?.capture?.captureId;
 	const receivedAt = receipt?.receivedAt;
@@ -75,22 +94,46 @@ async function readReceiptSummary(directory) {
 		!Number.isFinite(Date.parse(receivedAt))
 	)
 		throw Error('Invalid relay receipt metadata');
-	return { count, latest: { gameId, captureId, receivedAt } };
+	const installationId = receipt.capture.installationId;
+	const localPlayer = receipt.capture.localPlayer;
+	const gameName =
+		typeof localPlayer?.gameName === 'string' ? localPlayer.gameName.slice(0, 128) : '';
+	const tagLine = typeof localPlayer?.tagLine === 'string' ? localPlayer.tagLine.slice(0, 32) : '';
+	return {
+		gameId,
+		captureId,
+		receivedAt,
+		installationId:
+			typeof installationId === 'string' && /^[a-f0-9-]{36}$/i.test(installationId)
+				? installationId
+				: '',
+		playerName: gameName ? `${gameName}${tagLine ? `#${tagLine}` : ''}` : ''
+	};
 }
 
 /**
  * @param {string} mediaRoot
- * @returns {Promise<{ passwordState: 'waiting' | 'configured' | 'unavailable', receiptCount: number, latestReceipt: ReceiptSummary | null }>}
+ * @returns {Promise<{ passwordState: 'waiting' | 'configured' | 'unavailable', receiptCount: number, latestReceipt: ReceiptSummary | null, recentReceipts: ReceiptSummary[] }>}
  */
 export async function readRelayOperatorStatus(mediaRoot) {
 	const root = path.resolve(mediaRoot, 'player-relay');
 	try {
 		const passwordState = await readVerifierState(path.join(root, 'relay-password.json'));
 		if (passwordState === 'unavailable')
-			return { passwordState, receiptCount: 0, latestReceipt: null };
+			return { passwordState, receiptCount: 0, latestReceipt: null, recentReceipts: [] };
 		const receipts = await readReceiptSummary(path.join(root, 'receipts'));
-		return { passwordState, receiptCount: receipts.count, latestReceipt: receipts.latest };
+		return {
+			passwordState,
+			receiptCount: receipts.count,
+			latestReceipt: receipts.latest,
+			recentReceipts: receipts.recent
+		};
 	} catch {
-		return { passwordState: 'unavailable', receiptCount: 0, latestReceipt: null };
+		return {
+			passwordState: 'unavailable',
+			receiptCount: 0,
+			latestReceipt: null,
+			recentReceipts: []
+		};
 	}
 }
