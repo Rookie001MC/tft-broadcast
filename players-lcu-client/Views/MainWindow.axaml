@@ -23,6 +23,31 @@
         </Border>
         <TextBlock Text="{Binding LeagueStatus}" TextWrapping="Wrap" />
         <TextBlock Text="{Binding CaptureStatus}" TextWrapping="Wrap" />
+        <Border Padding="16" CornerRadius="8" Background="{Binding DeliveryBackground}">
+            <StackPanel Spacing="8">
+                <TextBlock Text="Delivery status" FontSize="18" FontWeight="SemiBold" />
+                <TextBlock Text="{Binding DeliveryStatus}" TextWrapping="Wrap" />
+                <TextBlock Text="{Binding DeliveryUpdatedAt}" FontSize="11" Opacity="0.8" />
+                <TextBlock Text="Connected only confirms a connection test. Received by server confirms a stored receipt; it does not mean the graphic is live on OBS."
+                           TextWrapping="Wrap" Opacity="0.8" />
+                <ScrollViewer MaxHeight="280">
+                    <ItemsControl ItemsSource="{Binding DeliveryRows}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:RelayDeliveryRow">
+                                <Border Background="{Binding Background}" Padding="10" Margin="0,4" CornerRadius="6">
+                                    <StackPanel Spacing="4">
+                                        <TextBlock Text="{Binding Game}" FontWeight="SemiBold" />
+                                        <TextBlock Text="{Binding Status}" FontWeight="SemiBold" />
+                                        <TextBlock Text="{Binding Capture}" FontSize="11" TextWrapping="Wrap" />
+                                        <TextBlock Text="{Binding Detail}" TextWrapping="Wrap" />
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </StackPanel>
+        </Border>
         <Border Padding="16" CornerRadius="8" Background="#1E293B">
         <StackPanel Spacing="8">
             <DockPanel>

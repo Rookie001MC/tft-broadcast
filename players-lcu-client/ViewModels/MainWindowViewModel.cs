@@ -1,6 +1,8 @@
 ﻿using System;
 using Avalonia.Threading;
 using System.Collections.ObjectModel;
+using System.Linq;
+using System.Threading;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -25,6 +27,13 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
     private readonly IDeliveryQueueStore _queue;
     private readonly IRelayReceiverClient _relayReceiver;
     public ObservableCollection<RelayDebugRow> DebugRows { get; } = [];
+    public ObservableCollection<RelayDeliveryRow> DeliveryRows { get; } = [];
+    private readonly CancellationTokenSource _statusLifetime = new();
+    private Task? _statusWorker;
+    private bool _disposed;
+    [ObservableProperty] private string _deliveryStatus = "Reading delivery status…";
+    [ObservableProperty] private string _deliveryUpdatedAt = string.Empty;
+    [ObservableProperty] private string _deliveryBackground = "#334155";
 
     [ObservableProperty]
     private string _leagueStatus = "League: starting…";
@@ -69,11 +78,17 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
         SetCaptureStatus(_captureStore.CurrentStatus);
         LoadSettings();
         _ = RefreshDebugAsync();
+        _statusWorker = MonitorDeliveryAsync(_statusLifetime.Token);
         logger.LogInformation("Desktop status view model initialized.");
     }
 
     public void Dispose()
     {
+        if (_disposed) return;
+        _disposed = true;
+        _statusLifetime.Cancel();
+        if (_statusWorker is { } worker)
+            _ = worker.ContinueWith(_ => _statusLifetime.Dispose(), TaskScheduler.Default);
         _lcuGateway.StatusChanged -= OnLcuStatusChanged;
         _captureStore.StatusChanged -= OnCaptureSpoolStatusChanged;
     }
@@ -287,6 +302,76 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
     }
 
+    private async Task MonitorDeliveryAsync(CancellationToken cancellationToken)
+    {
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            try
+            {
+                if (_queue is not IDeliveryStatusReader reader)
+                    throw new InvalidOperationException("Delivery status unavailable.");
+                // SQLite work runs off the UI thread; only one metadata read is active at a time.
+                var items = await Task.Run(() => reader.ReadDeliveryStatusAsync(25, cancellationToken), cancellationToken);
+                if (cancellationToken.IsCancellationRequested) return;
+                var rows = items.Select(ToDeliveryRow).ToArray();
+                if (!DeliveryRows.SequenceEqual(rows))
+                {
+                    DeliveryRows.Clear();
+                    foreach (var row in rows) DeliveryRows.Add(row);
+                }
+                var received = items.Count(item => item.State == QueuedCaptureDeliveryState.Acknowledged);
+                var needsAction = items.Count(item => item.State is QueuedCaptureDeliveryState.Blocked or QueuedCaptureDeliveryState.Rejected);
+                DeliveryStatus = items.Count == 0 ? "Waiting for the first capture — nothing sent yet."
+                    : $"Latest {items.Count} captures: {received} received by server · {items.Count - received - needsAction} pending/sending/retrying · {needsAction} need attention.";
+                DeliveryBackground = needsAction > 0 ? "#991B1B"
+                    : items.Count > received ? "#92400E" : received > 0 ? "#166534" : "#334155";
+                DeliveryUpdatedAt = $"Updated {DateTimeOffset.Now:HH:mm:ss} · refreshes every 2 seconds";
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { return; }
+            catch
+            {
+                if (cancellationToken.IsCancellationRequested) return;
+                DeliveryRows.Clear();
+                DeliveryStatus = "Cannot read local delivery storage. Delivery is unconfirmed; check disk space and restart the client.";
+                DeliveryBackground = "#991B1B";
+                DeliveryUpdatedAt = "Status unavailable — retrying automatically.";
+            }
+            try { await Task.Delay(TimeSpan.FromSeconds(2), cancellationToken); }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { return; }
+        }
+    }
+
+    private static RelayDeliveryRow ToDeliveryRow(DeliveryStatusItem item)
+    {
+        var (status, color) = item.State switch
+        {
+            QueuedCaptureDeliveryState.Acknowledged => ("Received by server", "#166534"),
+            QueuedCaptureDeliveryState.Sending => ("Sending — awaiting receipt", "#1E40AF"),
+            QueuedCaptureDeliveryState.RetryScheduled => ("Retry scheduled — not confirmed", "#92400E"),
+            QueuedCaptureDeliveryState.Blocked => ("Blocked — action required", "#991B1B"),
+            QueuedCaptureDeliveryState.Rejected => ("Rejected by server", "#991B1B"),
+            _ => ("Queued locally — not sent yet", "#334155")
+        };
+        var detail = item.SafeCode switch
+        {
+            "authentication_required" => "Relay password was refused. Save the correct shared password. This blocked capture does not retry automatically.",
+            "credential_unavailable" => "Saved password unavailable. Save the shared relay password; this capture will retry.",
+            "destination_unavailable" => "Save a valid relay host and port; this capture will retry.",
+            "destination_changed" => "Relay destination changed. This capture remains bound to its original server and will not retry automatically.",
+            "network_unavailable" => "Cannot reach relay. Check LAN, server address and firewall; retry is automatic.",
+            "request_timeout" => "Server did not confirm in time. Retrying the same capture safely.",
+            "receiver_unavailable" => "Server is busy or unavailable. Retry is automatic.",
+            "receiver_rejected" => "Server rejected this capture. Ask the broadcast operator to inspect it; no automatic retry.",
+            "invalid_acknowledgment" => "Server receipt was invalid. Delivery is unconfirmed; ask the broadcast operator to check server compatibility.",
+            "endpoint_not_found" or "redirect_not_allowed" or "unexpected_response" => "Check the relay URL and server version with the broadcast operator. No automatic retry.",
+            _ => string.Empty
+        };
+        if (item.ReceivedAtUtc is { } received) detail = $"Server receipt: {received.ToLocalTime():yyyy-MM-dd HH:mm:ss}.";
+        if (item.NextAttemptAtUtc is { } retry) detail += $" Next retry: {retry.ToLocalTime():HH:mm:ss}.";
+        if (item.SafeCode is { } code) detail += $" Code: {code}.";
+        return new RelayDeliveryRow($"Game {item.GameId}", $"Capture {item.CaptureId} · Attempts: {item.AttemptCount}", status, color, detail);
+    }
+
     private void SetConnectionState(bool connected, string status, string message)
     {
         ConnectionStatus = status;
@@ -321,3 +406,4 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
 }
 
 public sealed record RelayDebugRow(string GameId, string CaptureId, string State, string Attempts, string PayloadJson);
+public sealed record RelayDeliveryRow(string Game, string Capture, string Status, string Background, string Detail);

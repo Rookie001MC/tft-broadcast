@@ -20,6 +20,17 @@ For the immediate rehearsal, a detected TFT EOG response is copied atomically to
 
 Close the client normally after the rehearsal. It is read-only with respect to the League Client and does not alter game files or client settings.
 
+## Delivery status
+
+The main window automatically reads delivery metadata every two seconds and shows the latest 25 captures, newest first. Each row includes game/capture ID, attempt count, delivery state, receiver acknowledgment time, and any safe error code or scheduled retry time. Raw game JSON remains in the separate manual debug view.
+
+- **Queued / Sending / Retry scheduled**: delivery is not yet confirmed. Keep the app open; scheduled retries run automatically.
+- **Received by server**: a matching stored or duplicate receipt has been saved locally. This does not publish a graphic to OBS.
+- **Blocked / Rejected**: follow the row's guidance and contact the broadcast operator. These captures are retained but do not automatically retry after editing settings.
+- **Storage unavailable**: status cannot be confirmed; the UI clears stale rows and retries its metadata read.
+
+The connection-test badge describes the last manual connection test, independently of capture delivery. The summary counts cover only the displayed latest 25 captures.
+
 ## Local development
 
 On a development PC with the .NET 10 SDK:

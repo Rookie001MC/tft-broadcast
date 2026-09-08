@@ -21,7 +21,7 @@ namespace players_lcu_client.Infrastructure.Storage;
 /// stores the immutable envelope, destination binding, payload, and pending state in one SQLite
 /// transaction before it is exposed to a future uploader.
 /// </remarks>
-public sealed class SqliteDeliveryQueueStore : IDeliveryQueueStore
+public sealed class SqliteDeliveryQueueStore : IDeliveryQueueStore, IDeliveryStatusReader
 {
     private const int CurrentSchemaVersion = 1;
     private const int MaximumPayloadBytes = 4 * 1024 * 1024;
@@ -537,6 +537,32 @@ public sealed class SqliteDeliveryQueueStore : IDeliveryQueueStore
             var item = await ReadQueueItemAsync(connection, id, cancellationToken).ConfigureAwait(false);
             if (item is not null) items.Add(item);
         }
+        return items;
+    }
+
+    public async Task<IReadOnlyList<DeliveryStatusItem>> ReadDeliveryStatusAsync(int limit, CancellationToken cancellationToken)
+    {
+        if (limit is < 1 or > 100) throw new ArgumentOutOfRangeException(nameof(limit));
+        var initialization = await InitializeAsync(cancellationToken).ConfigureAwait(false);
+        if (initialization.Status != DeliveryQueueInitializationStatus.Ready)
+            throw new InvalidOperationException("Delivery storage unavailable.");
+        await using var connection = new SqliteConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+        await ConfigureInspectionConnectionAsync(connection, cancellationToken).ConfigureAwait(false);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT game_id, capture_id, delivery_state, attempt_count, last_attempt_safe_code,
+                   next_attempt_at_utc_ms, acknowledged_at_utc_ms
+            FROM delivery_queue ORDER BY queued_at_utc_ticks DESC LIMIT $limit;
+            """;
+        AddParameter(command, "$limit", limit);
+        var items = new List<DeliveryStatusItem>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            items.Add(new DeliveryStatusItem(reader.GetString(0), Guid.ParseExact(reader.GetString(1), "N").ToString("D"),
+                (QueuedCaptureDeliveryState)reader.GetInt32(2), reader.GetInt64(3),
+                reader.IsDBNull(4) ? null : reader.GetString(4),
+                ReadNullableUtcMilliseconds(reader, 5), ReadNullableUtcMilliseconds(reader, 6)));
         return items;
     }
 
