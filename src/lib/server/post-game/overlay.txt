@@ -20,8 +20,33 @@ const images=new Map(); let missing=new Set(), generation=0, ready=false;
 const exportButton=document.querySelector('#export');
 const mappedUrls=new Map();
 let winnerPortrait="";
+const previewFace=new URLSearchParams(location.search).get('face');
+const faceOverride=initial.ranking?(previewFace==='faker'?'/T1_Faker_2026_LCK_Cup.png':/^[a-f0-9-]{36}$/i.test(previewFace||'')?`/media/player-images/${previewFace}`:''):'';
 let animationFrame=0, animationTime=Infinity;
 const motionDuration=560;
+function postMatchPhase(delay,duration){
+ const t=Math.max(0,Math.min(1,(animationTime-delay)/duration));
+ return t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2;
+}
+function postMatchWinner(name,y,rank){
+ const offset=(rank-1)*100;
+ const entry=postMatchPhase(offset,360),expand=postMatchPhase(offset+420,380);
+ const title=postMatchPhase(offset+800,200),lift=postMatchPhase(offset+1180,320),nameIn=postMatchPhase(offset+1450,400);
+ const shakeT=Math.max(0,Math.min(1,(animationTime-offset-800)/360));
+ const shake=shakeT>0&&shakeT<1?Math.sin(shakeT*Math.PI*8)*4*Math.sin(shakeT*Math.PI)*(1-shakeT):0;
+ ctx.save();ctx.globalAlpha*=entry;ctx.translate(-80*(1-entry),0);
+ const gradient=ctx.createLinearGradient(90,y,515,y+106);gradient.addColorStop(0,rank===1?'#9f1730':rank===2?'#d9a514':'#d86418');gradient.addColorStop(1,rank===1?'#e84452':rank===2?'#f5c842':'#ef852f');
+ box(90,y+4,78,102,gradient);
+ ctx.textAlign='center';text(rank,129,y+68,34,'#ffffff',700);
+ ctx.save();ctx.translate(shake,0);
+ const panelWidth=347*expand;
+ ctx.beginPath();ctx.rect(168,y+4,panelWidth,102);ctx.clip();
+ box(168,y+4,panelWidth,102,gradient);
+ if(title*(1-lift)>0){ctx.save();ctx.globalAlpha*=title*(1-lift);text(['THỨ NHẤT','THỨ HAI','THỨ BA'][rank-1],341.5,y+68-48*lift,30,rank===2?'#25212b':'#ffffff',700);ctx.restore()}
+ ctx.textAlign='left';
+ if(nameIn>0){ctx.save();ctx.globalAlpha*=nameIn;text(name,190,y+66+24*(1-nameIn),27,rank===2?'#25212b':'#ffffff',600,303);ctx.restore()}
+ ctx.restore();ctx.restore();
+}
 function motion(delay,dx=64,dy=0){
  const t=Math.max(0,Math.min(1,(animationTime-delay)/motionDuration));
  const eased=t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2;
@@ -32,7 +57,7 @@ function playAnimation(){
  stopAnimation();
  const started=performance.now();
  const units=Math.max(11,...data.players.map(p=>(p.boardPieces||[]).length));
- const duration=initial.ranking?1000+Math.max(0,data.players.length-2)*80+motionDuration:Math.max(0,data.players.length-1)*100+100+(units-1)*24+motionDuration;
+ const duration=initial.ranking?1000+Math.max(0,data.players.length-2)*80+motionDuration:1500+Math.max(0,data.players.length-1)*100+100+(units-1)*24+motionDuration;
  exportButton.disabled=true;window.overlayState.animating=true;
  function tick(now){
   animationTime=(now-started)*1.2;draw();
@@ -47,9 +72,12 @@ if(new URLSearchParams(location.search).has('obs')) document.body.classList.add(
 function text(s,x,y,size=18,color='#f3f0fa',weight=600,max=1000){ctx.fillStyle=color;ctx.font=`${weight} ${size}px "IBM Plex Sans",Arial,sans-serif`;s=String(s);while(ctx.measureText(s).width>max&&s.length>1)s=s.slice(0,-2)+'…';ctx.fillText(s,x,y)}
 function box(x,y,w,h,color){ctx.fillStyle=color;ctx.fillRect(x,y,w,h)}
 function image(path,x,y,w,h){const im=images.get(path);if(im)ctx.drawImage(im,x,y,w,h);return !!im}
-function iconPaths(value){if(initial.ranking){value={players:[...value.players].sort((a,b)=>a.ffaStanding-b.ffaStanding).slice(0,1)}}const paths=new Set();if(initial.ranking&&winnerPortrait)paths.add(winnerPortrait);if(!initial.ranking&&value.players.some(p=>(p.boardPieces||[]).length<11))paths.add(emptySlotUrl);for(const p of value.players)for(const u of p.boardPieces||[]){paths.add(u.icon||'');mappedUrls.set(u.icon,initial.catalog?.champions?.[u.championId]||[]);for(const item of u.items||[]){paths.add(item.icon||'');mappedUrls.set(item.icon,initial.catalog?.items?.[item.nameId]||[])}}return paths}
+function iconPaths(value){if(initial.ranking){value={players:[...value.players].sort((a,b)=>a.ffaStanding-b.ffaStanding).slice(0,1)}}const paths=new Set();if(initial.ranking){for(const p of value.players)for(const augment of (p.augments||[]).slice(0,4)){if(!augment)continue;const key=augment.icon||initial.catalog?.augments?.[augment.nameId]?.[0]||'';if(key){paths.add(key);mappedUrls.set(key,initial.catalog?.augments?.[augment.nameId]||[])}}}if(initial.ranking&&winnerPortrait)paths.add(winnerPortrait);if(!initial.ranking&&value.players.some(p=>(p.boardPieces||[]).length<11))paths.add(emptySlotUrl);for(const p of value.players)for(const u of p.boardPieces||[]){paths.add(u.icon||'');mappedUrls.set(u.icon,initial.catalog?.champions?.[u.championId]||[]);for(const item of u.items||[]){paths.add(item.icon||'');mappedUrls.set(item.icon,initial.catalog?.items?.[item.nameId]||[])}}return paths}
 function assetUrls(path){
  if(!path)return [];
+ if(path==='/T1_Faker_2026_LCK_Cup.png')return [path];
+ if(path.startsWith('/media/catalog-assets/')&&!path.includes('..'))return [path];
+ if(/^\/media\/player-images\/[a-f0-9-]{36}$/i.test(path))return [path];
  if(/^data:image\/(png|webp);base64,/.test(path))return [path];
  if(/^https:\/\/raw\.communitydragon\.org\//i.test(path))return [path];
  const prefix='/lol-game-data/assets/';if(!path.startsWith(prefix))return [];
@@ -86,18 +114,20 @@ function draw(){
  ctx.scale(scale,scale);
  players.forEach((p,i)=>{
   const y=70+i*120, rank=p.ffaStanding??p.rank??i+1;
-  // Flat name panel, restrained rank divider and a single winner accent.
-  motion(i*100,-64);
+  const name=p.riotIdGameName||p.summonerName||'—';
+  if(rank<=3){postMatchWinner(name,y,rank)}else{
+  motion(1500+i*100,-64);
   box(90,y+4,425,102,'#ffffff');
-  if(rank===1){const gradient=ctx.createLinearGradient(90,y,170,y+106);gradient.addColorStop(0,'#9f1730');gradient.addColorStop(1,'#e84452');box(90,y+4,78,102,gradient)}
+  if(rank===2||rank===3)box(90,y+4,78,102,rank===2?'#f5c842':'#ef852f');
   else box(168,y+30,1,50,'#e4e4e9');
-  ctx.textAlign='center';text(rank,129,y+68,34,rank===1?'#ffffff':'#65616d',700);ctx.textAlign='left';
-  const name=p.riotIdGameName||p.summonerName||'—';text(name,190,y+66,27,'#25212b',600,303);
+  ctx.textAlign='center';text(rank,129,y+68,34,rank===2||rank===3?'#25212b':'#65616d',700);ctx.textAlign='left';
+  text(name,190,y+66,27,'#25212b',600,303);
   ctx.restore();
+  }
   const units=p.boardPieces||[],slots=Math.max(11,units.length),gap=8,size=Math.min(110,(1300-(slots-1)*gap)/slots);
   for(let j=0;j<slots;j++){
    const x=530+j*(size+gap),u=units[j];
-   motion(i*100+100+j*24,48);
+   motion(1500+i*100+100+j*24,48);
    const color=u?palette[Math.min(6,Math.max(0,Number(u.price)||0))]:'#343139';box(x,y,size,size,color);
    if(!u){image(emptySlotUrl,x+2,y+2,size-4,size-4);ctx.restore();continue}
    const portrait=images.get(u.icon);if(portrait){const side=Math.min(portrait.naturalWidth,portrait.naturalHeight);ctx.drawImage(portrait,(portrait.naturalWidth-side)/2,(portrait.naturalHeight-side)/2,side,side,x+2,y+2,size-4,size-4)}
@@ -146,8 +176,9 @@ if(initial.live){
   const state=await response.json(),wasShown=shown;shown=state.visible;
   canvas.style.display=shown?'block':'none';
   if(!shown)stopAnimation();
-  const nextKey=JSON.stringify([state.data,state.portrait||'']);
-  if(state.data&&contentKey!==nextKey){contentKey=nextKey;data=state.data;winnerPortrait=state.portrait||"";await render()}
+  const portrait=faceOverride||state.portrait||'';
+  const nextKey=JSON.stringify([state.data,portrait]);
+  if(state.data&&contentKey!==nextKey){contentKey=nextKey;data=state.data;winnerPortrait=portrait;await render()}
   else if(shown&&!wasShown&&ready)playAnimation();
  }catch(error){status.textContent='Mất kết nối máy broadcast';}finally{setTimeout(poll,1000)}}
  poll();

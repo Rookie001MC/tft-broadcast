@@ -56,13 +56,19 @@ export async function getState() {
 export function sceneState(state, scene) {
 	return state.scenes?.[scene] ?? { live: state.live, visible: state.visible };
 }
-/** @param {'import'|'publish'|'hide'} action @param {any} [data] @param {string} [scene] */
+/** @param {'import'|'publish'|'hide'|'augments'} action @param {any} [data] @param {string} [scene] */
 export function changeState(action, data, scene = 'post-match') {
 	if (!['post-match', 'ranking'].includes(scene)) throw Error('Unknown scene');
 	const task = queue.then(async () => {
 		const s = await getState();
 		s.scenes ??= { 'post-match': sceneState(s, 'post-match'), ranking: sceneState(s, 'ranking') };
 		if (action === 'import') s.draft = validateEog(data);
+		if (action === 'augments') {
+			if (!s.draft || s.draft.gameId !== data.gameId)
+				throw Error('Trận đã thay đổi. Tải lại rồi chọn lõi.');
+			const winner = [...s.draft.players].sort((a, b) => a.ffaStanding - b.ffaStanding)[0];
+			winner.augments = data.augments;
+		}
 		if (action === 'publish') {
 			if (!s.draft) throw Error('Hãy import EOG trước.');
 			s.scenes[scene] = { live: s.draft, visible: true };

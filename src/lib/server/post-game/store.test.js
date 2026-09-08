@@ -26,6 +26,18 @@ test('publishes and hides each scene independently and preserves its live data',
 		state = await getState();
 		expect(sceneState(state, 'ranking').live.gameId).toBe(1);
 		expect(sceneState(state, 'post-match').live.gameId).toBe(2);
+		const augments = [0, 1, 2, 3].map((id) => ({
+			id: String(id),
+			icon: `/media/catalog-assets/test/${id}.png`
+		}));
+		await changeState('augments', { gameId: 2, augments });
+		state = await getState();
+		expect(state.draft.players[0].augments).toHaveLength(4);
+		expect(sceneState(state, 'ranking').live.players[0].augments).toBeUndefined();
+		await changeState('publish', undefined, 'ranking');
+		state = await getState();
+		expect(sceneState(state, 'ranking').live.players[0].augments).toHaveLength(4);
+		expect(sceneState(state, 'post-match').live.players[0].augments).toBeUndefined();
 		await changeState('hide', undefined, 'ranking');
 		state = await getState();
 		expect(sceneState(state, 'ranking').visible).toBe(false);
