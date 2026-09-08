@@ -1,0 +1,6 @@
+{
+  "server_url": "http://192.168.1.10:5173",
+  "relay_password": "",
+  "lockfile": "",
+  "poll_seconds": 3
+}

@@ -1,0 +1,11 @@
+config.json
+status.json
+installation.json
+eog/
+pending/
+relay-pending/
+sent.json
+relay-sent.json
+*.bak
+*.tmp
+__pycache__/
