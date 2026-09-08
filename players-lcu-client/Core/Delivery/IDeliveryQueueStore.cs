@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -84,6 +85,38 @@ public sealed record DeliveryQueueAdmission(
     string Detail);
 
 /// <summary>
+/// A single durable send lease. The queue creates it atomically, so callers cannot upload the
+/// same capture concurrently.
+/// </summary>
+public sealed record DeliveryQueueLease(
+    DeliveryQueueItem Item,
+    long AttemptNumber,
+    DateTimeOffset AttemptedAtUtc);
+
+/// <summary>
+/// The safe terminal classification of a receiver request. It intentionally contains no raw
+/// response body, headers, or credentials.
+/// </summary>
+public sealed record DeliveryAttemptCompletion(
+    DeliveryAttemptOutcome Outcome,
+    string? SafeCode,
+    DateTimeOffset? RetryNotBeforeUtc,
+    DeliveryAcknowledgment? Acknowledgment)
+{
+    public static DeliveryAttemptCompletion Acknowledged(DeliveryAcknowledgment acknowledgment) =>
+        new(DeliveryAttemptOutcome.Acknowledged, null, null, acknowledgment);
+
+    public static DeliveryAttemptCompletion Retry(string safeCode, DateTimeOffset retryNotBeforeUtc) =>
+        new(DeliveryAttemptOutcome.RetryableFailure, safeCode, retryNotBeforeUtc, null);
+
+    public static DeliveryAttemptCompletion Blocked(string safeCode) =>
+        new(DeliveryAttemptOutcome.Blocked, safeCode, null, null);
+
+    public static DeliveryAttemptCompletion Rejected(string safeCode) =>
+        new(DeliveryAttemptOutcome.Rejected, safeCode, null, null);
+}
+
+/// <summary>
 /// Dependency-free boundary for the transactional admission of immutable capture envelopes.
 /// </summary>
 /// <remarks>
@@ -108,4 +141,22 @@ public interface IDeliveryQueueStore
     Task<DeliveryQueueAdmission> AdmitAsync(
         DeliveryQueueItem item,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Atomically claims the oldest eligible pending or retry-scheduled item for the one
+    /// uploader. Interrupted claims are recovered as pending during initialization.
+    /// </summary>
+    Task<DeliveryQueueLease?> ClaimNextAsync(
+        DateTimeOffset nowUtc,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Persists a completed leased attempt and its replacement delivery state atomically.
+    /// </summary>
+    Task CompleteAttemptAsync(
+        DeliveryQueueLease lease,
+        DeliveryAttemptCompletion completion,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<DeliveryQueueItem>> ReadRecentAsync(int limit, CancellationToken cancellationToken = default);
 }

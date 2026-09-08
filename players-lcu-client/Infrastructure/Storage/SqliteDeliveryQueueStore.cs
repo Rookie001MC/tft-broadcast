@@ -353,6 +353,374 @@ public sealed class SqliteDeliveryQueueStore : IDeliveryQueueStore
         }
     }
 
+    /// <inheritdoc />
+    public async Task<DeliveryQueueLease?> ClaimNextAsync(
+        DateTimeOffset nowUtc,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var initialization = await InitializeAsync(cancellationToken).ConfigureAwait(false);
+        if (initialization.Status != DeliveryQueueInitializationStatus.Ready)
+        {
+            return null;
+        }
+
+        await using var connection = new SqliteConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+        await ConfigureInspectionConnectionAsync(connection, cancellationToken).ConfigureAwait(false);
+        await ConfigureOperationalConnectionAsync(connection, cancellationToken).ConfigureAwait(false);
+        await BeginImmediateAsync(connection, cancellationToken).ConfigureAwait(false);
+        var transactionOpen = true;
+
+        try
+        {
+            var captureId = await FindEligibleCaptureIdAsync(connection, nowUtc, cancellationToken).ConfigureAwait(false);
+            if (captureId is null)
+            {
+                await CommitAsync(connection, cancellationToken).ConfigureAwait(false);
+                transactionOpen = false;
+                return null;
+            }
+
+            await ExecuteNonQueryAsync(
+                connection,
+                """
+                UPDATE delivery_queue
+                SET delivery_state = $sending,
+                    attempt_count = attempt_count + 1,
+                    last_attempted_at_utc_ms = NULL,
+                    last_attempt_outcome = NULL,
+                    last_attempt_safe_code = NULL,
+                    next_attempt_at_utc_ms = NULL
+                WHERE capture_id = $captureId AND
+                    (delivery_state = $pending OR
+                     (delivery_state = $retryScheduled AND next_attempt_at_utc_ms <= $nowUtcMs));
+                """,
+                cancellationToken,
+                ("$sending", (int)QueuedCaptureDeliveryState.Sending),
+                ("$captureId", captureId.Value.ToString("N")),
+                ("$pending", (int)QueuedCaptureDeliveryState.Pending),
+                ("$retryScheduled", (int)QueuedCaptureDeliveryState.RetryScheduled),
+                ("$nowUtcMs", nowUtc.ToUnixTimeMilliseconds())).ConfigureAwait(false);
+
+            var item = await ReadQueueItemAsync(connection, captureId.Value, cancellationToken).ConfigureAwait(false)
+                ?? throw new IOException("SQLite lost a claimed delivery capture.");
+            if (item.State != QueuedCaptureDeliveryState.Sending)
+            {
+                throw new IOException("SQLite did not claim the expected delivery capture.");
+            }
+
+            await CommitAsync(connection, cancellationToken).ConfigureAwait(false);
+            transactionOpen = false;
+            return new DeliveryQueueLease(item, item.AttemptCount, nowUtc);
+        }
+        catch
+        {
+            if (transactionOpen)
+            {
+                await RollbackAsync(connection).ConfigureAwait(false);
+            }
+
+            throw;
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task CompleteAttemptAsync(
+        DeliveryQueueLease lease,
+        DeliveryAttemptCompletion completion,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(lease);
+        ArgumentNullException.ThrowIfNull(completion);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if (!TryValidateCompletion(lease, completion, out var nextState))
+        {
+            throw new ArgumentException("The delivery attempt completion is invalid.", nameof(completion));
+        }
+
+        var initialization = await InitializeAsync(cancellationToken).ConfigureAwait(false);
+        if (initialization.Status != DeliveryQueueInitializationStatus.Ready)
+        {
+            throw new IOException(initialization.Detail);
+        }
+
+        await using var connection = new SqliteConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+        await ConfigureInspectionConnectionAsync(connection, cancellationToken).ConfigureAwait(false);
+        await ConfigureOperationalConnectionAsync(connection, cancellationToken).ConfigureAwait(false);
+        await BeginImmediateAsync(connection, cancellationToken).ConfigureAwait(false);
+        var transactionOpen = true;
+
+        try
+        {
+            await ExecuteNonQueryAsync(
+                connection,
+                """
+                INSERT INTO delivery_attempts (
+                    capture_id, attempt_number, attempted_at_utc_ms, outcome, safe_code, retry_not_before_utc_ms
+                ) VALUES (
+                    $captureId, $attemptNumber, $attemptedAtUtcMs, $outcome, $safeCode, $retryNotBeforeUtcMs
+                );
+                """,
+                cancellationToken,
+                ("$captureId", lease.Item.Envelope.CaptureId.ToString("N")),
+                ("$attemptNumber", lease.AttemptNumber),
+                ("$attemptedAtUtcMs", lease.AttemptedAtUtc.ToUnixTimeMilliseconds()),
+                ("$outcome", (int)completion.Outcome),
+                ("$safeCode", completion.SafeCode),
+                ("$retryNotBeforeUtcMs", completion.RetryNotBeforeUtc?.ToUnixTimeMilliseconds())).ConfigureAwait(false);
+
+            var rowsUpdated = await ExecuteNonQueryWithParametersAsync(
+                connection,
+                """
+                UPDATE delivery_queue
+                SET delivery_state = $deliveryState,
+                    last_attempted_at_utc_ms = $attemptedAtUtcMs,
+                    last_attempt_outcome = $outcome,
+                    last_attempt_safe_code = $safeCode,
+                    next_attempt_at_utc_ms = $retryNotBeforeUtcMs,
+                    acknowledged_at_utc_ms = $acknowledgedAtUtcMs,
+                    acknowledgment_status = $acknowledgmentStatus
+                WHERE capture_id = $captureId AND delivery_state = $sending AND attempt_count = $attemptNumber;
+                """,
+                cancellationToken,
+                ("$deliveryState", (int)nextState),
+                ("$attemptedAtUtcMs", lease.AttemptedAtUtc.ToUnixTimeMilliseconds()),
+                ("$outcome", (int)completion.Outcome),
+                ("$safeCode", completion.SafeCode),
+                ("$retryNotBeforeUtcMs", completion.RetryNotBeforeUtc?.ToUnixTimeMilliseconds()),
+                ("$acknowledgedAtUtcMs", completion.Acknowledgment?.ReceivedAtUtc.ToUnixTimeMilliseconds()),
+                ("$acknowledgmentStatus", completion.Acknowledgment is null ? null : (int)completion.Acknowledgment.Status),
+                ("$captureId", lease.Item.Envelope.CaptureId.ToString("N")),
+                ("$sending", (int)QueuedCaptureDeliveryState.Sending),
+                ("$attemptNumber", lease.AttemptNumber)).ConfigureAwait(false);
+            if (rowsUpdated != 1)
+            {
+                throw new InvalidOperationException("The delivery lease is no longer active.");
+            }
+
+            await CommitAsync(connection, cancellationToken).ConfigureAwait(false);
+            transactionOpen = false;
+        }
+        catch
+        {
+            if (transactionOpen)
+            {
+                await RollbackAsync(connection).ConfigureAwait(false);
+            }
+
+            throw;
+        }
+    }
+
+    public async Task<IReadOnlyList<DeliveryQueueItem>> ReadRecentAsync(int limit, CancellationToken cancellationToken = default)
+    {
+        if (limit is < 1 or > 100) throw new ArgumentOutOfRangeException(nameof(limit));
+        var initialization = await InitializeAsync(cancellationToken).ConfigureAwait(false);
+        if (initialization.Status != DeliveryQueueInitializationStatus.Ready) return [];
+        await using var connection = new SqliteConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+        await ConfigureInspectionConnectionAsync(connection, cancellationToken).ConfigureAwait(false);
+        var ids = new List<Guid>();
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText = "SELECT capture_id FROM delivery_queue ORDER BY queued_at_utc_ticks DESC LIMIT $limit;";
+            AddParameter(command, "$limit", limit);
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) ids.Add(Guid.ParseExact(reader.GetString(0), "N"));
+        }
+        var items = new List<DeliveryQueueItem>(ids.Count);
+        foreach (var id in ids)
+        {
+            var item = await ReadQueueItemAsync(connection, id, cancellationToken).ConfigureAwait(false);
+            if (item is not null) items.Add(item);
+        }
+        return items;
+    }
+
+    private static bool TryValidateCompletion(
+        DeliveryQueueLease lease,
+        DeliveryAttemptCompletion completion,
+        out QueuedCaptureDeliveryState nextState)
+    {
+        nextState = default;
+        if (lease.Item.State != QueuedCaptureDeliveryState.Sending ||
+            lease.Item.Envelope.CaptureId == Guid.Empty ||
+            lease.AttemptNumber < 1 ||
+            lease.AttemptNumber != lease.Item.AttemptCount ||
+            !HasOptionalStringLength(completion.SafeCode, 1, 128))
+        {
+            return false;
+        }
+
+        switch (completion.Outcome)
+        {
+            case DeliveryAttemptOutcome.Acknowledged:
+                if (completion.Acknowledgment is null ||
+                    completion.Acknowledgment.CaptureId != lease.Item.Envelope.CaptureId ||
+                    completion.Acknowledgment.Status is not DeliveryAcknowledgmentStatus.Stored and not DeliveryAcknowledgmentStatus.Duplicate ||
+                    completion.RetryNotBeforeUtc is not null)
+                {
+                    return false;
+                }
+
+                nextState = QueuedCaptureDeliveryState.Acknowledged;
+                return true;
+
+            case DeliveryAttemptOutcome.RetryableFailure:
+            case DeliveryAttemptOutcome.NoAcknowledgment:
+                if (completion.Acknowledgment is not null ||
+                    string.IsNullOrWhiteSpace(completion.SafeCode) ||
+                    completion.RetryNotBeforeUtc is null ||
+                    completion.RetryNotBeforeUtc <= lease.AttemptedAtUtc)
+                {
+                    return false;
+                }
+
+                nextState = QueuedCaptureDeliveryState.RetryScheduled;
+                return true;
+
+            case DeliveryAttemptOutcome.Blocked:
+                if (completion.Acknowledgment is not null ||
+                    string.IsNullOrWhiteSpace(completion.SafeCode) ||
+                    completion.RetryNotBeforeUtc is not null)
+                {
+                    return false;
+                }
+
+                nextState = QueuedCaptureDeliveryState.Blocked;
+                return true;
+
+            case DeliveryAttemptOutcome.Rejected:
+                if (completion.Acknowledgment is not null ||
+                    string.IsNullOrWhiteSpace(completion.SafeCode) ||
+                    completion.RetryNotBeforeUtc is not null)
+                {
+                    return false;
+                }
+
+                nextState = QueuedCaptureDeliveryState.Rejected;
+                return true;
+
+            default:
+                return false;
+        }
+    }
+
+    private static async Task<Guid?> FindEligibleCaptureIdAsync(
+        SqliteConnection connection,
+        DateTimeOffset nowUtc,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT capture_id
+            FROM delivery_queue
+            WHERE delivery_state = $pending OR
+                (delivery_state = $retryScheduled AND next_attempt_at_utc_ms <= $nowUtcMs)
+            ORDER BY queued_at_utc_ticks ASC
+            LIMIT 1;
+            """;
+        AddParameter(command, "$pending", (int)QueuedCaptureDeliveryState.Pending);
+        AddParameter(command, "$retryScheduled", (int)QueuedCaptureDeliveryState.RetryScheduled);
+        AddParameter(command, "$nowUtcMs", nowUtc.ToUnixTimeMilliseconds());
+        var value = await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
+        return value is string captureId && Guid.TryParseExact(captureId, "N", out var parsed)
+            ? parsed
+            : null;
+    }
+
+    private static async Task<DeliveryQueueItem?> ReadQueueItemAsync(
+        SqliteConnection connection,
+        Guid captureId,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT capture_id, installation_id, protocol_version, sequence, captured_at_utc_ticks,
+                   queued_at_utc_ticks, app_version, observation_kind, source_platform, game_id,
+                   local_player_puuid, local_player_game_name, local_player_tag_line,
+                   envelope_server_id, envelope_event_id, destination_profile_id,
+                   destination_server_id, destination_event_id, payload_sha256, payload_json,
+                   delivery_state, attempt_count, last_attempted_at_utc_ms, last_attempt_outcome,
+                   last_attempt_safe_code, next_attempt_at_utc_ms, acknowledged_at_utc_ms,
+                   acknowledgment_status
+            FROM delivery_queue
+            WHERE capture_id = $captureId
+            LIMIT 1;
+            """;
+        AddParameter(command, "$captureId", captureId.ToString("N"));
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            return null;
+        }
+
+        var envelopeContext = ReadContext(reader, 13, 14);
+        var destinationContext = ReadContext(reader, 16, 17);
+        var envelope = new CaptureEnvelope(
+            reader.GetInt32(2),
+            Guid.ParseExact(reader.GetString(0), "N"),
+            Guid.ParseExact(reader.GetString(1), "N"),
+            reader.GetString(3),
+            FromUtcTicks(reader.GetInt64(4)),
+            reader.GetString(6),
+            (DeliveryObservationKind)reader.GetInt32(7),
+            GetNullableString(reader, 8),
+            reader.GetString(9),
+            new DeliveryLocalPlayer(GetNullableString(reader, 10), GetNullableString(reader, 11), GetNullableString(reader, 12)),
+            envelopeContext,
+            reader.GetString(18),
+            reader.GetString(19));
+        var state = (QueuedCaptureDeliveryState)reader.GetInt32(20);
+        var attemptCount = reader.GetInt64(21);
+        var attemptedAtUtc = ReadNullableUtcMilliseconds(reader, 22);
+        var outcome = reader.IsDBNull(23) ? (DeliveryAttemptOutcome?)null : (DeliveryAttemptOutcome)reader.GetInt32(23);
+        var retryNotBeforeUtc = ReadNullableUtcMilliseconds(reader, 25);
+        var lastAttempt = attemptedAtUtc is { } attempted && outcome is { } attemptOutcome
+            ? new DeliveryAttempt(attemptCount, attempted, attemptOutcome, GetNullableString(reader, 24), retryNotBeforeUtc)
+            : null;
+        var acknowledgedAtUtc = ReadNullableUtcMilliseconds(reader, 26);
+        var acknowledgment = acknowledgedAtUtc is { } acknowledgedAt && !reader.IsDBNull(27)
+            ? new DeliveryAcknowledgment(envelope.CaptureId, (DeliveryAcknowledgmentStatus)reader.GetInt32(27), acknowledgedAt)
+            : null;
+
+        return new DeliveryQueueItem(
+            envelope,
+            new DeliveryDestinationBinding(Guid.ParseExact(reader.GetString(15), "N"), destinationContext),
+            state,
+            FromUtcTicks(reader.GetInt64(5)),
+            attemptCount,
+            lastAttempt,
+            retryNotBeforeUtc,
+            acknowledgment);
+    }
+
+    private static DeliveryContext? ReadContext(SqliteDataReader reader, int serverIdOrdinal, int eventIdOrdinal)
+    {
+        var serverId = GetNullableString(reader, serverIdOrdinal);
+        var eventId = GetNullableString(reader, eventIdOrdinal);
+        if (serverId is null && eventId is null)
+        {
+            return null;
+        }
+
+        if (serverId is null || eventId is null)
+        {
+            throw new IOException("SQLite retained an incomplete delivery context.");
+        }
+
+        return new DeliveryContext(serverId, eventId);
+    }
+
+    private static DateTimeOffset FromUtcTicks(long ticks) =>
+        new(new DateTime(ticks, DateTimeKind.Utc));
+
+    private static DateTimeOffset? ReadNullableUtcMilliseconds(SqliteDataReader reader, int ordinal) =>
+        reader.IsDBNull(ordinal) ? null : DateTimeOffset.FromUnixTimeMilliseconds(reader.GetInt64(ordinal));
+
     private static bool TryValidateAdmission(
         DeliveryQueueItem item,
         out int payloadBytes,
@@ -1208,6 +1576,22 @@ public sealed class SqliteDeliveryQueueStore : IDeliveryQueueStore
     {
         await using var command = connection.CreateCommand();
         command.CommandText = commandText;
+        return await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async Task<int> ExecuteNonQueryWithParametersAsync(
+        SqliteConnection connection,
+        string commandText,
+        CancellationToken cancellationToken,
+        params (string Name, object? Value)[] parameters)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = commandText;
+        foreach (var parameter in parameters)
+        {
+            AddParameter(command, parameter.Name, parameter.Value);
+        }
+
         return await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }
 

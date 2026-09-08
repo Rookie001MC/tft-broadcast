@@ -3,9 +3,14 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using players_lcu_client.Application;
 using players_lcu_client.Core.Capture;
+using players_lcu_client.Core.Delivery;
+using players_lcu_client.Core.Security;
+using players_lcu_client.Infrastructure.Configuration;
 using players_lcu_client.Infrastructure.Lcu;
 using players_lcu_client.Infrastructure.Logging;
+using players_lcu_client.Infrastructure.Security;
 using players_lcu_client.Infrastructure.Storage;
+using players_lcu_client.Infrastructure.Transport;
 using players_lcu_client.ViewModels;
 using players_lcu_client.Views;
 using Thresh.Extensions;
@@ -36,7 +41,15 @@ public static class ServiceCollectionExtensions
         });
 
         services.AddReadOnlyTftLcuGateway();
-        services.AddSingleton<ITftEogCaptureStore, FileTftEogCaptureStore>();
+        services.AddSingleton<IDeliveryQueueStore, SqliteDeliveryQueueStore>();
+        services.AddSingleton<IInstallationIdentityStore, FileInstallationIdentityStore>();
+        services.AddSingleton<IRelayDestinationSettingsStore, FileRelayDestinationSettingsStore>();
+#pragma warning disable CA1416 // The store returns an explicit availability result outside Windows.
+        services.AddSingleton<IDeviceTokenStore, WindowsDpapiDeviceTokenStore>();
+#pragma warning restore CA1416
+        services.AddSingleton<IRelayReceiverClient, RelayReceiverHttpClient>();
+        services.AddSingleton<ITftEogCaptureStore, SqliteTftEogCaptureStore>();
+        services.AddSingleton<IApplicationLifecycleService, RelayDeliveryService>();
         services.AddSingleton<IApplicationLifecycleService, LcuCaptureLifecycleService>();
         services.AddSingleton<MainWindowViewModel>();
         services.AddSingleton<MainWindow>();
