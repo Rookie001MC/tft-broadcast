@@ -1,5 +1,6 @@
 import { json } from '@sveltejs/kit';
 import { getState, sceneState } from '$lib/server/post-game/store.js';
+import { winnerPortrait } from '$lib/server/post-game/portrait.js';
 /** @type {import('./$types').RequestHandler} */
 export async function GET({ url, request }) {
 	const s = await getState();
@@ -20,7 +21,12 @@ export async function GET({ url, request }) {
 	}
 	const scene = sceneState(s, requestedScene === 'ranking' ? 'ranking' : 'post-match');
 	return json(
-		{ data: scene.live, visible: scene.visible, revision: s.revision },
+		{
+			data: scene.live,
+			portrait: requestedScene === 'ranking' ? await winnerPortrait(scene.live) : '',
+			visible: scene.visible,
+			revision: s.revision
+		},
 		{ headers: { 'Cache-Control': 'no-store' } }
 	);
 }

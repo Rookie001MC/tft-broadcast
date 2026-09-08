@@ -77,7 +77,7 @@ function assetUrls(path){
  if(!path)return [];
  if(path==='/T1_Faker_2026_LCK_Cup.png')return [path];
  if(path.startsWith('/media/catalog-assets/')&&!path.includes('..'))return [path];
- if(/^\/media\/player-images\/[a-f0-9-]{36}$/i.test(path))return [path];
+ if(/^\/media\/player-images\/[a-f0-9-]{36}(?:\?v=\d+)?$/i.test(path))return [path];
  if(/^data:image\/(png|webp);base64,/.test(path))return [path];
  if(/^https:\/\/raw\.communitydragon\.org\//i.test(path))return [path];
  const prefix='/lol-game-data/assets/';if(!path.startsWith(prefix))return [];
