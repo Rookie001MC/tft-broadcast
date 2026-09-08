@@ -1,6 +1,7 @@
 ﻿using System;
 using Avalonia.Threading;
 using System.Collections.ObjectModel;
+using System.Security.Cryptography;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -34,13 +35,18 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
     [ObservableProperty] private string _scheme = "http";
     [ObservableProperty] private string _host = "127.0.0.1";
     [ObservableProperty] private string _port = "5173";
-    [ObservableProperty] private string _token = string.Empty;
-    [ObservableProperty] private string _settingsStatus = "Configure the relay server and device token.";
+    [ObservableProperty] private string _relayPassword = string.Empty;
+    [ObservableProperty] private bool _isRelayPasswordVisible;
+    [ObservableProperty] private string _settingsStatus = "Configure the relay server and shared relay password.";
     [ObservableProperty] private string _connectionStatus = "Not tested";
     [ObservableProperty] private string _connectionBadgeColor = "#64748B";
     [ObservableProperty] private string _alertMessage = "Configure the relay, then test its connection before the match begins.";
     [ObservableProperty] private string _alertBackground = "#334155";
     [ObservableProperty] private string _debugStatus = "Refresh to inspect the local capture queue.";
+
+    public char RelayPasswordMaskCharacter => IsRelayPasswordVisible ? '\0' : '●';
+
+    public event Func<Task<bool>>? PasswordRotationConfirmationRequested;
 
     public MainWindowViewModel(
         ILcuGateway lcuGateway,
@@ -91,29 +97,130 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
         CaptureStatus = $"Local capture: {status.Detail}{lastCapture}";
     }
 
+    partial void OnIsRelayPasswordVisibleChanged(bool value) => OnPropertyChanged(nameof(RelayPasswordMaskCharacter));
+
     [RelayCommand]
-    private void SaveSettings()
+    private async Task SaveSettingsAsync()
     {
         if (!RelayDestination.TryCreate(Scheme, Host, Port, out var destination, out _ ) || destination is null)
         {
             SettingsStatus = "Enter a valid HTTP/HTTPS host and port (1–65535).";
             return;
         }
+
+        if (!string.IsNullOrEmpty(RelayPassword))
+        {
+            if (!DeviceToken.TryCreate(RelayPassword, out var password, out _) || password is null)
+            {
+                SettingsStatus = "Enter a valid relay password.";
+                return;
+            }
+
+            var storedPassword = _tokenStore.Load();
+            if (!storedPassword.HasToken)
+            {
+                if (storedPassword.Status != DeviceTokenLoadStatus.NotFound)
+                {
+                    SettingsStatus = storedPassword.Detail ?? "Protected relay-password storage is unavailable.";
+                    return;
+                }
+                var bootstrap = await _relayReceiver.BootstrapPasswordAsync(destination, password, default);
+                if (bootstrap.Outcome == RelayPasswordBootstrapOutcome.AlreadyInitialized)
+                {
+                    var probe = await _relayReceiver.TestConnectionAsync(destination, password, default);
+                    if (!probe.IsConnected)
+                    {
+                        SettingsStatus = "This relay already has a different password.";
+                        return;
+                    }
+                }
+                else if (bootstrap.Outcome != RelayPasswordBootstrapOutcome.Initialized)
+                {
+                    SettingsStatus = bootstrap.Detail;
+                    return;
+                }
+            }
+            else
+            {
+                var probe = await _relayReceiver.TestConnectionAsync(destination, password, default);
+                if (!probe.IsConnected)
+                {
+                    SettingsStatus = probe.Detail;
+                    return;
+                }
+            }
+
+            if (!_tokenStore.Save(password).IsSuccess)
+            {
+                SettingsStatus = "The relay password could not be saved securely.";
+                return;
+            }
+            RelayPassword = string.Empty;
+            IsRelayPasswordVisible = false;
+        }
+        else if (!_tokenStore.Load().HasToken)
+        {
+            SettingsStatus = "Enter or generate a relay password before saving settings.";
+            return;
+        }
+
         if (!_settingsStore.Save(new RelayDestinationSettings(destination)).IsSuccess)
         {
             SettingsStatus = "The relay destination could not be saved.";
             return;
         }
-        if (!string.IsNullOrEmpty(Token))
-        {
-            if (!DeviceToken.TryCreate(Token, out var deviceToken, out _) || deviceToken is null || !_tokenStore.Save(deviceToken).IsSuccess)
-            {
-                SettingsStatus = "The device token could not be saved securely.";
-                return;
-            }
-            Token = string.Empty;
-        }
         SettingsStatus = "Relay settings saved. Pending captures will retry automatically.";
+    }
+
+    [RelayCommand]
+    private async Task GenerateRelayPasswordAsync()
+    {
+        var storedPassword = _tokenStore.Load();
+        if (!storedPassword.HasToken || storedPassword.Token is null)
+        {
+            RelayPassword = GeneratePassword();
+            IsRelayPasswordVisible = true;
+            SettingsStatus = "New relay password generated. Save it to initialize the relay.";
+            return;
+        }
+
+        if (!RelayDestination.TryCreate(Scheme, Host, Port, out var destination, out _) || destination is null)
+        {
+            SetConnectionState(false, "Configuration needed", "Enter a valid relay server before rotating its password.");
+            return;
+        }
+        if (!await ConfirmPasswordRotationAsync()) return;
+
+        var generatedPassword = GeneratePassword();
+        if (!DeviceToken.TryCreate(generatedPassword, out var nextPassword, out _) || nextPassword is null)
+        {
+            SetConnectionState(false, "Password error", "A relay password could not be generated.");
+            return;
+        }
+
+        var rotation = await _relayReceiver.RotatePasswordAsync(destination, storedPassword.Token, nextPassword, default);
+        if (rotation.Outcome != RelayPasswordRotationOutcome.Rotated)
+        {
+            SetConnectionState(false, "Password unchanged", rotation.Detail);
+            return;
+        }
+        if (!_tokenStore.Save(nextPassword).IsSuccess)
+        {
+            SetConnectionState(false, "Password rotated", "Relay password changed, but this PC could not store it securely. Copy the displayed password now.");
+            RelayPassword = generatedPassword;
+            IsRelayPasswordVisible = true;
+            return;
+        }
+
+        RelayPassword = generatedPassword;
+        IsRelayPasswordVisible = true;
+        SetConnectionState(true, "Password rotated", "Relay password changed. Update every other Player LCU client before the next capture.");
+    }
+
+    [RelayCommand]
+    private void ToggleRelayPasswordVisibility()
+    {
+        if (!string.IsNullOrEmpty(RelayPassword)) IsRelayPasswordVisible = !IsRelayPasswordVisible;
     }
 
     [RelayCommand]
@@ -126,11 +233,11 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
 
         DeviceToken? deviceToken;
-        if (!string.IsNullOrEmpty(Token))
+        if (!string.IsNullOrEmpty(RelayPassword))
         {
-            if (!DeviceToken.TryCreate(Token, out deviceToken, out _) || deviceToken is null)
+            if (!DeviceToken.TryCreate(RelayPassword, out deviceToken, out _) || deviceToken is null)
             {
-                SetConnectionState(false, "Token needed", "Enter a valid device token before testing.");
+                SetConnectionState(false, "Password needed", "Enter a valid relay password before testing.");
                 return;
             }
         }
@@ -139,7 +246,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
             var loadedToken = _tokenStore.Load();
             if (!loadedToken.HasToken || loadedToken.Token is null)
             {
-                SetConnectionState(false, "Token needed", loadedToken.Detail ?? "Save a device token before testing the relay.");
+                SetConnectionState(false, "Password needed", loadedToken.Detail ?? "Save a relay password before testing the relay.");
                 return;
             }
             deviceToken = loadedToken.Token;
@@ -160,7 +267,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
         Scheme = settings.Scheme == RelayDestinationScheme.Https ? "https" : "http";
         Host = settings.Host.Value;
         Port = settings.Port.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        if (_tokenStore.Load().HasToken) SettingsStatus = "Relay destination and protected device token are configured.";
+        if (_tokenStore.Load().HasToken) SettingsStatus = "Relay destination and protected relay password are configured.";
     }
 
     [RelayCommand]
@@ -186,6 +293,30 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
         ConnectionBadgeColor = connected ? "#16A34A" : "#DC2626";
         AlertMessage = message;
         AlertBackground = connected ? "#166534" : "#991B1B";
+    }
+
+    private static string GeneratePassword()
+    {
+        var bytes = RandomNumberGenerator.GetBytes(24);
+        try
+        {
+            return Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(bytes);
+        }
+    }
+
+    private async Task<bool> ConfirmPasswordRotationAsync()
+    {
+        var confirmation = PasswordRotationConfirmationRequested;
+        if (confirmation is null) return false;
+        foreach (var callback in confirmation.GetInvocationList())
+        {
+            if (!await ((Func<Task<bool>>)callback)()) return false;
+        }
+        return true;
     }
 }
 

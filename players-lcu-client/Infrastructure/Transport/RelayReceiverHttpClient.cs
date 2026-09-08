@@ -17,6 +17,17 @@ namespace players_lcu_client.Infrastructure.Transport;
 
 public interface IRelayReceiverClient
 {
+    Task<RelayPasswordBootstrapResult> BootstrapPasswordAsync(
+        RelayDestination destination,
+        DeviceToken password,
+        CancellationToken cancellationToken);
+
+    Task<RelayPasswordRotationResult> RotatePasswordAsync(
+        RelayDestination destination,
+        DeviceToken currentPassword,
+        DeviceToken nextPassword,
+        CancellationToken cancellationToken);
+
     Task<RelayConnectionProbe> TestConnectionAsync(
         RelayDestination destination,
         DeviceToken token,
@@ -33,6 +44,11 @@ public interface IRelayReceiverClient
 /// <summary>A safe operator-facing result of probing the receiver handshake.</summary>
 public sealed record RelayConnectionProbe(bool IsConnected, string Detail);
 
+public enum RelayPasswordBootstrapOutcome { Initialized, AlreadyInitialized, InvalidPassword, Unavailable }
+public sealed record RelayPasswordBootstrapResult(RelayPasswordBootstrapOutcome Outcome, string Detail);
+public enum RelayPasswordRotationOutcome { Rotated, AuthenticationFailed, InvalidPassword, Unavailable }
+public sealed record RelayPasswordRotationResult(RelayPasswordRotationOutcome Outcome, string Detail);
+
 /// <summary>Strict v1 HTTP delivery client. It accepts only a correlated durable receipt.</summary>
 public sealed class RelayReceiverHttpClient : IRelayReceiverClient, IDisposable
 {
@@ -45,6 +61,73 @@ public sealed class RelayReceiverHttpClient : IRelayReceiverClient, IDisposable
         {
             Timeout = TimeSpan.FromSeconds(10),
         };
+    }
+
+    public async Task<RelayPasswordBootstrapResult> BootstrapPasswordAsync(
+        RelayDestination destination,
+        DeviceToken password,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(destination);
+        ArgumentNullException.ThrowIfNull(password);
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Post, destination.BuildEndpointUri("/api/player-relay/v1/auth/bootstrap"))
+            {
+                Content = CreatePasswordContent(password),
+            };
+            using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+            return response.StatusCode switch
+            {
+                HttpStatusCode.Created => new(RelayPasswordBootstrapOutcome.Initialized, "Relay password initialized."),
+                HttpStatusCode.Conflict => new(RelayPasswordBootstrapOutcome.AlreadyInitialized, "Relay already has a password. Enter the shared password and save again."),
+                HttpStatusCode.BadRequest => new(RelayPasswordBootstrapOutcome.InvalidPassword, "Enter a valid relay password."),
+                _ => new(RelayPasswordBootstrapOutcome.Unavailable, $"Relay returned HTTP {(int)response.StatusCode}."),
+            };
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return new(RelayPasswordBootstrapOutcome.Unavailable, "Relay password setup timed out.");
+        }
+        catch (HttpRequestException)
+        {
+            return new(RelayPasswordBootstrapOutcome.Unavailable, "Relay could not be reached.");
+        }
+    }
+
+    public async Task<RelayPasswordRotationResult> RotatePasswordAsync(
+        RelayDestination destination,
+        DeviceToken currentPassword,
+        DeviceToken nextPassword,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(destination);
+        ArgumentNullException.ThrowIfNull(currentPassword);
+        ArgumentNullException.ThrowIfNull(nextPassword);
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Post, destination.BuildEndpointUri("/api/player-relay/v1/auth/rotate"))
+            {
+                Content = CreatePasswordContent(nextPassword),
+            };
+            ApplyAuthorization(request, currentPassword);
+            using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+            return response.StatusCode switch
+            {
+                HttpStatusCode.OK => new(RelayPasswordRotationOutcome.Rotated, "Relay password rotated."),
+                HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden => new(RelayPasswordRotationOutcome.AuthenticationFailed, "Relay password was rejected."),
+                HttpStatusCode.BadRequest => new(RelayPasswordRotationOutcome.InvalidPassword, "Generated relay password was rejected."),
+                _ => new(RelayPasswordRotationOutcome.Unavailable, $"Relay returned HTTP {(int)response.StatusCode}."),
+            };
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return new(RelayPasswordRotationOutcome.Unavailable, "Relay password rotation timed out.");
+        }
+        catch (HttpRequestException)
+        {
+            return new(RelayPasswordRotationOutcome.Unavailable, "Relay could not be reached.");
+        }
     }
 
     public async Task<RelayConnectionProbe> TestConnectionAsync(
@@ -63,7 +146,7 @@ public sealed class RelayReceiverHttpClient : IRelayReceiverClient, IDisposable
 
             if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
             {
-                return new RelayConnectionProbe(false, "Receiver rejected the device token.");
+                return new RelayConnectionProbe(false, "Relay password was rejected.");
             }
             if (response.StatusCode == HttpStatusCode.NotFound)
             {
@@ -169,6 +252,19 @@ public sealed class RelayReceiverHttpClient : IRelayReceiverClient, IDisposable
         finally
         {
             CryptographicOperations.ZeroMemory(tokenBytes);
+        }
+    }
+
+    private static JsonContent CreatePasswordContent(DeviceToken password)
+    {
+        var passwordBytes = password.EncodeUtf8();
+        try
+        {
+            return JsonContent.Create(new { password = Encoding.UTF8.GetString(passwordBytes) });
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(passwordBytes);
         }
     }
 

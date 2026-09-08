@@ -34,7 +34,7 @@ There is no persistent server-to-client control channel. Rotation therefore does
 - `GET /api/player-relay/v1/handshake` and `POST /api/player-relay/v1/captures`: require the current Bearer password after bootstrap.
 - The verifier document belongs below `MEDIA_ROOT/player-relay/`; removing it directly on the relay host is the deliberate event-reset procedure.
 
-The server uses Node's `crypto.scrypt` with a fresh salt and a timing-safe comparison. It never logs, returns, or stores the plaintext password. The old `EOG_INGEST_TOKEN` configuration is removed.
+The server uses Node's `crypto.scrypt` with a fresh salt and a timing-safe comparison. It never logs, returns, or stores the plaintext password. The player-relay routes no longer read `EOG_INGEST_TOKEN`; the variable remains available to the unrelated legacy post-game collector.
 
 ## Desktop UI
 
