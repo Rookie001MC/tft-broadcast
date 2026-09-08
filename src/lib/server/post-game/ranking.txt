@@ -28,7 +28,7 @@ function drawRanking(){
  const portrait=images.get(winnerPortrait);
  if(portrait){const iw=portrait.naturalWidth,ih=portrait.naturalHeight,ratio=Math.min((w/2-40)/iw,394/ih),pw=iw*ratio,ph=ih*ratio;ctx.drawImage(portrait,left+(w/2-pw)/2,top+128+(394-ph)/2,pw,ph)}
  const augments=(winner.augments||[]).slice(0,4);
- for(let i=0;i<Math.max(3,augments.length);i++){
+ for(let i=0;i<augments.length;i++){
   const x=left+w/2+34+(i%2)*160,y=top+155+Math.floor(i/2)*160;
   box(x,y,132,132,'#f0f0f3');
   const augment=augments[i];
